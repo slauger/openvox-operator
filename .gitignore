@@ -1,3 +1,4 @@
 *.tar.gz
 *.jar
 .env
+AGENT.md

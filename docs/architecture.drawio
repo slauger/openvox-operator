@@ -1,0 +1,409 @@
+<mxfile host="app.diagrams.net" modified="2026-03-07T00:00:00.000Z" agent="draw.io" version="24.0.0" type="device">
+  <diagram id="openvox-operator-architecture" name="OpenVox Operator Architecture">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ========================================== -->
+        <!-- Kubernetes Cluster (outer container)       -->
+        <!-- ========================================== -->
+        <mxCell id="k8s-cluster" value="Kubernetes Cluster" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;strokeWidth=2;dashed=1;verticalAlign=top;fontStyle=1;fontSize=16;fontColor=#333333;arcSize=4;spacingTop=5;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="1520" height="1100" as="geometry" />
+        </mxCell>
+
+        <!-- ========================================== -->
+        <!-- OpenVox Operator (Controller)              -->
+        <!-- ========================================== -->
+        <mxCell id="operator" value="&lt;b&gt;OpenVox Operator&lt;/b&gt;&lt;br&gt;(Controller)&lt;br&gt;&lt;br&gt;&lt;i&gt;Watches OpenVoxServer CRD&lt;br&gt;Manages all components&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#1a5276;strokeWidth=2;fontSize=12;fontColor=#1a5276;shadow=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="600" y="90" width="240" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- Operator Kubernetes icon -->
+        <mxCell id="operator-icon" value="" style="shape=mxgraph.kubernetes.icon2;prIcon=c_role;fillColor=#1a5276;strokeColor=none;fontColor=#1a5276;" vertex="1" parent="1">
+          <mxGeometry x="610" y="100" width="30" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- OpenVoxServer CRD -->
+        <mxCell id="crd" value="&lt;b&gt;OpenVoxServer&lt;/b&gt;&lt;br&gt;CRD" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#1a5276;strokeWidth=2;fontSize=12;fontColor=#1a5276;shadow=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="310" y="100" width="160" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- CRD icon -->
+        <mxCell id="crd-icon" value="" style="shape=mxgraph.kubernetes.icon2;prIcon=crd;fillColor=#1a5276;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="320" y="108" width="25" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow: Operator watches CRD -->
+        <mxCell id="arrow-crd-operator" value="watches" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#1a5276;strokeWidth=2;fontColor=#1a5276;fontSize=11;fontStyle=2;" edge="1" source="crd" target="operator" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ========================================== -->
+        <!-- Operator "manages" arrows                  -->
+        <!-- ========================================== -->
+        <!-- Arrow: Operator -> CA Setup Job -->
+        <mxCell id="arrow-op-cajob" value="creates" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#1a5276;strokeWidth=1.5;dashed=1;fontColor=#1a5276;fontSize=10;fontStyle=2;" edge="1" source="operator" target="ca-setup-job" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="600" y="230" />
+              <mxPoint x="200" y="230" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Arrow: Operator -> CA Server -->
+        <mxCell id="arrow-op-caserver" value="creates" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.25;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#1a5276;strokeWidth=1.5;dashed=1;fontColor=#1a5276;fontSize=10;fontStyle=2;" edge="1" source="operator" target="ca-server" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="660" y="250" />
+              <mxPoint x="390" y="250" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Arrow: Operator -> Compilers -->
+        <mxCell id="arrow-op-compilers" value="creates" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.75;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#1a5276;strokeWidth=1.5;dashed=1;fontColor=#1a5276;fontSize=10;fontStyle=2;" edge="1" source="operator" target="compilers" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="780" y="250" />
+              <mxPoint x="830" y="250" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Arrow: Operator -> ConfigMaps/Secrets -->
+        <mxCell id="arrow-op-config" value="creates" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#1a5276;strokeWidth=1.5;dashed=1;fontColor=#1a5276;fontSize=10;fontStyle=2;" edge="1" source="operator" target="configmaps-group" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="840" y="230" />
+              <mxPoint x="1280" y="230" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Arrow: Operator -> Code Sync Job -->
+        <mxCell id="arrow-op-codesync" value="creates" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#1a5276;strokeWidth=1.5;dashed=1;fontColor=#1a5276;fontSize=10;fontStyle=2;" edge="1" source="operator" target="code-sync-job" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="720" y="220" />
+              <mxPoint x="610" y="220" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ========================================== -->
+        <!-- CA Setup Job                               -->
+        <!-- ========================================== -->
+        <mxCell id="ca-setup-job" value="&lt;b&gt;CA Setup Job&lt;/b&gt;&lt;br&gt;(Job)&lt;br&gt;&lt;br&gt;&lt;i&gt;puppetserver ca setup&lt;br&gt;(one-time)&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6a800;strokeWidth=2;fontSize=12;fontColor=#7d6608;shadow=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="100" y="280" width="200" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- CA Setup Job icon -->
+        <mxCell id="cajob-icon" value="" style="shape=mxgraph.kubernetes.icon2;prIcon=job;fillColor=#d6a800;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="110" y="288" width="25" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- ========================================== -->
+        <!-- CA Secret                                  -->
+        <!-- ========================================== -->
+        <mxCell id="ca-secret" value="&lt;b&gt;CA Secret&lt;/b&gt;&lt;br&gt;(Secret)&lt;br&gt;&lt;br&gt;&lt;i&gt;ca_crt.pem&lt;br&gt;ca_key.pem&lt;br&gt;ca_crl.pem&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e6e6e6;strokeColor=#999999;strokeWidth=2;fontSize=11;fontColor=#4d4d4d;shadow=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="100" y="480" width="200" height="110" as="geometry" />
+        </mxCell>
+
+        <!-- CA Secret icon -->
+        <mxCell id="casecret-icon" value="" style="shape=mxgraph.kubernetes.icon2;prIcon=secret;fillColor=#999999;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="110" y="488" width="25" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow: CA Setup Job -> CA Secret -->
+        <mxCell id="arrow-cajob-secret" value="stores CA certs" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#d6a800;strokeWidth=2;fontColor=#7d6608;fontSize=10;fontStyle=1;" edge="1" source="ca-setup-job" target="ca-secret" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ========================================== -->
+        <!-- CA Server (StatefulSet)                    -->
+        <!-- ========================================== -->
+        <mxCell id="ca-server" value="&lt;b&gt;CA Server&lt;/b&gt;&lt;br&gt;(StatefulSet, replicas: 1)&lt;br&gt;&lt;br&gt;&lt;i&gt;CA Service enabled&lt;br&gt;PVC for CA data&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#2d7600;strokeWidth=2;fontSize=12;fontColor=#2d7600;shadow=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="290" y="380" width="200" height="110" as="geometry" />
+        </mxCell>
+
+        <!-- CA Server icon -->
+        <mxCell id="caserver-icon" value="" style="shape=mxgraph.kubernetes.icon2;prIcon=sts;fillColor=#2d7600;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="300" y="388" width="25" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- CA PVC -->
+        <mxCell id="ca-pvc" value="&lt;b&gt;PVC&lt;/b&gt;&lt;br&gt;CA Data" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e6e6e6;strokeColor=#999999;strokeWidth=2;fontSize=11;fontColor=#4d4d4d;shadow=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="290" y="540" width="95" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- PVC icon -->
+        <mxCell id="pvc-icon" value="" style="shape=mxgraph.kubernetes.icon2;prIcon=pvc;fillColor=#999999;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="296" y="546" width="20" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow: CA Server -> PVC -->
+        <mxCell id="arrow-caserver-pvc" value="mounts" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;exitX=0.25;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#2d7600;strokeWidth=1.5;fontColor=#2d7600;fontSize=10;fontStyle=2;" edge="1" source="ca-server" target="ca-pvc" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow: CA Secret -> CA Server (mounts) -->
+        <mxCell id="arrow-secret-caserver" value="mounts CA data" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#999999;strokeWidth=2;fontColor=#4d4d4d;fontSize=10;fontStyle=2;" edge="1" source="ca-secret" target="ca-server" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ========================================== -->
+        <!-- Compilers (Deployment)                     -->
+        <!-- ========================================== -->
+        <mxCell id="compilers" value="&lt;b&gt;Compiler(s)&lt;/b&gt;&lt;br&gt;(Deployment, replicas: 1-N)&lt;br&gt;&lt;br&gt;&lt;i&gt;CA disabled&lt;br&gt;Catalog compilation&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#2d7600;strokeWidth=2;fontSize=12;fontColor=#2d7600;shadow=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="730" y="380" width="200" height="110" as="geometry" />
+        </mxCell>
+
+        <!-- Compilers icon -->
+        <mxCell id="compilers-icon" value="" style="shape=mxgraph.kubernetes.icon2;prIcon=deploy;fillColor=#2d7600;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="740" y="388" width="25" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow: CA Secret -> Compilers (mounts CA cert) -->
+        <mxCell id="arrow-secret-compilers" value="mounts CA cert" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0;entryY=0.75;entryDx=0;entryDy=0;strokeColor=#999999;strokeWidth=1.5;fontColor=#4d4d4d;fontSize=10;fontStyle=2;" edge="1" source="ca-secret" target="compilers" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="310" y="508" />
+              <mxPoint x="310" y="510" />
+              <mxPoint x="540" y="510" />
+              <mxPoint x="540" y="463" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Arrow: Compilers bootstrap SSL against CA Server -->
+        <mxCell id="arrow-compilers-caserver" value="bootstrap SSL" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;exitX=0;exitY=0.3;exitDx=0;exitDy=0;entryX=1;entryY=0.3;entryDx=0;entryDy=0;strokeColor=#2d7600;strokeWidth=2;fontColor=#2d7600;fontSize=10;fontStyle=1;" edge="1" source="compilers" target="ca-server" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ========================================== -->
+        <!-- Code Sync (r10k Job)                       -->
+        <!-- ========================================== -->
+        <mxCell id="code-sync-job" value="&lt;b&gt;Code Sync&lt;/b&gt;&lt;br&gt;(r10k Job)&lt;br&gt;&lt;br&gt;&lt;i&gt;r10k deploy&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6a800;strokeWidth=2;fontSize=12;fontColor=#7d6608;shadow=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="510" y="280" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- Code Sync icon -->
+        <mxCell id="codesync-icon" value="" style="shape=mxgraph.kubernetes.icon2;prIcon=job;fillColor=#d6a800;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="520" y="288" width="25" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow: Code Sync -> Compilers (deploys code) -->
+        <mxCell id="arrow-codesync-compilers" value="deploys code" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#d6a800;strokeWidth=1.5;fontColor=#7d6608;fontSize=10;fontStyle=2;" edge="1" source="code-sync-job" target="compilers" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="830" y="325" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ========================================== -->
+        <!-- ConfigMaps / Secrets Group                 -->
+        <!-- ========================================== -->
+        <mxCell id="configmaps-group" value="&lt;b&gt;ConfigMaps / Secrets&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e6e6e6;strokeColor=#999999;strokeWidth=2;dashed=1;verticalAlign=top;fontSize=13;fontColor=#4d4d4d;arcSize=6;spacingTop=3;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="270" width="400" height="340" as="geometry" />
+        </mxCell>
+
+        <!-- ConfigMap: puppet.conf -->
+        <mxCell id="cm-puppet-conf" value="&lt;b&gt;ConfigMap&lt;/b&gt;&lt;br&gt;puppet.conf" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#b3b3b3;strokeWidth=1.5;fontSize=10;fontColor=#4d4d4d;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="310" width="110" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- ConfigMap: puppetdb.conf -->
+        <mxCell id="cm-puppetdb-conf" value="&lt;b&gt;ConfigMap&lt;/b&gt;&lt;br&gt;puppetdb.conf" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#b3b3b3;strokeWidth=1.5;fontSize=10;fontColor=#4d4d4d;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1230" y="310" width="110" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- ConfigMap: webserver.conf -->
+        <mxCell id="cm-webserver-conf" value="&lt;b&gt;ConfigMap&lt;/b&gt;&lt;br&gt;webserver.conf" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#b3b3b3;strokeWidth=1.5;fontSize=10;fontColor=#4d4d4d;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1350" y="310" width="115" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- ConfigMap: auth.conf -->
+        <mxCell id="cm-auth-conf" value="&lt;b&gt;ConfigMap&lt;/b&gt;&lt;br&gt;auth.conf" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#b3b3b3;strokeWidth=1.5;fontSize=10;fontColor=#4d4d4d;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="380" width="110" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- ConfigMap: ca.conf -->
+        <mxCell id="cm-ca-conf" value="&lt;b&gt;ConfigMap&lt;/b&gt;&lt;br&gt;ca.conf" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#b3b3b3;strokeWidth=1.5;fontSize=10;fontColor=#4d4d4d;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1230" y="380" width="110" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Secret: CA certs -->
+        <mxCell id="secret-ca-certs" value="&lt;b&gt;Secret&lt;/b&gt;&lt;br&gt;CA Certs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#b3b3b3;strokeWidth=1.5;fontSize=10;fontColor=#4d4d4d;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1350" y="380" width="115" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- ConfigMap icon -->
+        <mxCell id="cm-icon" value="" style="shape=mxgraph.kubernetes.icon2;prIcon=cm;fillColor=#999999;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="278" width="22" height="22" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow: ConfigMaps -> CA Server (mounted) -->
+        <mxCell id="arrow-config-caserver" value="mounted" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;exitX=0;exitY=0.6;exitDx=0;exitDy=0;entryX=1;entryY=0.7;entryDx=0;entryDy=0;strokeColor=#999999;strokeWidth=1.5;dashed=1;fontColor=#4d4d4d;fontSize=10;fontStyle=2;" edge="1" source="configmaps-group" target="ca-server" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1020" y="474" />
+              <mxPoint x="1020" y="540" />
+              <mxPoint x="550" y="540" />
+              <mxPoint x="550" y="457" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Arrow: ConfigMaps -> Compilers (mounted) -->
+        <mxCell id="arrow-config-compilers" value="mounted" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;exitX=0;exitY=0.4;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#999999;strokeWidth=1.5;dashed=1;fontColor=#4d4d4d;fontSize=10;fontStyle=2;" edge="1" source="configmaps-group" target="compilers" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1000" y="406" />
+              <mxPoint x="1000" y="435" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ========================================== -->
+        <!-- Services                                   -->
+        <!-- ========================================== -->
+
+        <!-- Service: puppet-ca :8140 -->
+        <mxCell id="svc-puppet-ca" value="&lt;b&gt;Service: puppet-ca&lt;/b&gt;&lt;br&gt;:8140" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#2d7600;strokeWidth=2;fontSize=12;fontColor=#2d7600;shadow=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="290" y="680" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Service puppet-ca icon -->
+        <mxCell id="svc-ca-icon" value="" style="shape=mxgraph.kubernetes.icon2;prIcon=svc;fillColor=#2d7600;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="300" y="688" width="25" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow: Service puppet-ca -> CA Server -->
+        <mxCell id="arrow-svc-ca-caserver" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;strokeColor=#2d7600;strokeWidth=2;fontColor=#2d7600;fontSize=10;" edge="1" source="svc-puppet-ca" target="ca-server" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="390" y="640" />
+              <mxPoint x="390" y="640" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Service: puppet :8140 -->
+        <mxCell id="svc-puppet" value="&lt;b&gt;Service: puppet&lt;/b&gt;&lt;br&gt;:8140" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#2d7600;strokeWidth=2;fontSize=12;fontColor=#2d7600;shadow=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="730" y="680" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Service puppet icon -->
+        <mxCell id="svc-puppet-icon" value="" style="shape=mxgraph.kubernetes.icon2;prIcon=svc;fillColor=#2d7600;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="740" y="688" width="25" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow: Service puppet -> Compilers -->
+        <mxCell id="arrow-svc-puppet-compilers" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;strokeColor=#2d7600;strokeWidth=2;fontColor=#2d7600;fontSize=10;" edge="1" source="svc-puppet" target="compilers" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow: Compilers forward CA requests to puppet-ca Service -->
+        <mxCell id="arrow-compilers-svcca" value="forward CA requests" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;exitX=0;exitY=0.7;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#6c3483;strokeWidth=2;fontColor=#6c3483;fontSize=10;fontStyle=1;" edge="1" source="compilers" target="svc-puppet-ca" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="680" y="457" />
+              <mxPoint x="680" y="710" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ========================================== -->
+        <!-- External Agents                            -->
+        <!-- ========================================== -->
+        <mxCell id="external-agents" value="&lt;b&gt;External Agents&lt;/b&gt;&lt;br&gt;(Puppet / OpenVox Agents)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#6c3483;strokeWidth=2;fontSize=12;fontColor=#6c3483;shadow=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="680" y="830" width="300" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Agent icon -->
+        <mxCell id="agent-icon" value="" style="shape=mxgraph.kubernetes.icon2;prIcon=node;fillColor=#6c3483;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="690" y="840" width="25" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow: External Agents -> Service puppet -->
+        <mxCell id="arrow-agents-svc" value="connect :8140" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;strokeColor=#6c3483;strokeWidth=2;fontColor=#6c3483;fontSize=11;fontStyle=1;" edge="1" source="external-agents" target="svc-puppet" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ========================================== -->
+        <!-- PuppetDB (External)                        -->
+        <!-- ========================================== -->
+        <mxCell id="puppetdb" value="&lt;b&gt;PuppetDB&lt;/b&gt;&lt;br&gt;(user-provided, external)&lt;br&gt;&lt;br&gt;&lt;i&gt;PostgreSQL&lt;/i&gt;" style="shape=cylinder3;whiteSpace=wrap;html=1;size=15;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=12;fontColor=#b85450;shadow=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1150" y="680" width="200" height="110" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow: Compilers -> PuppetDB -->
+        <mxCell id="arrow-compilers-puppetdb" value="query / store" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;exitX=1;exitY=0.7;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#b85450;strokeWidth=2;fontColor=#b85450;fontSize=11;fontStyle=1;" edge="1" source="compilers" target="puppetdb" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1000" y="457" />
+              <mxPoint x="1000" y="735" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ========================================== -->
+        <!-- Legend                                     -->
+        <!-- ========================================== -->
+        <mxCell id="legend-box" value="&lt;b&gt;Legend&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;strokeWidth=1;verticalAlign=top;fontSize=12;fontColor=#333333;arcSize=6;spacingTop=3;" vertex="1" parent="1">
+          <mxGeometry x="60" y="910" width="460" height="200" as="geometry" />
+        </mxCell>
+
+        <!-- Legend: Operator -->
+        <mxCell id="legend-operator" value="Operator Components" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#1a5276;strokeWidth=1.5;fontSize=10;fontColor=#1a5276;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="80" y="950" width="140" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Legend: Services -->
+        <mxCell id="legend-services" value="Running Services" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#2d7600;strokeWidth=1.5;fontSize=10;fontColor=#2d7600;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="80" y="990" width="140" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Legend: Jobs -->
+        <mxCell id="legend-jobs" value="Jobs (CA Setup / Code Sync)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6a800;strokeWidth=1.5;fontSize=10;fontColor=#7d6608;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="80" y="1030" width="180" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Legend: Config -->
+        <mxCell id="legend-config" value="Config (ConfigMaps / Secrets)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e6e6e6;strokeColor=#999999;strokeWidth=1.5;fontSize=10;fontColor=#4d4d4d;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="80" y="1070" width="180" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Legend: External -->
+        <mxCell id="legend-external" value="External (PuppetDB)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=1.5;fontSize=10;fontColor=#b85450;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="300" y="950" width="140" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Legend: Agents -->
+        <mxCell id="legend-agents" value="External Agents" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#6c3483;strokeWidth=1.5;fontSize=10;fontColor=#6c3483;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="300" y="990" width="140" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Legend: dashed arrow -->
+        <mxCell id="legend-dashed" value="creates / manages" style="edgeStyle=none;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;strokeColor=#1a5276;strokeWidth=1.5;dashed=1;fontColor=#1a5276;fontSize=10;fontStyle=2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="300" y="1050" as="sourcePoint" />
+            <mxPoint x="450" y="1050" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Legend: solid arrow -->
+        <mxCell id="legend-solid" value="data flow" style="edgeStyle=none;rounded=0;strokeColor=#2d7600;strokeWidth=2;fontColor=#2d7600;fontSize=10;fontStyle=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="300" y="1090" as="sourcePoint" />
+            <mxPoint x="450" y="1090" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

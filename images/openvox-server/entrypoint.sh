@@ -6,16 +6,12 @@ set -o errexit
 set -o pipefail
 set -o nounset
 
-# Source puppetserver configuration
-. /etc/default/puppetserver
-
-# Run initialization scripts
-for f in /entrypoint.d/*.sh; do
-    if [ -f "$f" ] && [ -x "$f" ]; then
-        echo "Running $f"
-        "$f"
-    fi
-done
+# Inline defaults (previously from /etc/default/puppetserver)
+JAVA_BIN="/usr/bin/java"
+JAVA_ARGS="${JAVA_ARGS:--Xms1024m -Xmx1024m}"
+INSTALL_DIR="/opt/puppetlabs/server/apps/puppetserver"
+CONFIG="/etc/puppetlabs/puppetserver/conf.d"
+BOOTSTRAP_CONFIG="/etc/puppetlabs/puppetserver/services.d/,/opt/puppetlabs/server/apps/puppetserver/config/services.d/"
 
 echo "Starting OpenVox Server (direct java, PID $$)"
 

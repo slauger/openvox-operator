@@ -1,0 +1,12 @@
+FROM registry.access.redhat.com/ubi9/ubi
+
+LABEL org.opencontainers.image.title="OpenVox DB" \
+      org.opencontainers.image.description="OpenVox DB for Kubernetes/OpenShift" \
+      org.opencontainers.image.vendor="slauger" \
+      org.opencontainers.image.url="https://github.com/slauger/openvox-operator" \
+      org.opencontainers.image.source="https://github.com/slauger/openvox-operator" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
+USER 1001:0
+
+CMD ["/bin/bash"]

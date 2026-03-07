@@ -1,36 +1,44 @@
 # Rootless OpenVox Server on UBI9 for Kubernetes/OpenShift
-# No ezbake, no runuser/su/sudo — direct Java startup as the running user.
+# K8s-first: no entrypoint.d scripts, no System Ruby, no Docker ENV config.
+# The operator manages all configuration via ConfigMaps and Secrets.
 #
 # Build:
-#   podman build -t openvoxserver:rootless .
+#   podman build -t openvox-server:latest images/openvox-server/
 #
-# Run (default user 1001:0):
-#   podman run --rm -e USE_OPENVOXDB=false openvoxserver:rootless
-#
-# Run with random UID (OpenShift simulation):
-#   podman run --rm --user 12345:0 -e USE_OPENVOXDB=false openvoxserver:rootless
+# Run:
+#   podman run --rm openvox-server:latest
 
 ################################################################################
-# Stage: base — JRE + minimal runtime deps
+# Stage: base — JRE + minimal runtime deps (no Ruby)
 ################################################################################
-FROM registry.access.redhat.com/ubi9/ubi-minimal AS base
+FROM registry.access.redhat.com/ubi9/ubi AS base
 
 ARG JDK_VERSION=17
 
-RUN microdnf install -y \
+RUN dnf install -y --setopt=install_weak_deps=False \
         java-${JDK_VERSION}-openjdk-headless \
         bash \
-        curl-minimal \
+        curl \
         openssl \
-    && microdnf clean all
+        tar \
+        gzip \
+        findutils \
+        hostname \
+    && dnf clean all
 
 ################################################################################
-# Stage: build — install tarball contents
+# Stage: build — install tarball contents + JRuby gems
 ################################################################################
 FROM base AS build
 
 ARG OPENVOXSERVER_VERSION=8.12.1
 ARG OPENVOXDB_VERSION=8.12.1
+ARG OPENVOX_VERSION=8.25.0
+
+# Ruby needed temporarily for install-vendored-gems.sh
+RUN dnf module enable ruby:3.3 -y \
+    && dnf install -y --setopt=install_weak_deps=False ruby \
+    && dnf clean all
 
 ADD https://artifacts.voxpupuli.org/openvox-server/${OPENVOXSERVER_VERSION}/openvox-server-${OPENVOXSERVER_VERSION}.tar.gz /
 ADD https://artifacts.voxpupuli.org/openvoxdb/${OPENVOXDB_VERSION}/openvoxdb-${OPENVOXDB_VERSION}.tar.gz /
@@ -121,14 +129,22 @@ RUN tar -xzf /openvox-server-${OPENVOXSERVER_VERSION}.tar.gz \
     # --- cleanup ---
     && rm -rf /openvox-server-*.tar.gz /openvoxdb-*.tar.gz /puppetserver-* /puppetdb-*
 
+# Install openvox (puppet) into JRuby — needed at runtime for catalog compilation
+RUN puppetserver gem install --no-document openvox -v "${OPENVOX_VERSION}"
+
+# Patch openvoxserver-ca to skip cadir symlink and chown (fails rootless)
+RUN find / -path '*/openvoxserver-ca-*/lib/puppetserver/ca/action/setup.rb' \
+         -exec sed -i '/Puppetserver::Ca::Utils::Config\.symlink_to_old_cadir/ s/^/# /' {} + 2>/dev/null \
+    ; find / -path '*/openvoxserver-ca-*/lib/puppetserver/ca/utils/file_system.rb' \
+         -exec sed -i 's/FileUtils\.chown/# FileUtils.chown/' {} + 2>/dev/null \
+    ; true
+
 ################################################################################
-# Stage: final — rootless runtime image
+# Stage: final — rootless runtime image (no Ruby)
 ################################################################################
 FROM base AS final
 
 ARG OPENVOXSERVER_VERSION=8.12.1
-ARG R10K_VERSION=5.0.0
-ARG OPENVOX_GEM_VERSION=8.21.1
 
 LABEL org.opencontainers.image.title="OpenVox Server" \
       org.opencontainers.image.description="Rootless OpenVox Server for Kubernetes/OpenShift" \
@@ -138,38 +154,12 @@ LABEL org.opencontainers.image.title="OpenVox Server" \
       org.opencontainers.image.version="${OPENVOXSERVER_VERSION}" \
       org.opencontainers.image.licenses="Apache-2.0"
 
-ENV AUTOSIGN=true \
-    CA_ALLOW_SUBJECT_ALT_NAMES=false \
-    CA_ENABLED=true \
-    CA_TTL=157680000 \
-    CA_HOSTNAME=puppet \
-    CA_PORT=8140 \
-    CERTNAME="" \
-    CSR_ATTRIBUTES='{}' \
-    DNS_ALT_NAMES="" \
-    ENVIRONMENTPATH=/etc/puppetlabs/code/environments \
-    HIERACONFIG='$confdir/hiera.yaml' \
-    INTERMEDIATE_CA_BUNDLE=/etc/puppetlabs/intermediate/ca.pem \
-    INTERMEDIATE_CA_KEY=/etc/puppetlabs/intermediate/key.pem \
-    INTERMEDIATE_CA=false \
-    INTERMEDIATE_CRL_CHAIN=/etc/puppetlabs/intermediate/crl.pem \
-    LOGDIR=/var/log/puppetlabs/puppetserver \
-    OPENVOX_REPORTS="puppetdb" \
-    OPENVOX_STORECONFIGS_BACKEND="puppetdb" \
-    OPENVOX_STORECONFIGS=true \
-    OPENVOXDB_SERVER_URLS=https://openvoxdb:8081 \
-    OPENVOXSERVER_ENABLE_ENV_CACHE_DEL_API=true \
-    OPENVOXSERVER_ENVIRONMENT_TIMEOUT=unlimited \
-    OPENVOXSERVER_GRAPHITE_EXPORTER_ENABLED=false \
-    OPENVOXSERVER_GRAPHITE_HOST=exporter \
-    OPENVOXSERVER_GRAPHITE_PORT=9109 \
-    OPENVOXSERVER_HOSTNAME="" \
-    OPENVOXSERVER_JAVA_ARGS="-Xms1024m -Xmx1024m" \
+# Defaults for puppetserver.conf ENV var placeholders
+ENV LOGDIR=/var/log/puppetlabs/puppetserver \
     OPENVOXSERVER_MAX_ACTIVE_INSTANCES=1 \
     OPENVOXSERVER_MAX_REQUESTS_PER_INSTANCE=0 \
-    OPENVOXSERVER_PORT=8140 \
-    PATH=$PATH:/opt/puppetlabs/server/bin:/opt/puppetlabs/puppet/bin:/opt/puppetlabs/bin \
-    USE_OPENVOXDB=true
+    JAVA_ARGS="-Xms1024m -Xmx1024m" \
+    PATH=$PATH:/opt/puppetlabs/server/bin:/opt/puppetlabs/puppet/bin:/opt/puppetlabs/bin
 
 # Copy built artifacts from build stage
 COPY --from=build /opt/puppetlabs /opt/puppetlabs
@@ -177,70 +167,17 @@ COPY --from=build /etc/puppetlabs /etc/puppetlabs
 COPY --from=build /var/log/puppetlabs /var/log/puppetlabs
 COPY --from=build /var/run/puppetlabs /var/run/puppetlabs
 
-# Install runtime deps + Ruby gems, then remove build-only deps
-RUN microdnf install -y \
-        ruby \
-        ruby-devel \
-        gcc \
-        make \
-        redhat-rpm-config \
-        openssl-devel \
-        openssh-clients \
-        git \
-        findutils \
-        hostname \
-        sed \
-        grep \
-        tar \
-        gzip \
-        shadow-utils \
-    && gem install --no-document \
-        openvox:${OPENVOX_GEM_VERSION} \
-        hocon:1.4.0 \
-        r10k:${R10K_VERSION} \
-        hiera-eyaml:4.3.0 \
-        openvoxserver-ca:3.0.0 \
-    && microdnf remove -y \
-        ruby-devel \
-        gcc \
-        make \
-        redhat-rpm-config \
-        openssl-devel \
-    && microdnf clean all \
-    # --- symlinks for puppet tooling into expected paths ---
-    && mkdir -p /opt/puppetlabs/puppet/bin \
-    && ln -sf /usr/local/bin/puppet  /opt/puppetlabs/puppet/bin/puppet \
-    && ln -sf /usr/local/bin/facter  /opt/puppetlabs/puppet/bin/facter \
-    && ln -sf /usr/bin/ruby          /opt/puppetlabs/puppet/bin/ruby \
-    && ln -sf /usr/bin/gem           /opt/puppetlabs/puppet/bin/gem \
-    && ln -sf /usr/local/bin/r10k    /opt/puppetlabs/puppet/bin/r10k \
-    && ln -sf /usr/local/bin/hiera-eyaml /opt/puppetlabs/puppet/bin/hiera-eyaml \
-    # --- install puppet gem into JRuby loadpath ---
-    && puppetserver gem install --no-document openvox \
-    # --- patch openvoxserver-ca to skip cadir symlink (chown fails rootless) ---
-    && find / -path '*/openvoxserver-ca-*/lib/puppetserver/ca/action/setup.rb' \
-         -exec sed -i '/Puppetserver::Ca::Utils::Config\.symlink_to_old_cadir/ s/^/# /' {} \; 2>/dev/null \
-    || true
-
-# Copy container files
-COPY entrypoint.sh /entrypoint.sh
-COPY healthcheck.sh /healthcheck.sh
-COPY entrypoint.d /entrypoint.d
-
-# Override tarball defaults with our container-specific configs
+# Override tarball defaults with container-specific configs
 COPY conf.d/product.conf     /etc/puppetlabs/puppetserver/conf.d/
 COPY conf.d/puppetserver.conf /etc/puppetlabs/puppetserver/conf.d/
 COPY logback.xml              /etc/puppetlabs/puppetserver/
 COPY request-logging.xml      /etc/puppetlabs/puppetserver/
 COPY puppet.conf              /etc/puppetlabs/puppet/puppet.conf
-COPY puppetdb.conf            /etc/puppetlabs/puppet/puppetdb.conf
-COPY puppetserver             /etc/default/puppetserver
 
-RUN chmod +x /entrypoint.sh /healthcheck.sh \
-    && find /entrypoint.d -name '*.sh' -exec chmod +x {} +
+COPY entrypoint.sh /entrypoint.sh
+COPY healthcheck.sh /healthcheck.sh
 
-# Remove USER/GROUP from puppetserver defaults — not needed for rootless
-RUN sed -i '/^USER=/d; /^GROUP=/d' /etc/default/puppetserver
+RUN chmod +x /entrypoint.sh /healthcheck.sh
 
 # Set HOME explicitly: random UIDs (OpenShift) default HOME to "/"
 ENV HOME=/opt/puppetlabs/server/data/puppetserver
@@ -259,7 +196,6 @@ RUN for d in \
         /var/log/puppetlabs \
         /var/run/puppetlabs \
         /opt/puppetlabs \
-        /entrypoint.d \
     ; do \
         chgrp -R 0 "$d"; \
         chmod -R g=u "$d"; \

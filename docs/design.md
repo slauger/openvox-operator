@@ -1,273 +1,163 @@
-# OpenVox Operator — Architektur & Kubernetes-Design
+# OpenVox Operator - Architecture & Kubernetes Design
 
 ## Context
 
-### Probleme mit bestehenden Container-Ansätzen
+### Problems with Existing Container Approaches
 
-1. **ezbake-Legacy**: Upstream OpenVox Server nutzt ezbake für Packaging. Generiert Init-Scripts die als root starten und per `runuser`/`su`/`sudo` auf den puppet-User wechseln. Bricht rootless Container und OpenShift random UIDs.
+1. **ezbake Legacy**: Upstream OpenVox Server uses ezbake for packaging. Generates init scripts that start as root and switch to the puppet user via `runuser`/`su`/`sudo`. Breaks rootless containers and OpenShift random UIDs.
 
-2. **Doppelte Ruby-Installation**: Der Server braucht JRuby (eingebettet im JAR) für den Runtime. Die bisherigen Container installieren zusätzlich System Ruby + openvox Gem nur damit die entrypoint.d Scripts `puppet config set/print` aufrufen können. Das ist unnötig — diese Scripts schreiben nur INI-Config-Dateien die in K8s per ConfigMap kommen.
+2. **Duplicate Ruby Installation**: The server needs JRuby (embedded in the JAR) for runtime. Existing containers additionally install System Ruby + openvox gem just so the entrypoint.d scripts can call `puppet config set/print`. This is unnecessary - those scripts only write INI config files that come via ConfigMap in K8s.
 
-3. **Docker-Logik im K8s-Kontext**: ~15 entrypoint.d Scripts übersetzen ENV-Vars in Config-Dateien. Das ist ein Docker-Pattern. In K8s erledigt das der Operator via ConfigMaps/Secrets.
+3. **Docker Logic in K8s Context**: ~15 entrypoint.d scripts translate ENV vars into config files. This is a Docker pattern. In K8s the operator handles this via ConfigMaps/Secrets.
 
-4. **Keine Rollentrennung**: Container muss selbst entscheiden ob CA oder Compiler. In K8s macht der Operator die Orchestrierung.
+4. **No Role Separation**: The container has to decide itself whether to run as CA or compiler. In K8s the operator handles orchestration.
 
-5. **chown/chmod Probleme**: `openvoxserver-ca` Gem ruft `FileUtils.chown` auf — failed rootless. Muss gepatcht werden. Besser: Upstream-Fix in openvox vorschlagen (`manage_internal_file_permissions` konsequent umsetzen).
+5. **chown/chmod Issues**: The `openvoxserver-ca` gem calls `FileUtils.chown` - fails rootless. Needs patching. Better: propose upstream fix in openvox (consistently implement `manage_internal_file_permissions`).
 
-### Was in OpenVox upstream verbessert werden könnte
+### Potential Upstream Improvements in OpenVox
 
-- `openvoxserver-ca` Gem: `chown`/`lchown` Calls sollten `manage_internal_file_permissions` respektieren
-- `symlink_to_old_cadir` sollte optional/konfigurierbar sein
-- Tarball sollte puppet gem Dependencies für JRuby vollständig mitbringen (aktuell muss `puppetserver gem install openvox` separat laufen)
+- `openvoxserver-ca` gem: `chown`/`lchown` calls should respect `manage_internal_file_permissions`
+- `symlink_to_old_cadir` should be optional/configurable
+- Tarball should include puppet gem dependencies for JRuby completely (currently `puppetserver gem install openvox` needs to run separately)
 
 ## CRD Design
 
-### OpenVoxServer (Haupt-CRD)
+See [data-model.md](data-model.md) for the full multi-CRD data model (Environment, Pool, Server, CodeDeploy, Database).
 
-```yaml
-apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: OpenVoxServer
-metadata:
-  name: production
-  namespace: openvox
-spec:
-  # Image
-  image:
-    repository: ghcr.io/slauger/openvoxserver
-    tag: "8.12.1"
-
-  # CA Konfiguration (Single Instance)
-  ca:
-    enabled: true                     # false = externe CA verwenden
-    autosign: true                    # true/false/script-path
-    ttl: 157680000                    # 5 Jahre in Sekunden
-    allowSubjectAltNames: true
-    certname: "puppet"
-    dnsAltNames:
-      - puppet
-      - puppet-ca
-      - puppet-ca.openvox.svc
-    storage:
-      size: 1Gi
-      storageClass: ""                # Default StorageClass
-    resources:
-      requests: { memory: "1Gi", cpu: "500m" }
-      limits:   { memory: "2Gi", cpu: "1500m" }
-    javaArgs: "-Xms512m -Xmx1024m"
-    # Optional: Intermediate CA (Zertifikate per Secret mounten)
-    intermediateCA:
-      enabled: false
-      secretName: ""                  # Secret mit ca.pem, key.pem, crl.pem
-
-  # Compiler Konfiguration (Scalable)
-  compilers:
-    replicas: 1                       # 0 = nur CA Server, kein separater Compiler
-    autoscaling:
-      enabled: false
-      minReplicas: 1
-      maxReplicas: 5
-      targetCPU: 75
-    dnsAltNames:
-      - puppet
-      - puppet.openvox.svc
-    resources:
-      requests: { memory: "1Gi", cpu: "500m" }
-      limits:   { memory: "2Gi", cpu: "1500m" }
-    javaArgs: "-Xms512m -Xmx1024m"
-    maxActiveInstances: 2             # JRuby Instanzen pro Compiler
-
-  # Puppet Konfiguration (wird zu ConfigMap)
-  puppet:
-    serverport: 8140
-    environmentpath: /etc/puppetlabs/code/environments
-    environmentTimeout: unlimited
-    hieraConfig: "$confdir/hiera.yaml"
-    storeconfigs: true
-    storebackend: puppetdb
-    reports: puppetdb
-    # Zusätzliche puppet.conf Einträge
-    extraConfig: {}
-
-  # PuppetDB Verbindung (extern bereitgestellt)
-  puppetdb:
-    enabled: true
-    serverUrls:
-      - https://openvoxdb:8081
-
-  # Code Deployment
-  code:
-    # r10k als initContainer oder CronJob
-    r10k:
-      enabled: false
-      image:
-        repository: ghcr.io/slauger/r10k
-        tag: "latest"
-      repository: ""                  # Git URL
-      schedule: "*/5 * * * *"         # CronJob Schedule
-    # Alternativ: PVC für Code (manuell befüllt)
-    volume:
-      existingClaim: ""
-      size: 5Gi
-
-status:
-  phase: Running                      # Pending | CASetup | WaitingForCA | Running | Error
-  caReady: true
-  caSecretName: production-ca
-  compilersReady: 2
-  compilersDesired: 2
-  conditions:
-    - type: CAInitialized
-      status: "True"
-    - type: CAServerReady
-      status: "True"
-    - type: CompilersReady
-      status: "True"
-```
-
-## Komponenten im Detail
+## Components in Detail
 
 ### 1. Operator (Controller)
 
-- **Sprache**: Go (kubebuilder/controller-runtime)
+- **Language**: Go (kubebuilder/controller-runtime)
 - **Reconciliation Loop**:
-  1. Liest `OpenVoxServer` CR
-  2. Generiert ConfigMaps aus `spec.puppet.*` (puppet.conf, puppetdb.conf, webserver.conf, etc.)
-  3. Wenn `ca.enabled` und kein CA Secret existiert → erstellt CA Setup Job
-  4. Wartet auf Job-Completion → liest CA Zertifikate → erstellt CA Secret
-  5. Erstellt CA StatefulSet (replicas: 1, PVC für CA-Daten)
-  6. Wartet auf CA readiness (Status-Endpoint)
-  7. Erstellt Compiler Deployment (replicas: N, CA Secret gemountet)
-  8. Compiler-Pods bootstrappen sich per `puppet ssl bootstrap` beim CA Server
+  1. Reads the CRs (Environment, Pool, Server, CodeDeploy)
+  2. Generates ConfigMaps from `Environment.spec.puppet.*` (puppet.conf, puppetdb.conf, webserver.conf, etc.)
+  3. If CA not yet initialized -> creates CA Setup Job
+  4. Waits for Job completion -> reads CA certificates -> creates CA Secret
+  5. Creates CA StatefulSet (replicas: 1, PVC for CA data)
+  6. Waits for CA readiness (status endpoint)
+  7. Creates compiler Deployments (replicas: N, CA Secret mounted)
+  8. Compiler Pods bootstrap via `puppet ssl bootstrap` against the CA Server
 
 ### 2. CA Setup Job
 
-Ein einmaliger Job der `puppetserver ca setup` ausführt und die CA-Zertifikate in einem PVC speichert.
+A one-time Job that runs `puppetserver ca setup` and stores the CA certificates in a PVC.
 
 ### 3. CA Server (StatefulSet, replicas: 1)
 
-- Mountet CA-Daten PVC
-- Mountet puppet.conf, puppetdb.conf, webserver.conf als ConfigMap
+- Mounts CA data PVC
+- Mounts puppet.conf, puppetdb.conf, webserver.conf as ConfigMap
 - CA Service enabled (`ca.cfg`)
-- Kein System Ruby nötig — Config kommt per ConfigMap
-- Entrypoint: direkt `java` (kein entrypoint.d)
-- Liveness/Readiness: TCP-Check auf Port 8140
+- No System Ruby needed - config comes via ConfigMap
+- Entrypoint: direct `java` (no entrypoint.d)
+- Liveness/Readiness: TCP check on port 8140
 
 ### 4. Compiler (Deployment, replicas: N)
 
 - CA Service disabled
-- Mountet CA cert aus Secret (read-only)
+- Mounts CA cert from Secret (read-only)
 - InitContainer: `puppet ssl bootstrap --server puppet-ca`
-- Code via PVC oder r10k initContainer
-- Entrypoint: direkt `java`
-- HPA möglich
+- Code via PVC or r10k initContainer
+- Entrypoint: direct `java`
+- HPA support
 
 ### 5. Code Sync (r10k)
 
-- **r10k Job/CronJob**: Ein einzelner Job der `r10k deploy environment` auf das Code-PVC schreibt
-- **Separates Image**: nur Ruby + r10k, kein puppetserver
-- Alle Compiler mounten dasselbe Code-PVC read-only
+- **r10k Job/CronJob**: A single Job that writes `r10k deploy environment` to the code PVC
+- **Separate image**: only Ruby + r10k, no openvox-server
+- All compilers mount the same code PVC read-only
 
-#### Code Volume Strategie
+#### Code Volume Strategy
 
 **Default: RWO PVC + Pod-Affinity**
 
-RWO (ReadWriteOnce) erlaubt mehrere Pods auf **demselben Node** gleichzeitig. Der Operator setzt Pod-Affinity so dass r10k Job und Compiler-Pods auf dem gleichen Node laufen. Das funktioniert ohne speziellen Storage-Provider.
+RWO (ReadWriteOnce) allows multiple Pods on the **same node** simultaneously. The operator sets pod affinity so the r10k Job and compiler Pods run on the same node. This works without a special storage provider.
 
 ```
 Node A:
-  ├── r10k Job      ─── mount RWO PVC (read-write)
-  ├── Compiler Pod 1 ── mount RWO PVC (read-only)
-  └── Compiler Pod 2 ── mount RWO PVC (read-only)
+  +-- r10k Job       --- mount RWO PVC (read-write)
+  +-- Compiler Pod 1  -- mount RWO PVC (read-only)
+  +-- Compiler Pod 2  -- mount RWO PVC (read-only)
 ```
 
 **Multi-Node: RWX PVC**
 
-Sobald Compiler über mehrere Nodes verteilt werden (Anti-Affinity, Node-Failure, große Cluster), braucht man RWX (ReadWriteMany). Der Operator erkennt das automatisch wenn `compilers.replicas > 1` und kein Pod-Affinity-Override gesetzt ist.
+When compilers are distributed across multiple nodes (anti-affinity, node failure, large clusters), RWX (ReadWriteMany) is needed.
 
-| Setup | Access Mode | Voraussetzung |
-|-------|-------------|---------------|
-| Single-Node (Default) | RWO | Keine — jeder Storage-Provider |
+| Setup | Access Mode | Requirement |
+|-------|-------------|-------------|
+| Single-Node (Default) | RWO | None - any storage provider |
 | Multi-Node | RWX | NFS, CephFS, EFS, Longhorn, etc. |
-
-Die `spec.code.volume` Konfiguration im CRD:
-
-```yaml
-code:
-  volume:
-    size: 5Gi
-    accessMode: ReadWriteOnce    # oder ReadWriteMany
-    # existingClaim: ""          # Alternativ: vorhandenes PVC nutzen
-```
 
 ## cert-manager Integration
 
-Puppet nutzt **standard X.509 Zertifikate** (RSA/EC Keys, PEM-Format). Die CA ist ein normales X.509 CA-Zertifikat. cert-manager **könnte** die Root-CA erstellen.
+Puppet uses **standard X.509 certificates** (RSA/EC keys, PEM format). The CA is a regular X.509 CA certificate. cert-manager **could** create the root CA.
 
-**Aber**: Puppet CSRs haben eigene OID-Extensions (`1.3.6.1.4.1.34380.*` — pp_uuid, pp_instance_id, pp_auth_role). Diese werden vom Puppet CA Service beim Signing verarbeitet. cert-manager kann diese nicht erzeugen.
+**However**: Puppet CSRs have custom OID extensions (`1.3.6.1.4.1.34380.*` - pp_uuid, pp_instance_id, pp_auth_role). These are processed by the Puppet CA Service during signing. cert-manager cannot generate these.
 
-| Ansatz | Vorteil | Nachteil |
-|--------|---------|----------|
-| **Puppet CA standalone** (Default) | Einfach, funktioniert out-of-the-box | Eigene CA-Verwaltung nötig |
-| **cert-manager Root → Puppet Intermediate** | Root-CA Lifecycle via cert-manager | Komplexer Setup |
-| **cert-manager für Server-TLS, Puppet CA für Agents** | Trennung von Concerns | Zwei PKI-Systeme |
+| Approach | Advantage | Disadvantage |
+|----------|-----------|--------------|
+| **Puppet CA standalone** (Default) | Simple, works out-of-the-box | Own CA management needed |
+| **cert-manager Root -> Puppet Intermediate** | Root CA lifecycle via cert-manager | More complex setup |
+| **cert-manager for Server TLS, Puppet CA for Agents** | Separation of concerns | Two PKI systems |
 
-**Empfehlung**: Puppet CA standalone als Default. cert-manager Integration als optionales Feature für `spec.ca.intermediateCA`.
+**Recommendation**: Puppet CA standalone as default. cert-manager integration as optional feature via `spec.ca.intermediateCA`.
 
 ## Container Image (K8s-first)
 
-### Was rausfliegt
+### Removed
 
-- Alle entrypoint.d Scripts (Config kommt per ConfigMap)
-- System Ruby openvox Gem (kein `puppet config set/print` mehr nötig)
+- All entrypoint.d scripts (config comes via ConfigMap)
+- System Ruby openvox gem (no more `puppet config set/print` needed)
 - Gemfile / bundle install / ruby-devel / gcc / make
-- Die ganze ENV-Var → Config Übersetzungslogik
-- Docker-Compose Support
+- All ENV var -> config translation logic
+- Docker-Compose support
 
-### Was bleibt
+### Included
 
 - UBI9 + JDK 17
-- Tarball-Installation (puppet-server-release.jar, CLI tools, vendored JRuby gems)
-- PuppetDB-Termini
+- Tarball installation (puppet-server-release.jar, CLI tools, vendored JRuby gems)
+- PuppetDB termini
 - `puppetserver gem install openvox` (JRuby)
-- openvoxserver-ca Patch (chown/symlink)
-- OpenShift random-UID Pattern (chgrp 0, chmod g=u, SGID)
-- Schlankes Entrypoint: direkt `java` starten
+- openvoxserver-ca patch (chown/symlink)
+- OpenShift random-UID pattern (chgrp 0, chmod g=u, SGID)
+- Slim entrypoint: direct `java` start
 
-### Kein Docker-Compose Support
+### No Docker-Compose Support
 
-Docker-Compose wird **nicht** unterstützt. Die zwei Ansätze beißen sich:
-- K8s: Config per ConfigMap/Secret, CA per Job → schlankes Image ohne entrypoint.d
-- Docker-Compose: braucht entrypoint.d Scripts die ENV-Vars → Config übersetzen
+Docker-Compose is **not** supported. The two approaches conflict:
+- K8s: Config via ConfigMap/Secret, CA via Job -> slim image without entrypoint.d
+- Docker-Compose: needs entrypoint.d scripts that translate ENV vars -> config
 
-**Lokales Testen**: `kind` oder `minikube` + die gleichen K8s Manifests.
+**Local testing**: `kind` or `minikube` + the same K8s manifests.
 
-## Phasen
+## Phases
 
 ### Phase 1: Container Image
-- [x] Rootless Containerfile (UBI9, Tarball, kein ezbake)
-- [ ] System Ruby entfernen (kein Gemfile/bundle install)
-- [ ] Entrypoint vereinfachen (direkt java, keine entrypoint.d Scripts)
-- [ ] Image bauen und testen
+- [x] Rootless Containerfile (UBI9, tarball, no ezbake)
+- [ ] Remove System Ruby (no Gemfile/bundle install)
+- [ ] Simplify entrypoint (direct java, no entrypoint.d scripts)
+- [ ] Build and test image
 
 ### Phase 2: Kubernetes Manifests
-- [ ] Beispiel-ConfigMaps für puppet.conf, webserver.conf, etc.
-- [ ] StatefulSet für CA Server
-- [ ] Deployment für Compiler
-- [ ] Job für CA Setup
+- [ ] Example ConfigMaps for puppet.conf, webserver.conf, etc.
+- [ ] StatefulSet for CA Server
+- [ ] Deployment for compilers
+- [ ] Job for CA setup
 - [ ] Services (puppet-ca, puppet)
 
 ### Phase 3: Operator
-- [x] Go Projekt initialisieren (go.mod, cmd/main.go)
-- [x] CRD `OpenVoxServer` definieren (api/v1alpha1/)
-- [x] Controller: ConfigMap Generation
-- [x] Controller: CA Job Lifecycle
-- [x] Controller: CA StatefulSet Management
-- [x] Controller: Compiler Deployment Management
-- [ ] CRD YAML generieren
-- [ ] RBAC Manifests
+- [x] Initialize Go project (go.mod, cmd/main.go)
+- [x] Define CRDs (api/v1alpha1/)
+- [x] Controller: ConfigMap generation
+- [x] Controller: CA Job lifecycle
+- [x] Controller: CA StatefulSet management
+- [x] Controller: Compiler Deployment management
+- [ ] Generate CRD YAML
+- [ ] RBAC manifests
 
 ### Phase 4: Extras
-- [ ] r10k Integration (initContainer / CronJob)
-- [ ] HPA für Compiler
-- [ ] cert-manager Intermediate CA Support
-- [ ] OLM Bundle für OpenShift
+- [ ] r10k integration (initContainer / CronJob)
+- [ ] HPA for compilers
+- [ ] cert-manager intermediate CA support
+- [ ] OLM bundle for OpenShift

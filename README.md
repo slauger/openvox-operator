@@ -4,16 +4,16 @@ A Kubernetes Operator for running [OpenVox Server](https://github.com/OpenVoxPro
 
 <table>
 <tr>
-<td>🔐</td><td><b>Automated CA Lifecycle</b><br/>CA initialization, certificate signing and distribution — fully managed</td>
+<td>🔐</td><td><b>Automated CA Lifecycle</b><br/>CA initialization, certificate signing and distribution - fully managed</td>
 <td>📦</td><td><b>One Image, Two Roles</b><br/>Same rootless image runs as CA or compiler, configured by the operator</td>
 </tr>
 <tr>
-<td>⚡</td><td><b>Scalable Compilers</b><br/>Scale catalog compilation horizontally — multiple server pools with HPA</td>
-<td>🔄</td><td><b>Multi-Version Deployments</b><br/>Run different server versions side by side — canary deployments, rolling upgrades</td>
+<td>⚡</td><td><b>Scalable Compilers</b><br/>Scale catalog compilation horizontally - multiple server pools with HPA</td>
+<td>🔄</td><td><b>Multi-Version Deployments</b><br/>Run different server versions side by side - canary deployments, rolling upgrades</td>
 </tr>
 <tr>
 <td>🔒</td><td><b>Rootless & OpenShift Ready</b><br/>Random UID compatible, no root, no ezbake, no privilege escalation</td>
-<td>☸️</td><td><b>Kubernetes-Native</b><br/>All config via ConfigMaps/Secrets — no entrypoint scripts, no ENV translation</td>
+<td>☸️</td><td><b>Kubernetes-Native</b><br/>All config via ConfigMaps/Secrets - no entrypoint scripts, no ENV translation</td>
 </tr>
 </table>
 
@@ -30,7 +30,7 @@ graph TB
         Pool["🔀 Pool<br/><small>owns the K8s Service</small>"]
         Pool -->|creates| Svc["Service: puppet :8140"]
 
-        subgraph servers ["Server Instances — same image, different roles"]
+        subgraph servers ["Server Instances - same image, different roles"]
             CA["Server  ·  CA enabled<br/><small>StatefulSet · 1 replica</small>"]
             V1["Server  ·  v8.12.1<br/><small>Deployment · 3 replicas</small>"]
             V2["Server  ·  v8.13.0<br/><small>Deployment · 1 replica (canary)</small>"]
@@ -51,7 +51,7 @@ graph TB
     V1 & V2 -->|facts & reports| PuppetDB[("🗄️ PuppetDB")]
 ```
 
-### CRD Model
+## CRD Model
 
 All resources use the API group `openvox.voxpupuli.org/v1alpha1`.
 
@@ -59,24 +59,24 @@ All resources use the API group `openvox.voxpupuli.org/v1alpha1`.
 |---|---|---|
 | **`Environment`** | Shared config, CA lifecycle, PuppetDB connection | ConfigMaps, CA Job, CA Secret, CA PVC, CA Service |
 | **`Pool`** | Owns a Kubernetes Service | Service (type, annotations, port) |
-| **`Server`** | Puppetserver instance pool | Deployment or StatefulSet, HPA |
+| **`Server`** | OpenVox Server instance pool | Deployment or StatefulSet, HPA |
 | **`CodeDeploy`** | r10k code deployment from Git | PVC, Job, CronJob |
 | *`Database`* | *OpenVoxDB (future)* | *StatefulSet, Service* |
 
 Servers reference their Environment and optionally a Pool:
 
 ```
-Environment ◄── Server (environmentRef)
-Environment ◄── CodeDeploy (environmentRef)
-Environment ◄── Pool (environmentRef)
-Pool        ◄── Server (poolRef)
+Environment <-- Server (environmentRef)
+Environment <-- CodeDeploy (environmentRef)
+Environment <-- Pool (environmentRef)
+Pool        <-- Server (poolRef)
 ```
 
-> 📐 Detailed data model: [docs/data-model.md](docs/data-model.md) · [docs/design.md](docs/design.md)
+> Detailed data model: [docs/data-model.md](docs/data-model.md) - [docs/design.md](docs/design.md)
 
 ## Examples
 
-### Minimal — Single Pod does everything
+### Minimal - Single Pod does everything
 
 ```yaml
 apiVersion: openvox.voxpupuli.org/v1alpha1
@@ -100,7 +100,7 @@ spec:
   replicas: 1
 ```
 
-### Production — CA + Compiler Pool + Canary
+### Production - CA + Compiler Pool + Canary
 
 ```yaml
 apiVersion: openvox.voxpupuli.org/v1alpha1
@@ -172,7 +172,7 @@ spec:
   environmentRef: production
   image: { repository: ghcr.io/slauger/r10k, tag: "latest" }
   sources:
-    - name: puppet
+   - name: puppet
       remote: https://github.com/example/control-repo.git
       basedir: /etc/puppetlabs/code/environments
   schedule: "*/5 * * * *"
@@ -203,7 +203,7 @@ control-repo   production    */5 * * * *   2m ago        1h
 
 ## Container Image
 
-The image is **Kubernetes-first** — intentionally slim, no Docker-Compose support.
+The image is **Kubernetes-first** - intentionally slim, no Docker-Compose support.
 
 | ✅ Included | ❌ Removed (vs. upstream) |
 |---|---|
@@ -214,34 +214,17 @@ The image is **Kubernetes-first** — intentionally slim, no Docker-Compose supp
 | OpenShift random-UID pattern | Docker-Compose support |
 | openvoxserver-ca rootless patches | |
 
-**Entrypoint** — direct JVM, nothing else:
+**Entrypoint** - direct JVM, nothing else:
 
 ```bash
 exec java ${JAVA_ARGS} \
-    -Dlogappender=STDOUT \
-    -cp "${INSTALL_DIR}/puppet-server-release.jar" \
+   -Dlogappender=STDOUT \
+   -cp "${INSTALL_DIR}/puppet-server-release.jar" \
     clojure.main -m puppetlabs.trapperkeeper.main \
-    --config "${CONFIG}" --bootstrap-config "${BOOTSTRAP_CONFIG}"
+   --config "${CONFIG}" --bootstrap-config "${BOOTSTRAP_CONFIG}"
 ```
 
 Local testing: use `kind` or `minikube` with the same K8s manifests.
-
-## Quick Start
-
-### Build the Image
-
-```bash
-cd images/openvoxserver
-podman build -t openvoxserver:rootless .
-```
-
-### Deploy with the Operator
-
-```bash
-kubectl apply -f config/crd/bases/            # Install CRDs
-kubectl apply -f config/manager/              # Deploy operator
-kubectl apply -f config/samples/              # Create an environment
-```
 
 ## Project Structure
 
@@ -249,7 +232,7 @@ kubectl apply -f config/samples/              # Create an environment
 openvox-operator/
 ├── images/openvoxserver/          # 🐳 Rootless K8s-first container image (UBI9)
 │   ├── Containerfile
-│   ├── entrypoint.sh              #    Direct java — no entrypoint.d
+│   ├── entrypoint.sh              #    Direct java - no entrypoint.d
 │   └── healthcheck.sh
 ├── api/v1alpha1/                  # 📋 CRD type definitions
 ├── cmd/main.go                    # 🚀 Operator entrypoint

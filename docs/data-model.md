@@ -1,36 +1,36 @@
-# Datenmodell — CRD Design
+# Data Model - CRD Design
 
 ## API Group
 
 `openvox.voxpupuli.org/v1alpha1`
 
-## Übersicht
+## Overview
 
-| Kind | Verantwortung | Erzeugt K8s-Ressourcen |
+| Kind | Responsibility | Creates K8s Resources |
 |---|---|---|
-| `Environment` | Shared Config, CA-Lifecycle, PuppetDB-Verbindung | ConfigMaps, CA Job, CA Secret, CA PVC, CA Service |
-| `Pool` | Besitzt einen K8s Service | Service |
-| `Server` | Puppetserver Deployment/StatefulSet | Deployment oder StatefulSet, HPA |
-| `CodeDeploy` | r10k Code-Deployment aus Git | PVC, Job, CronJob |
-| `Database` | OpenVoxDB *(Zukunft)* | StatefulSet, Service |
+| `Environment` | Shared config, CA lifecycle, PuppetDB connection | ConfigMaps, CA Job, CA Secret, CA PVC, CA Service |
+| `Pool` | Owns a K8s Service | Service |
+| `Server` | OpenVox Server Deployment/StatefulSet | Deployment or StatefulSet, HPA |
+| `CodeDeploy` | r10k code deployment from Git | PVC, Job, CronJob |
+| `Database` | OpenVoxDB *(future)* | StatefulSet, Service |
 
-## Beziehungen
+## Relationships
 
 ```
-Environment ◄── Server (environmentRef)
-Environment ◄── Pool (environmentRef)
-Environment ◄── CodeDeploy (environmentRef)
-Pool        ◄── Server (poolRef)
+Environment <-- Server (environmentRef)
+Environment <-- Pool (environmentRef)
+Environment <-- CodeDeploy (environmentRef)
+Pool        <-- Server (poolRef)
 ```
 
-Mehrere Server können dasselbe Environment und denselben Pool referenzieren.
-Ein Environment kann von beliebig vielen Servern, Pools und CodeDeploys referenziert werden.
+Multiple Servers can reference the same Environment and the same Pool.
+An Environment can be referenced by any number of Servers, Pools, and CodeDeploys.
 
 ---
 
 ## 1. `Environment`
 
-Die Klammer für ein Puppet-Setup. Verwaltet die CA, shared Konfiguration und PuppetDB-Verbindung.
+The umbrella for a Puppet setup. Manages the CA, shared configuration, and PuppetDB connection.
 
 ```yaml
 apiVersion: openvox.voxpupuli.org/v1alpha1
@@ -38,34 +38,34 @@ kind: Environment
 metadata:
   name: production
 spec:
-  # Default-Image für alle Server in diesem Environment (überschreibbar pro Server)
+  # Default image for all Servers in this Environment (overridable per Server)
   image:
     repository: ghcr.io/slauger/openvoxserver
     tag: "8.12.1"
 
-  # CA-Konfiguration
+  # CA configuration
   ca:
     certname: puppet
     dnsAltNames:
       - puppet
       - puppet-ca
       - puppet-ca.openvox.svc
-    ttl: 157680000                     # 5 Jahre
+    ttl: 157680000                     # 5 years
     allowSubjectAltNames: true
     autosign: "true"                   # true/false/script-path
     storage:
       size: 1Gi
-      storageClass: ""                 # leer = default StorageClass
+      storageClass: ""                 # empty = default StorageClass
     # Optional: Intermediate CA
     # intermediateCA:
     #   secretName: my-intermediate-ca
 
-  # PuppetDB-Verbindung (extern bereitgestellt)
+  # PuppetDB connection (externally provided)
   puppetdb:
     serverUrls:
       - https://openvoxdb:8081
 
-  # Shared puppet.conf Einstellungen
+  # Shared puppet.conf settings
   puppet:
     environmentTimeout: unlimited
     environmentPath: /etc/puppetlabs/code/environments
@@ -73,13 +73,13 @@ spec:
     storeconfigs: true
     storeBackend: puppetdb
     reports: puppetdb
-    extraConfig: {}                    # beliebige key=value Paare
+    extraConfig: {}                    # arbitrary key=value pairs
 
 status:
   phase: Running                       # Pending | CASetup | Running | Error
   caReady: true
-  caSecretName: production-ca-certs    # auto-generiert
-  caServiceName: production-ca         # auto-generiert (interner ClusterIP)
+  caSecretName: production-ca-certs    # auto-generated
+  caServiceName: production-ca         # auto-generated (internal ClusterIP)
   conditions:
     - type: CAInitialized
       status: "True"
@@ -87,18 +87,18 @@ status:
       status: "True"
 ```
 
-**Erzeugt**:
-- CA Setup Job (einmalig, `puppetserver ca setup`)
+**Creates**:
+- CA Setup Job (one-time, `puppetserver ca setup`)
 - CA Secret (`<name>-ca-certs`: ca_crt.pem, ca_key.pem, ca_crl.pem)
 - CA PVC (`<name>-ca-data`)
-- CA Service (`<name>-ca`, interner ClusterIP, immer — braucht keinen Pool)
+- CA Service (`<name>-ca`, internal ClusterIP, always created - no Pool needed)
 - ConfigMaps (`<name>-puppet-conf`, `<name>-puppetdb-conf`, `<name>-webserver-conf`, etc.)
 
 ---
 
 ## 2. `Pool`
 
-Besitzt einen Kubernetes Service. Löst das Ownership-Problem wenn mehrere Server denselben Service teilen.
+Owns a Kubernetes Service. Solves the ownership problem when multiple Servers share the same Service.
 
 ```yaml
 apiVersion: openvox.voxpupuli.org/v1alpha1
@@ -117,21 +117,21 @@ spec:
       team: platform
 
 status:
-  serviceName: puppet                # der erstellte K8s Service
-  endpoints: 4                       # Anzahl Pods hinter dem Service
+  serviceName: puppet                # the created K8s Service
+  endpoints: 4                       # number of Pods behind the Service
 ```
 
-**Erzeugt**:
+**Creates**:
 - Kubernetes Service (`<name>:8140`)
-- Der Service selektiert alle Server-Pods die diesen Pool referenzieren via Label `openvox.voxpupuli.org/pool: <name>`
+- The Service selects all Server Pods referencing this Pool via label `openvox.voxpupuli.org/pool: <name>`
 
-**Lifecycle**: Löscht man einen Server, bleibt der Service. Löscht man den Pool, ist der Service weg.
+**Lifecycle**: Deleting a Server keeps the Service. Deleting the Pool removes the Service.
 
 ---
 
 ## 3. `Server`
 
-Ein Pool von Puppetserver-Instanzen. Kann als CA, Compiler, oder beides laufen.
+A pool of OpenVox Server instances. Can run as CA, compiler, or both.
 
 ```yaml
 apiVersion: openvox.voxpupuli.org/v1alpha1
@@ -139,17 +139,17 @@ kind: Server
 metadata:
   name: stable
 spec:
-  environmentRef: production         # Pflicht: gehört zu diesem Environment
-  poolRef: puppet                    # Optional: tritt diesem Pool/Service bei
+  environmentRef: production         # required: belongs to this Environment
+  poolRef: puppet                    # optional: joins this Pool/Service
 
-  # Image-Override (sonst Environment-Default)
+  # Image override (otherwise uses Environment default)
   image:
     tag: "8.12.1"
 
-  # CA-Rolle
+  # CA role
   ca:
-    enabled: false                   # true = CA-Service aktiviert, mountet CA-Daten
-    compiler: false                  # true = CA nimmt auch am Pool-Service teil
+    enabled: false                   # true = CA service enabled, mounts CA data
+    compiler: false                  # true = CA also participates in Pool Service
 
   replicas: 3
   autoscaling:
@@ -162,9 +162,9 @@ spec:
     requests: { memory: "1Gi", cpu: "500m" }
     limits:   { memory: "2Gi" }
   javaArgs: "-Xms512m -Xmx1024m"
-  maxActiveInstances: 2              # JRuby-Instanzen pro Pod
+  maxActiveInstances: 2              # JRuby instances per Pod
 
-  # Optional: zusätzliche DNS-Alt-Names für das Server-Zertifikat
+  # Optional: additional DNS alt names for the server certificate
   dnsAltNames:
     - puppet
     - puppet.openvox.svc
@@ -180,18 +180,18 @@ status:
       status: "True"
 ```
 
-**Erzeugt**:
-- Deployment (wenn `ca.enabled: false`) oder StatefulSet (wenn `ca.enabled: true`)
-- HPA (wenn `autoscaling.enabled`)
-- InitContainer für SSL-Bootstrap gegen CA-Service (wenn `ca.enabled: false`)
+**Creates**:
+- Deployment (when `ca.enabled: false`) or StatefulSet (when `ca.enabled: true`)
+- HPA (when `autoscaling.enabled`)
+- InitContainer for SSL bootstrap against CA Service (when `ca.enabled: false`)
 
-**Labels auf den Pods**:
+**Pod Labels**:
 - `openvox.voxpupuli.org/environment: production`
-- `openvox.voxpupuli.org/pool: puppet` (wenn poolRef gesetzt)
+- `openvox.voxpupuli.org/pool: puppet` (when poolRef is set)
 - `openvox.voxpupuli.org/server: stable`
-- `openvox.voxpupuli.org/role: compiler` oder `ca`
+- `openvox.voxpupuli.org/role: compiler` or `ca`
 
-**CA-Server + Compiler Combo** (kleine Setups):
+**CA Server + Compiler Combo** (small setups):
 ```yaml
 kind: Server
 metadata:
@@ -201,7 +201,7 @@ spec:
   poolRef: puppet
   ca:
     enabled: true
-    compiler: true      # Pods bekommen AUCH das Pool-Label → landen im Service
+    compiler: true      # Pods also get the Pool label -> join the Service
   replicas: 1
 ```
 
@@ -209,7 +209,7 @@ spec:
 
 ## 4. `CodeDeploy`
 
-r10k Code-Deployment aus Git. Unabhängig von Server — verwaltet ein PVC das von Servern gemountet wird.
+r10k code deployment from Git. Independent of Server - manages a PVC that Servers mount.
 
 ```yaml
 apiVersion: openvox.voxpupuli.org/v1alpha1
@@ -228,21 +228,21 @@ spec:
       remote: https://github.com/example/control-repo.git
       basedir: /etc/puppetlabs/code/environments
 
-  # Git-Authentifizierung (optional)
+  # Git authentication (optional)
   # gitSecret: r10k-git-credentials
 
-  schedule: "*/5 * * * *"           # CronJob für periodisches Update
+  schedule: "*/5 * * * *"           # CronJob for periodic updates
 
   volume:
     size: 5Gi
-    accessMode: ReadWriteOnce        # ReadWriteOnce oder ReadWriteMany
+    accessMode: ReadWriteOnce        # ReadWriteOnce or ReadWriteMany
     # storageClass: ""
-    # existingClaim: ""              # vorhandenes PVC nutzen
+    # existingClaim: ""              # use existing PVC
 
 status:
   phase: Ready                       # Pending | Deploying | Ready | Error
   lastDeployTime: "2026-03-07T22:00:00Z"
-  pvcName: control-repo-code         # auto-generiert
+  pvcName: control-repo-code         # auto-generated
   conditions:
     - type: VolumeReady
       status: "True"
@@ -250,40 +250,40 @@ status:
       status: "True"
 ```
 
-**Erzeugt**:
+**Creates**:
 - PVC (`<name>-code`)
 - Job (initial deploy)
-- CronJob (periodischer Sync nach `schedule`)
+- CronJob (periodic sync per `schedule`)
 
-### Code Volume Strategie
+### Code Volume Strategy
 
-Server mounten das Code-PVC automatisch wenn ein `CodeDeploy` im gleichen Environment existiert.
+Servers automatically mount the code PVC when a `CodeDeploy` in the same Environment exists.
 
 **Single-Node (Default): RWO + Pod-Affinity**
 
-RWO erlaubt mehrere Pods auf **demselben Node**. Der Operator setzt Pod-Affinity damit r10k Job und Server-Pods auf dem gleichen Node laufen.
+RWO allows multiple Pods on the **same Node**. The operator sets pod affinity so the r10k Job and Server Pods run on the same node.
 
 ```
 Node A:
-  ├── r10k CronJob     ─── mount RWO PVC (read-write)
-  ├── Server Pod 1      ── mount RWO PVC (read-only)
-  └── Server Pod 2      ── mount RWO PVC (read-only)
+  +-- r10k CronJob      --- mount RWO PVC (read-write)
+  +-- Server Pod 1       -- mount RWO PVC (read-only)
+  +-- Server Pod 2       -- mount RWO PVC (read-only)
 ```
 
 **Multi-Node: RWX**
 
-Sobald Server über mehrere Nodes verteilt werden, braucht man `accessMode: ReadWriteMany`. Benötigt einen RWX-fähigen Storage-Provider (NFS, CephFS, EFS, Longhorn).
+When Servers are distributed across multiple nodes, `accessMode: ReadWriteMany` is required. Needs an RWX-capable storage provider (NFS, CephFS, EFS, Longhorn).
 
-| Setup | accessMode | Voraussetzung |
+| Setup | accessMode | Requirement |
 |---|---|---|
-| Single-Node | `ReadWriteOnce` | Jeder Storage-Provider |
+| Single-Node | `ReadWriteOnce` | Any storage provider |
 | Multi-Node | `ReadWriteMany` | NFS, CephFS, EFS, Longhorn |
 
 ---
 
-## 5. `Database` *(Zukunft)*
+## 5. `Database` *(future)*
 
-Für den Fall dass man OpenVoxDB auch vom Operator managen lassen will.
+For managing OpenVoxDB via the operator.
 
 ```yaml
 apiVersion: openvox.voxpupuli.org/v1alpha1
@@ -304,33 +304,33 @@ spec:
     size: 10Gi
 ```
 
-Erstmal **out of scope** — PuppetDB und PostgreSQL kommen extern über `Environment.spec.puppetdb`. Das Datenmodell ist aber vorbereitet.
+Currently **out of scope** - PuppetDB and PostgreSQL are provided externally via `Environment.spec.puppetdb`. The data model is prepared for future use.
 
 ---
 
-## Referenz-Auflösung
+## Reference Resolution
 
-Der Server-Controller löst bei jeder Reconciliation die Referenzen auf:
+The Server controller resolves references during each reconciliation:
 
 ```
 Server.spec.environmentRef: "production"
-  → Environment "production"
-    → status.caSecretName: "production-ca-certs"    (CA Secret zum Mounten)
-    → status.caServiceName: "production-ca"          (für SSL Bootstrap)
-    → ConfigMaps: "production-puppet-conf", etc.     (zum Mounten)
+  -> Environment "production"
+    -> status.caSecretName: "production-ca-certs"    (CA Secret to mount)
+    -> status.caServiceName: "production-ca"          (for SSL bootstrap)
+    -> ConfigMaps: "production-puppet-conf", etc.     (to mount)
 
 Server.spec.poolRef: "puppet"
-  → Pool "puppet"
-    → Label "openvox.voxpupuli.org/pool: puppet"     (für Service-Selektion)
+  -> Pool "puppet"
+    -> Label "openvox.voxpupuli.org/pool: puppet"     (for Service selection)
 
-CodeDeploy im gleichen Environment:
-  → CodeDeploy "control-repo"
-    → status.pvcName: "control-repo-code"            (Code-PVC zum Mounten)
+CodeDeploy in the same Environment:
+  -> CodeDeploy "control-repo"
+    -> status.pvcName: "control-repo-code"            (code PVC to mount)
 ```
 
 ---
 
-## Vollständiges Beispiel
+## Full Example
 
 ```yaml
 ---
@@ -354,7 +354,7 @@ spec:
     storeconfigs: true
     reports: puppetdb
 ---
-# 2. Pool: Besitzt den Service für Agents
+# 2. Pool: Owns the Service for agents
 apiVersion: openvox.voxpupuli.org/v1alpha1
 kind: Pool
 metadata:
@@ -366,7 +366,7 @@ spec:
     type: LoadBalancer
     port: 8140
 ---
-# 3. Server: CA (1 Replica, kein Pool)
+# 3. Server: CA (1 replica, no Pool)
 apiVersion: openvox.voxpupuli.org/v1alpha1
 kind: Server
 metadata:
@@ -378,7 +378,7 @@ spec:
   replicas: 1
   javaArgs: "-Xms512m -Xmx1024m"
 ---
-# 4. Server: Stable Compiler Pool
+# 4. Server: Stable compiler pool
 apiVersion: openvox.voxpupuli.org/v1alpha1
 kind: Server
 metadata:
@@ -391,7 +391,7 @@ spec:
   maxActiveInstances: 2
   javaArgs: "-Xms512m -Xmx1024m"
 ---
-# 5. Server: Canary (neue Version, gleicher Pool)
+# 5. Server: Canary (newer version, same Pool)
 apiVersion: openvox.voxpupuli.org/v1alpha1
 kind: Server
 metadata:

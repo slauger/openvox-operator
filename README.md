@@ -167,28 +167,6 @@ spec:
   volume: { size: 5Gi }
 ```
 
-### Status
-
-```
-$ kubectl get environment
-NAME         CA READY   AGE
-production   true       1h
-
-$ kubectl get pool
-NAME     TYPE           SERVICE   AGE
-puppet   LoadBalancer   puppet    1h
-
-$ kubectl get server
-NAME     ENVIRONMENT   POOL     IMAGE     REPLICAS   READY   AGE
-ca       production             8.12.1    1          1       1h
-stable   production    puppet   8.12.1    3          3       1h
-canary   production    puppet   8.13.0    1          1       30m
-
-$ kubectl get codedeploy
-NAME           ENVIRONMENT   SCHEDULE      LAST DEPLOY   AGE
-control-repo   production    */5 * * * *   2m ago        1h
-```
-
 ## License
 
 Apache License 2.0

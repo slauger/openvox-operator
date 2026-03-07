@@ -29,22 +29,14 @@ graph TD
     Env --> Stable["⚙️ Server CRD: stable<br/>role: compiler - v8.8.1"]
     Env --> Canary["⚙️ Server CRD: canary<br/>role: compiler - v8.9.0"]
 
-    CA --> CA_P["Pod ca-0"]
-    Stable --> ST_P1["Pod stable-0"]
-    Stable --> ST_P2["Pod stable-1"]
-    Stable --> ST_P3["Pod stable-2"]
-    Canary --> CA_P2["Pod canary-0"]
-    Canary --> CA_P3["Pod canary-1"]
-    Canary --> CA_P4["Pod canary-2"]
+    CA --> CA_P["Pod"]
+    Stable --> ST_P["Pod"]
+    Canary --> CN_P["Pod"]
 
     CA_P -->|mounts| CA_PVC["💾 CA Data PVC"]
     CA_P -->|mounts| Code_PVC
-    ST_P1 -->|mounts| Code_PVC["📦 Code PVC (RWX)"]
-    ST_P2 -->|mounts| Code_PVC
-    ST_P3 -->|mounts| Code_PVC
-    CA_P2 -->|mounts| Code_PVC
-    CA_P3 -->|mounts| Code_PVC
-    CA_P4 -->|mounts| Code_PVC
+    ST_P -->|mounts| Code_PVC["📦 Code PVC (RWX)"]
+    CN_P -->|mounts| Code_PVC
 ```
 
 ## CRD Model

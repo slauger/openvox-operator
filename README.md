@@ -20,35 +20,11 @@ A Kubernetes Operator for running [OpenVox Server](https://github.com/OpenVoxPro
 ## Architecture
 
 ```mermaid
-graph TB
-    subgraph cluster ["Kubernetes Cluster"]
-        Env["🌍 Environment<br/><small>shared config, CA lifecycle,<br/>PuppetDB connection</small>"]
-
-        Env -->|manages CA| CASecret["🔐 CA Secret + PVC"]
-        Env -->|generates| CM["📄 ConfigMaps"]
-
-        Pool["🔀 Pool<br/><small>owns the K8s Service</small>"]
-        Pool -->|creates| Svc["Service: puppet :8140"]
-
-        subgraph servers ["Server Instances - same image, different roles"]
-            CA["Server  ·  CA enabled<br/><small>StatefulSet · 1 replica</small>"]
-            V1["Server  ·  v8.12.1<br/><small>Deployment · 3 replicas</small>"]
-            V2["Server  ·  v8.13.0<br/><small>Deployment · 1 replica (canary)</small>"]
-        end
-
-        CA -->|environmentRef| Env
-        V1 -->|environmentRef| Env
-        V2 -->|environmentRef| Env
-        V1 -->|poolRef| Pool
-        V2 -->|poolRef| Pool
-        CA -->|cert signing| CASecret
-
-        CodeDeploy["📦 CodeDeploy<br/><small>r10k · CronJob + PVC</small>"]
-        CodeDeploy -->|environmentRef| Env
-    end
-
-    Agents["🖥️ Puppet Agents"] -->|connect :8140| Svc
-    V1 & V2 -->|facts & reports| PuppetDB[("🗄️ PuppetDB")]
+graph TD
+    Env["Environment: production"]
+    Env --> CA["Server: ca<br/>CA enabled - 1 replica"]
+    Env --> Stable["Server: stable<br/>v8.8.1 - 3 replicas"]
+    Env --> Canary["Server: canary<br/>v8.9.0 - 3 replicas"]
 ```
 
 ## CRD Model
@@ -200,64 +176,6 @@ $ kubectl get codedeploy
 NAME           ENVIRONMENT   SCHEDULE      LAST DEPLOY   AGE
 control-repo   production    */5 * * * *   2m ago        1h
 ```
-
-## Container Image
-
-The image is **Kubernetes-first** - intentionally slim, no Docker-Compose support.
-
-| ✅ Included | ❌ Removed (vs. upstream) |
-|---|---|
-| UBI9 + JDK 17 | entrypoint.d scripts |
-| OpenVox Server tarball | System Ruby / Gemfile / bundle install |
-| PuppetDB termini | ENV→config translation logic |
-| JRuby openvox gem | gcc / make / ruby-devel |
-| OpenShift random-UID pattern | Docker-Compose support |
-| openvoxserver-ca rootless patches | |
-
-**Entrypoint** - direct JVM, nothing else:
-
-```bash
-exec java ${JAVA_ARGS} \
-   -Dlogappender=STDOUT \
-   -cp "${INSTALL_DIR}/puppet-server-release.jar" \
-    clojure.main -m puppetlabs.trapperkeeper.main \
-   --config "${CONFIG}" --bootstrap-config "${BOOTSTRAP_CONFIG}"
-```
-
-Local testing: use `kind` or `minikube` with the same K8s manifests.
-
-## Project Structure
-
-```
-openvox-operator/
-├── images/openvoxserver/          # 🐳 Rootless K8s-first container image (UBI9)
-│   ├── Containerfile
-│   ├── entrypoint.sh              #    Direct java - no entrypoint.d
-│   └── healthcheck.sh
-├── api/v1alpha1/                  # 📋 CRD type definitions
-├── cmd/main.go                    # 🚀 Operator entrypoint
-├── internal/controller/           # ⚙️  Reconciliation logic
-├── config/
-│   ├── crd/bases/                 #    CRD manifests
-│   ├── rbac/                      #    RBAC roles
-│   └── samples/                   #    Example CRs
-├── docs/                          # 📐 Architecture & design docs
-├── go.mod
-└── LICENSE                        #    Apache 2.0
-```
-
-## Roadmap
-
-- [x] Rootless OpenVox Server container image (UBI9, tarball-based, no ezbake)
-- [x] CRD data model design (Environment, Pool, Server, CodeDeploy)
-- [ ] Implement multi-CRD Go types and controllers
-- [ ] Simplify container image (remove entrypoint.d, Gemfile, System Ruby)
-- [ ] CRD manifest generation and RBAC
-- [ ] r10k code deployment (Job / CronJob with shared PVC)
-- [ ] HPA for compiler autoscaling
-- [ ] cert-manager intermediate CA support
-- [ ] OLM bundle for OpenShift
-- [ ] Rootless OpenVoxDB container image
 
 ## License
 

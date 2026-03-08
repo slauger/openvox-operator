@@ -120,14 +120,17 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 
 	javaArgs := resolveJavaArgs(server)
 
-	// Determine role
+	// Determine role: primary role is "server" unless it's a CA-only node
 	role := RoleServer
-	if server.Spec.CA {
+	if server.Spec.CA && !server.Spec.Server {
 		role = RoleCA
 	}
 
 	// Build labels
 	labels := serverLabels(server.Spec.EnvironmentRef, server.Name, role)
+	if server.Spec.CA {
+		labels[LabelCA] = "true"
+	}
 	for _, pool := range server.Spec.PoolRefs {
 		labels[poolLabel(pool)] = "true"
 	}

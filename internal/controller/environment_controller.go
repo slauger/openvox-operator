@@ -120,6 +120,11 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, fmt.Errorf("reconciling CA Service: %w", err)
 	}
 
+	// Step 2d: Default Server Service
+	if err := r.reconcileServerService(ctx, env); err != nil {
+		return ctrl.Result{}, fmt.Errorf("reconciling Server Service: %w", err)
+	}
+
 	// Update status
 	env.Status.CAReady = true
 	env.Status.CASecretName = caSecretName
@@ -955,7 +960,47 @@ echo "CA Secret '${SECRET_NAME}' created/updated successfully."
 	}
 }
 
-// --- CA Service ---
+// --- Default Services ---
+
+func (r *EnvironmentReconciler) reconcileServerService(ctx context.Context, env *openvoxv1alpha1.Environment) error {
+	svcName := fmt.Sprintf("%s-server", env.Name)
+
+	svc := &corev1.Service{}
+	err := r.Get(ctx, types.NamespacedName{Name: svcName, Namespace: env.Namespace}, svc)
+	if errors.IsNotFound(err) {
+		labels := environmentLabels(env.Name)
+		// Default server service selects all server-role pods in this environment
+		selector := map[string]string{
+			LabelEnvironment: env.Name,
+			LabelRole:        RoleServer,
+		}
+
+		svc = &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      svcName,
+				Namespace: env.Namespace,
+				Labels:    labels,
+			},
+			Spec: corev1.ServiceSpec{
+				Selector: selector,
+				Ports: []corev1.ServicePort{
+					{
+						Name:       "https",
+						Port:       8140,
+						TargetPort: intstr.FromInt32(8140),
+						Protocol:   corev1.ProtocolTCP,
+					},
+				},
+			},
+		}
+
+		if err := controllerutil.SetControllerReference(env, svc, r.Scheme); err != nil {
+			return err
+		}
+		return r.Create(ctx, svc)
+	}
+	return err
+}
 
 func (r *EnvironmentReconciler) reconcileCAService(ctx context.Context, env *openvoxv1alpha1.Environment) error {
 	svcName := fmt.Sprintf("%s-ca", env.Name)
@@ -964,10 +1009,10 @@ func (r *EnvironmentReconciler) reconcileCAService(ctx context.Context, env *ope
 	err := r.Get(ctx, types.NamespacedName{Name: svcName, Namespace: env.Namespace}, svc)
 	if errors.IsNotFound(err) {
 		labels := environmentLabels(env.Name)
-		// CA Service selects pods with role=ca in this environment
+		// CA Service selects pods with ca=true in this environment
 		selector := map[string]string{
 			LabelEnvironment: env.Name,
-			LabelRole:        RoleCA,
+			LabelCA:          "true",
 		}
 
 		svc = &corev1.Service{

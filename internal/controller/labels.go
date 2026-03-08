@@ -6,6 +6,7 @@ const (
 	LabelPoolPrefix  = "openvox.voxpupuli.org/pool-"
 	LabelServer      = "openvox.voxpupuli.org/server"
 	LabelRole        = "openvox.voxpupuli.org/role"
+	LabelCA          = "openvox.voxpupuli.org/ca"
 
 	// Role values.
 	RoleCA     = "ca"

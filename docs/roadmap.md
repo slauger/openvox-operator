@@ -43,6 +43,8 @@ See [certificate-signing.md](certificate-signing.md) for the detailed design.
 - [ ] CertificateRequest CRD for declarative CSR approval
 - [ ] Sidecar container on CA server pod for CSR polling and signing
 - [ ] Dedicated `{env}-ca-signing` ServiceAccount with CRD access
+- [ ] SigningPolicy CRD with modes: psk, pattern, token, any
+- [ ] Environment references SigningPolicies (replaces autosign field)
 - [ ] CRL auto-refresh in CA Secret after signing/revocation
 
 ## Later

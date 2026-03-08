@@ -128,7 +128,7 @@ rules:
 
 ### Configuration
 
-The sidecar is opt-in via the Environment spec:
+The sidecar is enabled automatically when `signingPolicies` are referenced in the Environment spec (see SigningPolicy CRD below). The sidecar poll interval can be configured:
 
 ```yaml
 apiVersion: openvox.voxpupuli.org/v1alpha1
@@ -137,22 +137,183 @@ metadata:
   name: production
 spec:
   ca:
-    autosign: "false"
+    signingPolicies:
+      - name: psk-signing
+      - name: trusted-patterns
     signing:
-      enabled: true          # Enables the sidecar + CertificateRequest CRD flow
-      pollInterval: 30s      # How often to check for pending CSRs
+      pollInterval: 30s      # How often the sidecar checks for pending CSRs (default: 30s)
 ```
 
-When `signing.enabled` is `false` (default) and `autosign` is `"false"`, CSRs must be signed manually (e.g., via `kubectl exec` into the CA pod).
+When no `signingPolicies` are referenced, CSRs must be approved manually via CertificateRequest CRDs (deny-all default). See the next section for details.
 
 ### Denial and Revocation
 
 - **Deny**: Setting a CertificateRequest to `Denied` triggers `puppetserver ca clean <certname>` (removes the pending CSR)
 - **Revoke**: A separate `certificaterequests/revoke` subresource or a `revoked` status triggers `puppetserver ca revoke <certname>` and updates the CRL
 
-### Implementation Phases
+## SigningPolicy CRD
+
+### Problem
+
+Different environments need different certificate signing strategies. Development environments may want automatic signing, while production environments require pre-shared key validation or pattern-based restrictions. These policies should be reusable across environments and managed as GitOps-friendly Kubernetes objects.
+
+### Design
+
+A `SigningPolicy` CRD defines how CSRs are automatically approved:
+
+```yaml
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: SigningPolicy
+metadata:
+  name: psk-signing
+  namespace: openvox-system
+spec:
+  mode: psk
+  psk:
+    secretRef:
+      name: signing-psk        # Secret containing the pre-shared key
+      key: psk                  # Key within the Secret
+    csrAttribute: pp_preshared_key  # CSR extension attribute to match (default: pp_preshared_key)
+```
+
+### Modes
+
+| Mode | Description | Use Case |
+|---|---|---|
+| `psk` | Pre-shared key in CSR extension attribute | Automated agent bootstrapping with shared secret |
+| `pattern` | Certname pattern matching (glob or regex) | Trusted naming conventions |
+| `token` | One-time token validated against a Secret | Controlled single-use provisioning |
+| `any` | Approve all CSRs unconditionally | Development and trusted environments |
+
+### Mode Examples
+
+**PSK (Pre-Shared Key)**
+
+The agent includes a pre-shared key as a CSR extension attribute (`pp_preshared_key`). The sidecar validates the key against a Kubernetes Secret.
+
+```yaml
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: SigningPolicy
+metadata:
+  name: psk-signing
+spec:
+  mode: psk
+  psk:
+    secretRef:
+      name: signing-psk
+      key: psk
+    csrAttribute: pp_preshared_key
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: signing-psk
+type: Opaque
+stringData:
+  psk: "my-secret-bootstrap-key"
+```
+
+**Pattern Matching**
+
+CSRs are approved if the certname matches one of the allowed patterns.
+
+```yaml
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: SigningPolicy
+metadata:
+  name: trusted-patterns
+spec:
+  mode: pattern
+  pattern:
+    allow:
+      - "*.openvox-system.svc"
+      - "compiler-*.example.com"
+```
+
+**One-Time Token**
+
+Each agent uses a unique token that is consumed after signing.
+
+```yaml
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: SigningPolicy
+metadata:
+  name: token-signing
+spec:
+  mode: token
+  token:
+    secretRef:
+      name: signing-tokens    # Secret with certname->token mappings
+    csrAttribute: pp_auth_token
+```
+
+**Automatic (Any)**
+
+Approves all CSRs unconditionally. Replaces the legacy `autosign: "true"` behavior.
+
+```yaml
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: SigningPolicy
+metadata:
+  name: auto-approve
+spec:
+  mode: any
+```
+
+### Environment Reference
+
+An Environment references zero or more SigningPolicies:
+
+```yaml
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: Environment
+metadata:
+  name: production
+spec:
+  ca:
+    signingPolicies:
+      - name: psk-signing
+      - name: trusted-patterns
+```
+
+**Evaluation logic:**
+
+- **No `signingPolicies`** (default): Manual signing only. All CSRs create CertificateRequest CRDs in `Pending` state. An administrator or external policy controller must approve them.
+- **One policy**: CSRs are evaluated against that policy. If it matches, the CSR is auto-approved. If not, a CertificateRequest CRD is created for manual approval.
+- **Multiple policies**: OR logic - if any policy matches, the CSR is auto-approved. This allows combining e.g. PSK for automated agents with pattern matching for known hostnames.
+
+### Signing Flow with Policies
+
+```
+1. CSR arrives on CA server filesystem
+   |
+   v
+2. Sidecar detects pending CSR
+   |
+   v
+3. Sidecar evaluates CSR against referenced SigningPolicies
+   |
+   +-- Policy matches --> Auto-approve: sign immediately
+   |                      Update CertificateRequest status to Signed
+   |
+   +-- No policy matches --> Create CertificateRequest CR (status: Pending)
+                             Wait for manual/external approval
+```
+
+### Migration from autosign
+
+The `autosign` field on the Environment spec is replaced by SigningPolicies:
+
+| Legacy | SigningPolicy equivalent |
+|---|---|
+| `autosign: "true"` | Reference a SigningPolicy with `mode: any` |
+| `autosign: "false"` | No `signingPolicies` (manual default) |
+
+The `autosign` field will be deprecated once SigningPolicy support is implemented.
+
+## Implementation Phases
 
 1. **Phase 1** (current): `autosign=true` for all environments
 2. **Phase 2**: CertificateRequest CRD + sidecar for manual approval
-3. **Phase 3**: Policy-based auto-approval (OPA/Kyverno integration, label-based rules)
+3. **Phase 3**: SigningPolicy CRD with PSK, pattern, token, and any modes
 4. **Phase 4**: CRL auto-refresh (sidecar updates CA Secret after any signing/revocation)

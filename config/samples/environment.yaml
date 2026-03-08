@@ -9,11 +9,6 @@ spec:
     repository: ghcr.io/slauger/openvox-server
     tag: "8.12.1"
   ca:
-    certname: puppet
-    dnsAltNames:
-      - puppet
-      - puppet-ca
-      - puppet-ca.openvox.svc
     autosign: "true"
     storage:
       size: 1Gi

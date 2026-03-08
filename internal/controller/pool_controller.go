@@ -72,6 +72,19 @@ func (r *PoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
+// poolServiceSelector builds the label selector for a Pool's Service.
+// It merges the user-defined Selector with the auto-injected environment label.
+// If no Selector is defined, only the environment label is used (selects all Pods in the Environment).
+func poolServiceSelector(pool *openvoxv1alpha1.Pool) map[string]string {
+	sel := map[string]string{
+		LabelEnvironment: pool.Spec.EnvironmentRef,
+	}
+	for k, v := range pool.Spec.Selector {
+		sel[k] = v
+	}
+	return sel
+}
+
 func (r *PoolReconciler) reconcileService(ctx context.Context, pool *openvoxv1alpha1.Pool) error {
 	logger := log.FromContext(ctx)
 	svcName := pool.Name
@@ -118,7 +131,7 @@ func (r *PoolReconciler) reconcileService(ctx context.Context, pool *openvoxv1al
 			},
 			Spec: corev1.ServiceSpec{
 				Type:        svcType,
-				Selector:    poolSelector(pool.Name),
+				Selector:    poolServiceSelector(pool),
 				Ports:       []corev1.ServicePort{svcPort},
 				ExternalIPs: pool.Spec.Service.ExternalIPs,
 			},
@@ -152,7 +165,7 @@ func (r *PoolReconciler) reconcileService(ctx context.Context, pool *openvoxv1al
 	svc.Annotations = pool.Spec.Service.Annotations
 
 	svc.Spec.Type = svcType
-	svc.Spec.Selector = poolSelector(pool.Name)
+	svc.Spec.Selector = poolServiceSelector(pool)
 	if len(svc.Spec.Ports) == 0 {
 		svc.Spec.Ports = []corev1.ServicePort{{}}
 	}

@@ -18,9 +18,6 @@ spec:
     - jsonPath: .spec.environmentRef
       name: Environment
       type: string
-    - jsonPath: .spec.poolRefs
-      name: Pools
-      type: string
     - jsonPath: .spec.replicas
       name: Replicas
       type: integer
@@ -91,6 +88,11 @@ spec:
                   CA enables the Certificate Authority role on this Server.
                   When true, pods mount the CA data PVC and run as CA.
                 type: boolean
+              certname:
+                description: |-
+                  Certname is the certificate name for this Server.
+                  Defaults to the Server's name if not set.
+                type: string
               code:
                 description: Code overrides the Environment's code volume for this
                   Server.
@@ -157,13 +159,6 @@ spec:
                   Pod.
                 format: int32
                 type: integer
-              poolRefs:
-                description: |-
-                  PoolRefs references one or more Pools this Server joins.
-                  For each Pool, Pods get a pool label and are selected by that Pool's Service.
-                items:
-                  type: string
-                type: array
               replicas:
                 default: 1
                 description: Replicas is the number of Server instances.
@@ -306,6 +301,7 @@ spec:
                 enum:
                 - Pending
                 - WaitingForCA
+                - CertSetup
                 - Running
                 - Error
                 type: string

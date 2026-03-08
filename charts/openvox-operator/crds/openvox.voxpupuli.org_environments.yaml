@@ -67,16 +67,6 @@ spec:
                       Autosign controls certificate autosigning.
                       Can be "true", "false", or a path to an autosign script.
                     type: string
-                  certname:
-                    default: puppet
-                    description: Certname is the CA server's certificate name.
-                    type: string
-                  dnsAltNames:
-                    description: DNSAltNames is a list of DNS alternative names for
-                      the CA certificate.
-                    items:
-                      type: string
-                    type: array
                   intermediateCA:
                     description: IntermediateCA configures an intermediate CA setup.
                     properties:

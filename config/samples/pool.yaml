@@ -6,6 +6,8 @@ metadata:
   namespace: openvox-system
 spec:
   environmentRef: production
+  selector:
+    openvox.voxpupuli.org/role: server
   service:
     type: ClusterIP
     port: 8140

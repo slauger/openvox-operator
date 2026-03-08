@@ -13,7 +13,7 @@ import (
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // Pool is the Schema for the pools API.
-// It owns a Kubernetes Service that selects Server Pods referencing this Pool.
+// It owns a Kubernetes Service that selects Server Pods matching the Pool's Selector.
 type Pool struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -35,6 +35,12 @@ type PoolList struct {
 type PoolSpec struct {
 	// EnvironmentRef references the Environment this Pool belongs to.
 	EnvironmentRef string `json:"environmentRef"`
+
+	// Selector is a set of labels used to select Server Pods for this Pool's Service.
+	// The environment label is always added automatically.
+	// If empty or nil, the Pool selects all Server Pods in the Environment.
+	// +optional
+	Selector map[string]string `json:"selector,omitempty"`
 
 	// Service defines the Kubernetes Service configuration.
 	// +optional

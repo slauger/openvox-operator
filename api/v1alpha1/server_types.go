@@ -8,7 +8,6 @@ import (
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Environment",type=string,JSONPath=`.spec.environmentRef`
-// +kubebuilder:printcolumn:name="Pools",type=string,JSONPath=`.spec.poolRefs`
 // +kubebuilder:printcolumn:name="Replicas",type=integer,JSONPath=`.spec.replicas`
 // +kubebuilder:printcolumn:name="Ready",type=integer,JSONPath=`.status.ready`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
@@ -37,11 +36,6 @@ type ServerList struct {
 type ServerSpec struct {
 	// EnvironmentRef references the Environment this Server belongs to.
 	EnvironmentRef string `json:"environmentRef"`
-
-	// PoolRefs references one or more Pools this Server joins.
-	// For each Pool, Pods get a pool label and are selected by that Pool's Service.
-	// +optional
-	PoolRefs []string `json:"poolRefs,omitempty"`
 
 	// Image overrides the Environment's default image.
 	// +optional
@@ -119,12 +113,13 @@ type AutoscalingSpec struct {
 }
 
 // ServerPhase represents the current lifecycle phase of a Server.
-// +kubebuilder:validation:Enum=Pending;WaitingForCA;Running;Error
+// +kubebuilder:validation:Enum=Pending;WaitingForCA;CertSetup;Running;Error
 type ServerPhase string
 
 const (
 	ServerPhasePending      ServerPhase = "Pending"
 	ServerPhaseWaitingForCA ServerPhase = "WaitingForCA"
+	ServerPhaseCertSetup    ServerPhase = "CertSetup"
 	ServerPhaseRunning      ServerPhase = "Running"
 	ServerPhaseError        ServerPhase = "Error"
 )

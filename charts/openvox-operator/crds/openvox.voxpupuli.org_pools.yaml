@@ -32,7 +32,7 @@ spec:
       openAPIV3Schema:
         description: |-
           Pool is the Schema for the pools API.
-          It owns a Kubernetes Service that selects Server Pods referencing this Pool.
+          It owns a Kubernetes Service that selects Server Pods matching the Pool's Selector.
         properties:
           apiVersion:
             description: |-
@@ -58,6 +58,14 @@ spec:
                 description: EnvironmentRef references the Environment this Pool belongs
                   to.
                 type: string
+              selector:
+                additionalProperties:
+                  type: string
+                description: |-
+                  Selector is a set of labels used to select Server Pods for this Pool's Service.
+                  The environment label is always added automatically.
+                  If empty or nil, the Pool selects all Server Pods in the Environment.
+                type: object
               service:
                 description: Service defines the Kubernetes Service configuration.
                 properties:

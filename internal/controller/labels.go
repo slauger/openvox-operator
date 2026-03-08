@@ -39,12 +39,5 @@ func poolLabel(poolName string) string {
 	return LabelPoolPrefix + poolName
 }
 
-// poolSelector returns the label selector for a Pool's Service.
-func poolSelector(poolName string) map[string]string {
-	return map[string]string{
-		poolLabel(poolName): "true",
-	}
-}
-
 func int64Ptr(i int64) *int64 { return &i }
 func boolPtr(b bool) *bool    { return &b }

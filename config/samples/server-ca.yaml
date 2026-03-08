@@ -8,8 +8,11 @@ spec:
   environmentRef: production
   ca: true
   server: true
-  poolRefs:
+  certname: puppet
+  dnsAltNames:
     - puppet
+    - puppet-ca
+    - puppet-ca.openvox.svc
   replicas: 1
   resources:
     requests:

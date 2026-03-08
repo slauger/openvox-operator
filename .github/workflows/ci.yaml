@@ -7,6 +7,15 @@ on:
     branches: [main]
 
 jobs:
+  go:
+    uses: ./.github/workflows/go.yaml
+
+  helm:
+    uses: ./.github/workflows/helm.yaml
+
+  shellcheck:
+    uses: ./.github/workflows/shellcheck.yaml
+
   openvox-operator:
     uses: ./.github/workflows/container-build.yaml
     permissions:

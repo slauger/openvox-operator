@@ -80,7 +80,7 @@ jobs:
           dockerfile: ${{ inputs.dockerfile }}
 
   build:
-    needs: prepare
+    needs: [hadolint, prepare]
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false

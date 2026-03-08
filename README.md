@@ -25,7 +25,7 @@ graph TD
     Stable --> ST_D["Deployment"]
     Canary --> CN_D["Deployment"]
 
-    CA_D -->|mounts| CA_PVC["💾 CA Data PVC"]
+    CA_D -->|mounts| CA_PVC["💾 CA Data PVC (RWO)"]
     CA_D -->|mounts| Code_PVC
     ST_D -->|mounts| Code_PVC["📦 Code PVC (RWX)"]
     CN_D -->|mounts| Code_PVC

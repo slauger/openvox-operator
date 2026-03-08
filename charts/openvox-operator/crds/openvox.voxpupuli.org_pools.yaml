@@ -21,6 +21,9 @@ spec:
     - jsonPath: .spec.service.type
       name: Type
       type: string
+    - jsonPath: .status.endpoints
+      name: Endpoints
+      type: integer
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -68,6 +71,12 @@ spec:
                       type: string
                     description: Labels are additional labels for the Service.
                     type: object
+                  nodePort:
+                    description: |-
+                      NodePort is the port on each node for type NodePort or LoadBalancer.
+                      If unset, Kubernetes auto-assigns a port from the node port range.
+                    format: int32
+                    type: integer
                   port:
                     default: 8140
                     description: Port is the Service port.

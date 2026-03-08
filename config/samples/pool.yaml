@@ -3,7 +3,7 @@ apiVersion: openvox.voxpupuli.org/v1alpha1
 kind: Pool
 metadata:
   name: puppet
-  namespace: openvox
+  namespace: openvox-system
 spec:
   environmentRef: production
   service:

@@ -125,7 +125,7 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 
 	// Determine role
 	role := RoleCompiler
-	if server.Spec.CA.Enabled {
+	if server.Spec.CA {
 		role = RoleCA
 	}
 
@@ -134,14 +134,10 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 	if server.Spec.PoolRef != "" {
 		labels[LabelPool] = server.Spec.PoolRef
 	}
-	// CA+compiler combo: also add pool label
-	if server.Spec.CA.Enabled && server.Spec.CA.Compiler && server.Spec.PoolRef != "" {
-		labels[LabelPool] = server.Spec.PoolRef
-	}
 
 	// Deployment strategy
 	strategy := appsv1.DeploymentStrategy{Type: appsv1.RollingUpdateDeploymentStrategyType}
-	if server.Spec.CA.Enabled {
+	if server.Spec.CA {
 		strategy = appsv1.DeploymentStrategy{Type: appsv1.RecreateDeploymentStrategyType}
 	}
 
@@ -212,7 +208,7 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, env *ope
 	}
 
 	// CA-specific: mount CA data PVC, use ca-enabled.cfg
-	if server.Spec.CA.Enabled {
+	if server.Spec.CA {
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      "ca-data",
 			MountPath: "/etc/puppetlabs/puppetserver/ca",
@@ -298,7 +294,7 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, env *ope
 	}
 
 	// Compilers need an InitContainer for SSL bootstrap against CA
-	if !server.Spec.CA.Enabled {
+	if !server.Spec.CA {
 		caServiceName := fmt.Sprintf("%s-ca", server.Spec.EnvironmentRef)
 		podSpec.InitContainers = []corev1.Container{
 			{

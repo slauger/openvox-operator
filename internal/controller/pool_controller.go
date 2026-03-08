@@ -99,6 +99,16 @@ func (r *PoolReconciler) reconcileService(ctx context.Context, pool *openvoxv1al
 			labels[k] = v
 		}
 
+		svcPort := corev1.ServicePort{
+			Name:       "https",
+			Port:       port,
+			TargetPort: intstr.FromInt32(8140),
+			Protocol:   corev1.ProtocolTCP,
+		}
+		if pool.Spec.Service.NodePort > 0 {
+			svcPort.NodePort = pool.Spec.Service.NodePort
+		}
+
 		svc = &corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:        svcName,
@@ -109,14 +119,7 @@ func (r *PoolReconciler) reconcileService(ctx context.Context, pool *openvoxv1al
 			Spec: corev1.ServiceSpec{
 				Type:     svcType,
 				Selector: poolSelector(pool.Name),
-				Ports: []corev1.ServicePort{
-					{
-						Name:       "https",
-						Port:       port,
-						TargetPort: intstr.FromInt32(8140),
-						Protocol:   corev1.ProtocolTCP,
-					},
-				},
+				Ports:    []corev1.ServicePort{svcPort},
 			},
 		}
 
@@ -138,9 +141,27 @@ func (r *PoolReconciler) reconcileService(ctx context.Context, pool *openvoxv1al
 		svcType = pool.Spec.Service.Type
 	}
 
+	// Update labels
+	labels := environmentLabels(pool.Spec.EnvironmentRef)
+	labels[LabelPool] = pool.Name
+	for k, v := range pool.Spec.Service.Labels {
+		labels[k] = v
+	}
+	svc.Labels = labels
+	svc.Annotations = pool.Spec.Service.Annotations
+
 	svc.Spec.Type = svcType
-	svc.Spec.Ports[0].Port = port
 	svc.Spec.Selector = poolSelector(pool.Name)
+	if len(svc.Spec.Ports) == 0 {
+		svc.Spec.Ports = []corev1.ServicePort{{}}
+	}
+	svc.Spec.Ports[0].Name = "https"
+	svc.Spec.Ports[0].Port = port
+	svc.Spec.Ports[0].TargetPort = intstr.FromInt32(8140)
+	svc.Spec.Ports[0].Protocol = corev1.ProtocolTCP
+	if pool.Spec.Service.NodePort > 0 {
+		svc.Spec.Ports[0].NodePort = pool.Spec.Service.NodePort
+	}
 	return r.Update(ctx, svc)
 }
 

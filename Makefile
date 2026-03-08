@@ -1,4 +1,6 @@
 IMG ?= ghcr.io/slauger/openvox-operator:latest
+OPENVOX_SERVER_IMG ?= ghcr.io/slauger/openvox-server:latest
+NAMESPACE ?= openvox-system
 CONTAINER_TOOL ?= $(shell which podman 2>/dev/null || which docker 2>/dev/null)
 CONTROLLER_GEN ?= $(shell which controller-gen 2>/dev/null || echo $(GOBIN)/controller-gen)
 GOBIN ?= $(shell go env GOPATH)/bin
@@ -46,6 +48,37 @@ docker-build: ## Build container image.
 .PHONY: docker-push
 docker-push: ## Push container image.
 	$(CONTAINER_TOOL) push $(IMG)
+
+##@ Local Development
+
+LOCAL_TAG ?= $(shell git describe --always --dirty)
+
+.PHONY: local-build
+local-build: ## Build all images for local development (Docker Desktop K8s).
+	$(CONTAINER_TOOL) build -t openvox-operator:$(LOCAL_TAG) -f images/openvox-operator/Containerfile .
+	$(CONTAINER_TOOL) build -t openvox-server:$(LOCAL_TAG) -f images/openvox-server/Containerfile images/openvox-server/
+	@echo "Built openvox-operator:$(LOCAL_TAG)"
+	@echo "Built openvox-server:$(LOCAL_TAG)"
+
+.PHONY: local-deploy
+local-deploy: local-build install ## Build images, install CRDs, and deploy operator via Helm.
+	helm upgrade --install openvox-operator charts/openvox-operator \
+		--namespace $(NAMESPACE) --create-namespace \
+		--set image.repository=openvox-operator \
+		--set image.tag=$(LOCAL_TAG) \
+		--set image.pullPolicy=Never
+	@echo ""
+	@echo "Operator deployed with openvox-operator:$(LOCAL_TAG)"
+	@echo "Use this tag in your Environment CR:"
+	@echo "  image:"
+	@echo "    repository: openvox-server"
+	@echo "    tag: '$(LOCAL_TAG)'"
+	@echo "    pullPolicy: Never"
+
+.PHONY: local-reload
+local-reload: local-build install ## Rebuild images, update CRDs, and restart operator with new tag.
+	kubectl set image deployment/openvox-operator -n $(NAMESPACE) manager=openvox-operator:$(LOCAL_TAG)
+	@echo "Operator updated to openvox-operator:$(LOCAL_TAG)"
 
 ##@ Deployment
 

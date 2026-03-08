@@ -47,9 +47,18 @@ type ServerSpec struct {
 	// +optional
 	Image ImageSpec `json:"image,omitempty"`
 
-	// CA configures the CA role for this Server.
+	// CA enables the Certificate Authority role on this Server.
+	// When true, pods mount the CA data PVC and run as CA.
+	// +kubebuilder:default=false
 	// +optional
-	CA ServerCASpec `json:"ca,omitempty"`
+	CA bool `json:"ca,omitempty"`
+
+	// Compiler enables the compiler role on this Server.
+	// Servers are compilers by default.
+	// A Server with both CA and Compiler serves as a combined CA+compiler.
+	// +kubebuilder:default=true
+	// +optional
+	Compiler bool `json:"compiler,omitempty"`
 
 	// Replicas is the number of Server instances.
 	// +kubebuilder:default=1
@@ -77,20 +86,6 @@ type ServerSpec struct {
 	// DNSAltNames is a list of DNS alternative names for the server certificate.
 	// +optional
 	DNSAltNames []string `json:"dnsAltNames,omitempty"`
-}
-
-// ServerCASpec configures the CA role on a Server.
-type ServerCASpec struct {
-	// Enabled activates CA service on this Server.
-	// When true, pods mount the CA data PVC and run as CA.
-	// +kubebuilder:default=false
-	Enabled bool `json:"enabled"`
-
-	// Compiler controls whether this CA Server also participates in a Pool Service.
-	// Only relevant when Enabled is true.
-	// +kubebuilder:default=false
-	// +optional
-	Compiler bool `json:"compiler,omitempty"`
 }
 
 // AutoscalingSpec defines HPA settings.

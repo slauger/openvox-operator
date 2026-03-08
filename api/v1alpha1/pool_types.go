@@ -9,6 +9,7 @@ import (
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Environment",type=string,JSONPath=`.spec.environmentRef`
 // +kubebuilder:printcolumn:name="Type",type=string,JSONPath=`.spec.service.type`
+// +kubebuilder:printcolumn:name="Endpoints",type=integer,JSONPath=`.status.endpoints`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // Pool is the Schema for the pools API.
@@ -51,6 +52,11 @@ type PoolServiceSpec struct {
 	// +kubebuilder:default=8140
 	// +optional
 	Port int32 `json:"port,omitempty"`
+
+	// NodePort is the port on each node for type NodePort or LoadBalancer.
+	// If unset, Kubernetes auto-assigns a port from the node port range.
+	// +optional
+	NodePort int32 `json:"nodePort,omitempty"`
 
 	// Annotations are additional annotations for the Service.
 	// +optional

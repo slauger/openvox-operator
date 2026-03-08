@@ -86,23 +86,18 @@ spec:
                 - enabled
                 type: object
               ca:
-                description: CA configures the CA role for this Server.
-                properties:
-                  compiler:
-                    default: false
-                    description: |-
-                      Compiler controls whether this CA Server also participates in a Pool Service.
-                      Only relevant when Enabled is true.
-                    type: boolean
-                  enabled:
-                    default: false
-                    description: |-
-                      Enabled activates CA service on this Server.
-                      When true, pods mount the CA data PVC and run as CA.
-                    type: boolean
-                required:
-                - enabled
-                type: object
+                default: false
+                description: |-
+                  CA enables the Certificate Authority role on this Server.
+                  When true, pods mount the CA data PVC and run as CA.
+                type: boolean
+              compiler:
+                default: true
+                description: |-
+                  Compiler enables the compiler role on this Server.
+                  Servers are compilers by default.
+                  A Server with both CA and Compiler serves as a combined CA+compiler.
+                type: boolean
               dnsAltNames:
                 description: DNSAltNames is a list of DNS alternative names for the
                   server certificate.

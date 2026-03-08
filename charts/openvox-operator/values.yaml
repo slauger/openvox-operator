@@ -3,6 +3,7 @@ replicaCount: 1
 image:
   repository: ghcr.io/slauger/openvox-operator
   tag: latest
+  # digest: sha256:...  # Set to use digest instead of tag
   pullPolicy: Always
 
 imagePullSecrets: []

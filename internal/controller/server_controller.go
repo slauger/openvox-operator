@@ -2,7 +2,9 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
+	"sort"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -143,8 +145,17 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 
 	configMapName := fmt.Sprintf("%s-config", server.Spec.EnvironmentRef)
 
+	// Compute ConfigMap hash for automatic rollout on config changes
+	configHash, err := r.configMapHash(ctx, configMapName, server.Namespace)
+	if err != nil {
+		return fmt.Errorf("computing ConfigMap hash: %w", err)
+	}
+	annotations := map[string]string{
+		"openvox.voxpupuli.org/config-hash": configHash,
+	}
+
 	deploy := &appsv1.Deployment{}
-	err := r.Get(ctx, types.NamespacedName{Name: deployName, Namespace: server.Namespace}, deploy)
+	err = r.Get(ctx, types.NamespacedName{Name: deployName, Namespace: server.Namespace}, deploy)
 	if errors.IsNotFound(err) {
 		logger.Info("creating Server Deployment", "name", deployName, "role", role, "replicas", replicas)
 
@@ -164,7 +175,8 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 				},
 				Template: corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{
-						Labels: labels,
+						Labels:      labels,
+						Annotations: annotations,
 					},
 					Spec: r.buildPodSpec(server, env, image, javaArgs, configMapName, role),
 				},
@@ -183,6 +195,7 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 	deploy.Spec.Replicas = &replicas
 	deploy.Spec.Strategy = strategy
 	deploy.Spec.Template.Labels = labels
+	deploy.Spec.Template.Annotations = annotations
 	deploy.Spec.Template.Spec = r.buildPodSpec(server, env, image, javaArgs, configMapName, role)
 	return r.Update(ctx, deploy)
 }
@@ -402,4 +415,26 @@ func configMapVolumeWithKey(volumeName, cmName, key, path string) corev1.Volume 
 			},
 		},
 	}
+}
+
+// configMapHash computes a deterministic SHA256 hash of a ConfigMap's data.
+// Used as a pod template annotation to trigger rollouts on config changes.
+func (r *ServerReconciler) configMapHash(ctx context.Context, name, namespace string) (string, error) {
+	cm := &corev1.ConfigMap{}
+	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, cm); err != nil {
+		return "", err
+	}
+
+	keys := make([]string, 0, len(cm.Data))
+	for k := range cm.Data {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	h := sha256.New()
+	for _, k := range keys {
+		h.Write([]byte(k))
+		h.Write([]byte(cm.Data[k]))
+	}
+	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }

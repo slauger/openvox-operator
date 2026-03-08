@@ -9,6 +9,7 @@ A Kubernetes Operator for running [OpenVox Server](https://github.com/OpenVoxPro
 - ⚡ **Scalable Servers** - Scale catalog compilation horizontally with multiple server pools and HPA
 - 🔄 **Multi-Version Deployments** - Run different server versions side by side for canary deployments and rolling upgrades
 - 🔒 **Rootless & OpenShift Ready** - Random UID compatible, no root, no ezbake, no privilege escalation
+- 🪶 **Minimal Image** - No system Ruby, no ezbake packaging - smaller footprint, fewer updates
 - ☸️ **Kubernetes-Native** - All config via ConfigMaps/Secrets, no entrypoint scripts, no ENV translation
 
 ## How It Works

@@ -60,3 +60,10 @@ nav:
       - Quick Start: getting-started/quickstart.md
   - Examples:
       - Overview: examples/index.md
+  - Reference:
+      - Overview: reference/index.md
+      - Environment: reference/environment.md
+      - CertificateAuthority: reference/certificateauthority.md
+      - Certificate: reference/certificate.md
+      - Server: reference/server.md
+      - Pool: reference/pool.md

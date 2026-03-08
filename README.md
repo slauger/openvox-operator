@@ -36,10 +36,11 @@ graph TD
 ```mermaid
 graph LR
     Agent["🖥️ Agents"] --> LB
+    Agent --> CA_SVC
 
     subgraph Kubernetes
         LB["🌐 Pool: puppet<br/>Service (LoadBalancer)"]
-        CA_SVC["🔐 Pool: puppet-ca<br/>Service (ClusterIP)"]
+        CA_SVC["🔐 Pool: puppet-ca<br/>Service (LoadBalancer)"]
 
         LB --> CA["🔐 Server: ca<br/>replicas: 1"]
         LB --> Stable["⚙️ Server: stable<br/>replicas: 3 - v8.12.1"]
@@ -49,7 +50,7 @@ graph LR
     end
 ```
 
-The CA server is member of both pools - it handles CA requests via the ClusterIP service and also serves catalog requests from external agents via the LoadBalancer.
+The CA server is member of both pools - it handles CA requests via the `puppet-ca` service and also serves catalog requests from external agents via the `puppet` service.
 
 ## CRD Model
 

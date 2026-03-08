@@ -1,6 +1,6 @@
 # 🦊 openvox-operator
 
-[![CI](https://github.com/slauger/openvox-operator/actions/workflows/ci.yml/badge.svg)](https://github.com/slauger/openvox-operator/actions/workflows/ci.yml)
+[![CI](https://github.com/slauger/openvox-operator/actions/workflows/ci.yaml/badge.svg)](https://github.com/slauger/openvox-operator/actions/workflows/ci.yaml)
 [![Go](https://github.com/slauger/openvox-operator/actions/workflows/go.yaml/badge.svg)](https://github.com/slauger/openvox-operator/actions/workflows/go.yaml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/slauger/openvox-operator)](https://goreportcard.com/report/github.com/slauger/openvox-operator)
 [![Go Reference](https://pkg.go.dev/badge/github.com/slauger/openvox-operator.svg)](https://pkg.go.dev/github.com/slauger/openvox-operator)

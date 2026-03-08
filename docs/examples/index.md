@@ -2,7 +2,7 @@
 
 ## Minimal - Single Pod
 
-A single Server with CA enabled that handles both CA operations and catalog compilation. Suitable for development and lab environments.
+A single Server with CA enabled that handles both CA operations and catalog requests. Suitable for development and lab environments.
 
 ```yaml
 apiVersion: openvox.voxpupuli.org/v1alpha1
@@ -30,7 +30,7 @@ spec:
 
 ## Production - CA + Server Pool + Canary
 
-Separate CA server, a stable compiler pool with 3 replicas, and a canary pool running a newer version. All compilers join the same Pool and share a LoadBalancer Service.
+Separate CA server, a stable server pool with 3 replicas, and a canary server running a newer version. All servers join the same Pool and share a LoadBalancer Service.
 
 ```yaml
 apiVersion: openvox.voxpupuli.org/v1alpha1

@@ -8,18 +8,17 @@
 - Kubernetes 1.28+ or OpenShift 4.14+
 - Helm 3.x
 
-## Install via Helm
+## Install via Helm (OCI)
+
+The Helm chart is published as an OCI artifact to GitHub Container Registry.
 
 ```bash
-helm repo add openvox-operator https://slauger.github.io/openvox-operator
-helm repo update
-
-helm install openvox-operator openvox-operator/openvox-operator \
+helm install openvox-operator \
+  oci://ghcr.io/slauger/charts/openvox-operator \
+  --version 0.1.0 \
   --namespace openvox-system \
   --create-namespace
 ```
-
-This installs the operator and its CRDs into the `openvox-system` namespace.
 
 ## Verify
 

@@ -20,7 +20,7 @@ Existing images use ~15 entrypoint scripts that translate environment variables 
 
 ### No Role Separation
 
-Existing containers decide at startup whether to run as CA or compiler based on environment variables. In Kubernetes, the operator handles orchestration and role assignment through the CRD model.
+Existing containers decide at startup whether to run as CA or server based on environment variables. In Kubernetes, the operator handles orchestration and role assignment through the CRD model.
 
 ## How openvox-operator Differs
 
@@ -54,6 +54,3 @@ The operator uses a minimal container image:
 - Gemfile / bundle install / ruby-devel / gcc / make
 - ENV var to config translation logic
 - Docker-Compose support
-
-!!! note
-    Docker-Compose is not supported. The Kubernetes-native approach and Docker-Compose approach are fundamentally incompatible. For local testing, use `kind` or `minikube` with the same Kubernetes manifests.

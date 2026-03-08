@@ -12,6 +12,9 @@ jobs:
 
   helm:
     uses: ./.github/workflows/helm.yaml
+    permissions:
+      contents: read
+      packages: write
 
   shellcheck:
     uses: ./.github/workflows/shellcheck.yaml

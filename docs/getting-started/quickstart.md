@@ -1,6 +1,6 @@
 # Quick Start
 
-This guide sets up a minimal OpenVox Server environment with a single pod acting as both CA and compiler.
+This guide sets up a minimal OpenVox Server environment with a single pod acting as both CA and server.
 
 ## Minimal Setup
 
@@ -59,4 +59,4 @@ server.openvox.voxpupuli.org/puppet      lab           1          1
 
 ## Next Steps
 
-See the [Examples](../examples/index.md) section for production setups with separate CA, compiler pools, canary deployments, and code deployment via r10k.
+See the [Examples](../examples/index.md) section for production setups with separate CA, server pools, canary deployments, and code deployment via r10k.

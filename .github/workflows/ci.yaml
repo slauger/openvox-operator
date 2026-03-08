@@ -39,4 +39,4 @@ jobs:
     with:
       image_name: openvox-server
       dockerfile: images/openvox-server/Containerfile
-      context: images/openvox-server
+      context: '.'

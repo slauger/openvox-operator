@@ -3,10 +3,10 @@
 apiVersion: openvox.voxpupuli.org/v1alpha1
 kind: Server
 metadata:
-  name: {{ $key }}
+  name: {{ include "openvox-stack.serverName" (dict "root" $ "key" $key) }}
 spec:
   environmentRef: {{ include "openvox-stack.envName" $ }}
-  certificateRef: {{ include "openvox-stack.certName" (dict "key" $key "val" $val) }}
+  certificateRef: {{ include "openvox-stack.certName" (dict "root" $ "key" $key "val" $val) }}
   {{- if hasKey $val "ca" }}
   ca: {{ $val.ca }}
   {{- end }}

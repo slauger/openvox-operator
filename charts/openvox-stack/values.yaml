@@ -1,5 +1,8 @@
+# nameOverride: ""
+# fullnameOverride: ""
+
 environment:
-  name: production
+  name: ""             # default: Release name
   image:
     repository: ghcr.io/slauger/openvox-server
     tag: latest
@@ -12,7 +15,7 @@ environment:
     reports: store
 
 ca:
-  name: ""           # default: {envName}-ca
+  name: ""             # default: {fullname}-ca
   ttl: 5y
   storage:
     size: 1Gi
@@ -20,7 +23,7 @@ ca:
 
 signingPolicy:
   enabled: true
-  name: ""           # default: {envName}-autosign
+  name: ""             # default: {fullname}-autosign
   any: true
 
 servers:
@@ -38,7 +41,7 @@ servers:
       limits:
         memory: 2Gi
     pool:
-      name: ""       # default: server key name
+      name: ""         # default: {fullname}-{key}
       service:
         type: ClusterIP
         port: 8140

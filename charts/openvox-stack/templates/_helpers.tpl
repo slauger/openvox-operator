@@ -1,8 +1,16 @@
 {{/*
-Environment name.
+Fullname prefix for all resources.
+Defaults to the Release name, overridable via fullnameOverride.
+*/}}
+{{- define "openvox-stack.fullname" -}}
+{{- .Values.fullnameOverride | default .Release.Name | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Environment name — defaults to fullname.
 */}}
 {{- define "openvox-stack.envName" -}}
-{{- .Values.environment.name }}
+{{- .Values.environment.name | default (include "openvox-stack.fullname" .) }}
 {{- end }}
 
 {{/*
@@ -12,7 +20,7 @@ CertificateAuthority name.
 {{- if .Values.ca.name -}}
 {{- .Values.ca.name }}
 {{- else -}}
-{{- include "openvox-stack.envName" . }}-ca
+{{- include "openvox-stack.fullname" . }}-ca
 {{- end }}
 {{- end }}
 
@@ -23,30 +31,38 @@ SigningPolicy name.
 {{- if .Values.signingPolicy.name -}}
 {{- .Values.signingPolicy.name }}
 {{- else -}}
-{{- include "openvox-stack.envName" . }}-autosign
+{{- include "openvox-stack.fullname" . }}-autosign
 {{- end }}
 {{- end }}
 
 {{/*
+Server name for a server entry — prefixed with fullname.
+Usage: include "openvox-stack.serverName" (dict "root" $ "key" $key)
+*/}}
+{{- define "openvox-stack.serverName" -}}
+{{- printf "%s-%s" (include "openvox-stack.fullname" .root) .key | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
 Certificate name for a server entry.
-Usage: include "openvox-stack.certName" (dict "key" $key "val" $val)
+Usage: include "openvox-stack.certName" (dict "root" $ "key" $key "val" $val)
 */}}
 {{- define "openvox-stack.certName" -}}
 {{- if .val.certificate.name -}}
 {{- .val.certificate.name }}
 {{- else -}}
-{{- .key }}-cert
+{{- printf "%s-%s" (include "openvox-stack.fullname" .root) .key | trunc 63 | trimSuffix "-" }}
 {{- end }}
 {{- end }}
 
 {{/*
 Pool name for a server entry.
-Usage: include "openvox-stack.poolName" (dict "key" $key "val" $val)
+Usage: include "openvox-stack.poolName" (dict "root" $ "key" $key "val" $val)
 */}}
 {{- define "openvox-stack.poolName" -}}
 {{- if .val.pool.name -}}
 {{- .val.pool.name }}
 {{- else -}}
-{{- .key }}
+{{- printf "%s-%s" (include "openvox-stack.fullname" .root) .key | trunc 63 | trimSuffix "-" }}
 {{- end }}
 {{- end }}

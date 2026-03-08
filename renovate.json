@@ -4,6 +4,16 @@
     "config:recommended"
   ],
   "labels": ["dependencies"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["(^|/)Containerfile$"],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\nARG \\w+=(?<currentValue>\\S+)"
+      ],
+      "extractVersionTemplate": "^v?(?<version>.*)$"
+    }
+  ],
   "packageRules": [
     {
       "matchManagers": ["gomod"],
@@ -16,6 +26,11 @@
     {
       "matchManagers": ["dockerfile"],
       "groupName": "Container base images"
+    },
+    {
+      "matchManagers": ["custom.regex"],
+      "matchDatasources": ["github-releases"],
+      "groupName": "OpenVox versions"
     }
   ]
 }

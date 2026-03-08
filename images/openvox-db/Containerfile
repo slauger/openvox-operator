@@ -1,3 +1,6 @@
+# renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
+ARG OPENVOXDB_VERSION=8.12.1
+
 FROM registry.access.redhat.com/ubi9/ubi
 
 LABEL org.opencontainers.image.title="OpenVox DB" \

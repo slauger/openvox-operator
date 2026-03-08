@@ -8,6 +8,13 @@
 # Run:
 #   podman run --rm openvox-server:latest
 
+# renovate: datasource=github-releases depName=OpenVoxProject/openvox-server
+ARG OPENVOXSERVER_VERSION=8.12.1
+# renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
+ARG OPENVOXDB_TERMINI_VERSION=8.12.1
+# renovate: datasource=github-releases depName=OpenVoxProject/openvox
+ARG OPENVOX_VERSION=8.25.0
+
 ################################################################################
 # Stage: base — JRE + minimal runtime deps (no Ruby)
 ################################################################################
@@ -31,9 +38,9 @@ RUN dnf install -y --allowerasing --setopt=install_weak_deps=False \
 ################################################################################
 FROM base AS build
 
-ARG OPENVOXSERVER_VERSION=8.12.1
-ARG OPENVOXDB_VERSION=8.12.1
-ARG OPENVOX_VERSION=8.25.0
+ARG OPENVOXSERVER_VERSION
+ARG OPENVOXDB_TERMINI_VERSION
+ARG OPENVOX_VERSION
 
 # Ruby needed temporarily for install-vendored-gems.sh
 RUN dnf module enable ruby:3.3 -y \
@@ -41,7 +48,7 @@ RUN dnf module enable ruby:3.3 -y \
     && dnf clean all
 
 ADD https://artifacts.voxpupuli.org/openvox-server/${OPENVOXSERVER_VERSION}/openvox-server-${OPENVOXSERVER_VERSION}.tar.gz /
-ADD https://artifacts.voxpupuli.org/openvoxdb/${OPENVOXDB_VERSION}/openvoxdb-${OPENVOXDB_VERSION}.tar.gz /
+ADD https://artifacts.voxpupuli.org/openvoxdb/${OPENVOXDB_TERMINI_VERSION}/openvoxdb-${OPENVOXDB_TERMINI_VERSION}.tar.gz /
 
 ENV app_logdir=/var/log/puppetlabs \
     apps_dir=/opt/puppetlabs/server/apps \
@@ -54,7 +61,7 @@ ENV app_logdir=/var/log/puppetlabs \
     rubylibdir=/opt/puppetlabs/puppet/lib/ruby/vendor_ruby
 
 RUN tar -xzf /openvox-server-${OPENVOXSERVER_VERSION}.tar.gz \
-    && tar -xzf /openvoxdb-${OPENVOXDB_VERSION}.tar.gz \
+    && tar -xzf /openvoxdb-${OPENVOXDB_TERMINI_VERSION}.tar.gz \
     && cd /puppetserver-${OPENVOXSERVER_VERSION} \
     # --- directory structure ---
     && install -d -m 0755 "${app_logdir}/puppetserver" \
@@ -105,7 +112,7 @@ RUN tar -xzf /openvox-server-${OPENVOXSERVER_VERSION}.tar.gz \
     # --- vendored gems ---
     && bash ext/build-scripts/install-vendored-gems.sh \
     # --- puppetdb-termini ---
-    && cd /puppetdb-${OPENVOXDB_VERSION} \
+    && cd /puppetdb-${OPENVOXDB_TERMINI_VERSION} \
     && for f in \
          puppet/face/node/deactivate.rb \
          puppet/face/node/status.rb \
@@ -151,7 +158,7 @@ RUN find / -path '*/openvoxserver-ca-*/lib/puppetserver/ca/action/setup.rb' \
 ################################################################################
 FROM base AS final
 
-ARG OPENVOXSERVER_VERSION=8.12.1
+ARG OPENVOXSERVER_VERSION
 
 LABEL org.opencontainers.image.title="OpenVox Server" \
       org.opencontainers.image.description="Rootless OpenVox Server for Kubernetes/OpenShift" \

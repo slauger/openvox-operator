@@ -95,7 +95,7 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconciling CA setup job: %w", err)
 	}
-	if result.Requeue || result.RequeueAfter > 0 {
+	if result.RequeueAfter > 0 {
 		return result, nil
 	}
 

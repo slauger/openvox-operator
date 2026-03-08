@@ -47,6 +47,17 @@ type EnvironmentSpec struct {
 	// Puppet defines shared puppet.conf settings.
 	// +optional
 	Puppet PuppetSpec `json:"puppet,omitempty"`
+
+	// Code defines the PVC for Puppet code (environments directory).
+	// All Servers in this Environment mount this PVC by default.
+	// +optional
+	Code *CodeSpec `json:"code,omitempty"`
+}
+
+// CodeSpec references an existing PVC containing Puppet code.
+type CodeSpec struct {
+	// ClaimName is the name of an existing PVC containing Puppet code.
+	ClaimName string `json:"claimName"`
 }
 
 // EnvironmentPhase represents the current lifecycle phase.

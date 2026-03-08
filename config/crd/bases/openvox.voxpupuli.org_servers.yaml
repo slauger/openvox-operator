@@ -91,6 +91,17 @@ spec:
                   CA enables the Certificate Authority role on this Server.
                   When true, pods mount the CA data PVC and run as CA.
                 type: boolean
+              code:
+                description: Code overrides the Environment's code volume for this
+                  Server.
+                properties:
+                  claimName:
+                    description: ClaimName is the name of an existing PVC containing
+                      Puppet code.
+                    type: string
+                required:
+                - claimName
+                type: object
               compiler:
                 default: true
                 description: |-

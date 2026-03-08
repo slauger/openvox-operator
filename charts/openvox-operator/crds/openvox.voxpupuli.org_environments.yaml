@@ -109,6 +109,18 @@ spec:
                     format: int64
                     type: integer
                 type: object
+              code:
+                description: |-
+                  Code defines the PVC for Puppet code (environments directory).
+                  All Servers in this Environment mount this PVC by default.
+                properties:
+                  claimName:
+                    description: ClaimName is the name of an existing PVC containing
+                      Puppet code.
+                    type: string
+                required:
+                - claimName
+                type: object
               image:
                 description: Image defines the default container image for all Servers
                   in this Environment.

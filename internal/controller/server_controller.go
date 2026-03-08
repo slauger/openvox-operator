@@ -251,6 +251,28 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, env *ope
 		)
 	}
 
+	// Code volume: Server override > Environment default
+	code := env.Spec.Code
+	if server.Spec.Code != nil {
+		code = server.Spec.Code
+	}
+	if code != nil {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      "code",
+			MountPath: env.Spec.Puppet.EnvironmentPath,
+			ReadOnly:  true,
+		})
+		volumes = append(volumes, corev1.Volume{
+			Name: "code",
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: code.ClaimName,
+					ReadOnly:  true,
+				},
+			},
+		})
+	}
+
 	container := corev1.Container{
 		Name:            "openvox-server",
 		Image:           image,

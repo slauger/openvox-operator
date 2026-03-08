@@ -25,3 +25,5 @@ spec:
     storeconfigs: true
     storeBackend: puppetdb
     reports: puppetdb
+  code:
+    claimName: puppet-code

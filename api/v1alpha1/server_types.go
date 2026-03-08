@@ -83,6 +83,10 @@ type ServerSpec struct {
 	// +optional
 	MaxActiveInstances int32 `json:"maxActiveInstances,omitempty"`
 
+	// Code overrides the Environment's code volume for this Server.
+	// +optional
+	Code *CodeSpec `json:"code,omitempty"`
+
 	// DNSAltNames is a list of DNS alternative names for the server certificate.
 	// +optional
 	DNSAltNames []string `json:"dnsAltNames,omitempty"`

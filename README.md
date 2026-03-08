@@ -138,7 +138,7 @@ helm install production \
   --create-namespace
 ```
 
-This creates a single CA+Server with autosign enabled. See the [documentation](https://slauger.github.io/openvox-operator) for advanced setups like multi-server pools and canary deployments.
+This creates a single CA+Server with autosign enabled.
 
 ## Documentation
 

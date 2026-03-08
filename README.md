@@ -86,114 +86,19 @@ This operator takes a **Kubernetes-native approach** that differs in several key
 
 By eliminating system Ruby from the runtime image, the container has a smaller footprint and a reduced attack surface, avoiding the duplicate Ruby installation (CRuby + JRuby) that the OS packages carry.
 
-## Examples
+## Installation
 
-### Minimal - Single Pod does everything
-
-```yaml
-apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: Environment
-metadata:
-  name: lab
-spec:
-  image: { repository: ghcr.io/slauger/openvoxserver, tag: "8.12.1" }
-  ca:
-    autosign: "true"
----
-apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: Server
-metadata:
-  name: puppet
-spec:
-  environmentRef: lab
-  ca:
-    enabled: true
-    server: true     # CA also serves catalogs
-  replicas: 1
+```bash
+helm install openvox-operator \
+  oci://ghcr.io/slauger/charts/openvox-operator \
+  --version 0.1.0 \
+  --namespace openvox-system \
+  --create-namespace
 ```
 
-### Production - CA + Server Pool + Canary
+## Documentation
 
-```yaml
-apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: Environment
-metadata:
-  name: production
-spec:
-  image: { repository: ghcr.io/slauger/openvoxserver, tag: "8.12.1" }
-  ca:
-    certname: puppet
-    dnsAltNames: [puppet, puppet-ca]
-    ttl: 157680000
-    storage: { size: 1Gi }
-  puppetdb:
-    serverUrls: ["https://openvoxdb:8081"]
-  puppet:
-    environmentTimeout: unlimited
-    storeconfigs: true
-    reports: puppetdb
----
-apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: Pool
-metadata:
-  name: puppet
-spec:
-  environmentRef: production
-  service:
-    type: LoadBalancer
-    port: 8140
----
-apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: Server
-metadata:
-  name: ca
-spec:
-  environmentRef: production
-  ca: { enabled: true }
-  replicas: 1
-  javaArgs: "-Xms512m -Xmx1024m"
----
-apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: Server
-metadata:
-  name: stable
-spec:
-  environmentRef: production
-  poolRef: puppet
-  image: { tag: "8.12.1" }
-  replicas: 3
-  maxActiveInstances: 2
-  javaArgs: "-Xms512m -Xmx1024m"
----
-apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: Server
-metadata:
-  name: canary
-spec:
-  environmentRef: production
-  poolRef: puppet                 # same pool as stable!
-  image: { tag: "8.13.0" }       # newer version
-  replicas: 1
-  javaArgs: "-Xms512m -Xmx1024m"
-```
-
-### CodeDeploy - r10k from Git
-
-```yaml
-apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: CodeDeploy
-metadata:
-  name: control-repo
-spec:
-  environmentRef: production
-  image: { repository: ghcr.io/slauger/r10k, tag: "latest" }
-  sources:
-    - name: puppet
-      remote: https://github.com/example/control-repo.git
-      basedir: /etc/puppetlabs/code/environments
-  schedule: "*/5 * * * *"
-  volume: { size: 5Gi }
-```
+For getting started guides, examples, and detailed architecture documentation, see the [documentation](https://slauger.github.io/openvox-operator).
 
 ## License
 

@@ -21,7 +21,7 @@ import (
 
 // signCertificate generates an RSA key pair, submits a CSR to the Puppet CA HTTP API,
 // and polls for the signed certificate. Returns PEM-encoded cert and key.
-func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openvoxv1alpha1.Certificate, caServiceName string) (certPEM, keyPEM []byte, err error) {
+func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openvoxv1alpha1.Certificate, caServiceName, namespace string) (certPEM, keyPEM []byte, err error) {
 	logger := log.FromContext(ctx)
 
 	certname := cert.Spec.Certname
@@ -64,7 +64,7 @@ func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openv
 		},
 	}
 
-	caBaseURL := fmt.Sprintf("https://%s:8140", caServiceName)
+	caBaseURL := fmt.Sprintf("https://%s.%s.svc:8140", caServiceName, namespace)
 
 	// Submit CSR via PUT
 	csrURL := fmt.Sprintf("%s/puppet-ca/v1/certificate_request/%s?environment=production", caBaseURL, certname)
@@ -80,7 +80,7 @@ func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openv
 	if err != nil {
 		return nil, nil, fmt.Errorf("submitting CSR: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
@@ -113,7 +113,7 @@ func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openv
 		}
 
 		certBody, _ := io.ReadAll(certResp.Body)
-		certResp.Body.Close()
+		_ = certResp.Body.Close()
 
 		if certResp.StatusCode == http.StatusOK && len(certBody) > 0 {
 			// Verify it's a valid PEM certificate (not just the CSR echoed back)

@@ -1,6 +1,6 @@
 module github.com/slauger/openvox-operator
 
-go 1.24.0
+go 1.26
 
 require (
 	k8s.io/api v0.31.4

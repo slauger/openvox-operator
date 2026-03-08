@@ -140,13 +140,15 @@ This policy requires **both** a matching certname pattern **and** a valid PSK.
 ## How It Works
 
 1. The operator collects all SigningPolicies for a CertificateAuthority
-2. **No policies** → `autosign = false` in puppet.conf
-3. **Only `any: true`** → `autosign = true` in puppet.conf (simple mode)
-4. **Other policies** → operator renders a policy config Secret, puppet.conf points to the `openvox-autosign` binary
-5. When a SigningPolicy changes, the operator updates the Secret. Kubelet syncs the mounted file (~60s). No pod restart needed.
+2. It renders a policy config YAML into a Secret, mounted into the CA pod
+3. puppet.conf always points to the `openvox-autosign` binary (static config, no pod restarts)
+4. When a SigningPolicy changes, the operator updates the Secret. Kubelet syncs the mounted file (~60s). **No pod restart needed.**
 
 The `openvox-autosign` binary shipped in the openvox-server container image evaluates policies at CSR signing time:
 
 - Receives certname as argument, CSR on stdin
 - Evaluates all policies (OR between policies, AND within a policy)
+- **No policies** → deny all (exit 1)
+- **`any: true`** → approve unconditionally (exit 0)
+- **Pattern/PSK/Token** → evaluate rules
 - Exits 0 (sign) or 1 (deny)

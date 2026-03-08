@@ -93,7 +93,7 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 						Labels:      labels,
 						Annotations: annotations,
 					},
-					Spec: r.buildPodSpec(ctx, server, env, cert, ca, image, javaArgs, configMapName),
+					Spec: r.buildPodSpec(server, env, cert, ca, image, javaArgs, configMapName),
 				},
 			},
 		}
@@ -111,11 +111,11 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 	deploy.Spec.Strategy = strategy
 	deploy.Spec.Template.Labels = labels
 	deploy.Spec.Template.Annotations = annotations
-	deploy.Spec.Template.Spec = r.buildPodSpec(ctx, server, env, cert, ca, image, javaArgs, configMapName)
+	deploy.Spec.Template.Spec = r.buildPodSpec(server, env, cert, ca, image, javaArgs, configMapName)
 	return r.Update(ctx, deploy)
 }
 
-func (r *ServerReconciler) buildPodSpec(ctx context.Context, server *openvoxv1alpha1.Server, env *openvoxv1alpha1.Environment, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, image, javaArgs, configMapName string) corev1.PodSpec {
+func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, env *openvoxv1alpha1.Environment, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, image, javaArgs, configMapName string) corev1.PodSpec {
 	sslSecretName := cert.Status.SecretName
 	caSecretName := ca.Status.CASecretName
 
@@ -190,24 +190,22 @@ func (r *ServerReconciler) buildPodSpec(ctx context.Context, server *openvoxv1al
 			configMapVolumeWithKey("ca-cfg", configMapName, "ca-enabled.cfg", "ca.cfg"),
 		)
 
-		// Mount autosign policy Secret if it exists
+		// Mount autosign policy Secret (always present, managed by Environment controller)
 		autosignSecretName := fmt.Sprintf("%s-autosign-policy", ca.Name)
-		if r.secretExists(ctx, autosignSecretName, server.Namespace) {
-			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name:      "autosign-policy",
-				MountPath: "/etc/puppetlabs/puppet/autosign-policy.yaml",
-				SubPath:   "autosign-policy.yaml",
-				ReadOnly:  true,
-			})
-			volumes = append(volumes, corev1.Volume{
-				Name: "autosign-policy",
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName: autosignSecretName,
-					},
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      "autosign-policy",
+			MountPath: "/etc/puppetlabs/puppet/autosign-policy.yaml",
+			SubPath:   "autosign-policy.yaml",
+			ReadOnly:  true,
+		})
+		volumes = append(volumes, corev1.Volume{
+			Name: "autosign-policy",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: autosignSecretName,
 				},
-			})
-		}
+			},
+		})
 	} else {
 		volumes = append(volumes,
 			configMapVolumeWithKey("ca-cfg", configMapName, "ca-disabled.cfg", "ca.cfg"),
@@ -304,11 +302,4 @@ func (r *ServerReconciler) secretHash(ctx context.Context, name, namespace strin
 		data[k] = string(v)
 	}
 	return hashStringMap(data), nil
-}
-
-// secretExists checks if a Secret exists in the given namespace.
-func (r *ServerReconciler) secretExists(ctx context.Context, name, namespace string) bool {
-	secret := &corev1.Secret{}
-	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, secret)
-	return err == nil
 }

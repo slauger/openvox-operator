@@ -552,37 +552,6 @@ func (r *EnvironmentReconciler) renderAuthConf() string {
 const autosignPolicyPath = "/etc/puppetlabs/puppet/autosign-policy.yaml"
 const autosignBinaryPath = "/usr/local/bin/openvox-autosign"
 
-// autosignMode represents how autosign is configured in puppet.conf.
-type autosignMode int
-
-const (
-	autosignDisabled autosignMode = iota // autosign = false
-	autosignEnabled                      // autosign = true
-	autosignBinary                       // autosign = /usr/local/bin/openvox-autosign --config ...
-)
-
-// resolveAutosignMode determines how autosign should be configured based on SigningPolicies.
-func (r *EnvironmentReconciler) resolveAutosignMode(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority) string {
-	policies := r.findSigningPolicies(ctx, ca)
-	if len(policies) == 0 {
-		return "false"
-	}
-
-	// If all policies are "any: true", use simple autosign = true
-	allAny := true
-	for _, p := range policies {
-		if !p.Spec.Any {
-			allAny = false
-			break
-		}
-	}
-	if allAny {
-		return "true"
-	}
-
-	return fmt.Sprintf("%s --config %s", autosignBinaryPath, autosignPolicyPath)
-}
-
 // findSigningPolicies returns all SigningPolicies referencing the given CA.
 func (r *EnvironmentReconciler) findSigningPolicies(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority) []openvoxv1alpha1.SigningPolicy {
 	list := &openvoxv1alpha1.SigningPolicyList{}
@@ -617,37 +586,18 @@ func (r *EnvironmentReconciler) reconcileAutosignSecrets(ctx context.Context, en
 }
 
 // reconcileAutosignSecret renders the autosign policy config YAML into a Secret.
+// The Secret is always created — the binary handles all cases (no policies = deny all,
+// any:true = approve all). This keeps puppet.conf static and avoids pod restarts.
 func (r *EnvironmentReconciler) reconcileAutosignSecret(ctx context.Context, env *openvoxv1alpha1.Environment, ca *openvoxv1alpha1.CertificateAuthority) error {
 	logger := log.FromContext(ctx)
 	secretName := fmt.Sprintf("%s-autosign-policy", ca.Name)
 
 	policies := r.findSigningPolicies(ctx, ca)
 
-	// Determine if we need the Secret at all
-	needSecret := false
-	for _, p := range policies {
-		if !p.Spec.Any {
-			needSecret = true
-			break
-		}
-	}
-
-	existing := &corev1.Secret{}
-	err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: env.Namespace}, existing)
-
-	if !needSecret {
-		// Delete the Secret if it exists but is no longer needed
-		if err == nil {
-			logger.Info("deleting autosign policy Secret (no longer needed)", "name", secretName)
-			return r.Delete(ctx, existing)
-		}
-		return nil
-	}
-
 	// Render policy config YAML
-	policyYAML, err2 := r.renderAutosignPolicyConfig(ctx, env.Namespace, policies)
-	if err2 != nil {
-		return fmt.Errorf("rendering autosign policy config: %w", err2)
+	policyYAML, renderErr := r.renderAutosignPolicyConfig(ctx, env.Namespace, policies)
+	if renderErr != nil {
+		return fmt.Errorf("rendering autosign policy config: %w", renderErr)
 	}
 
 	// Update SigningPolicy status
@@ -659,6 +609,8 @@ func (r *EnvironmentReconciler) reconcileAutosignSecret(ctx context.Context, env
 		"autosign-policy.yaml": []byte(policyYAML),
 	}
 
+	existing := &corev1.Secret{}
+	err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: env.Namespace}, existing)
 	if errors.IsNotFound(err) {
 		logger.Info("creating autosign policy Secret", "name", secretName)
 		secret := &corev1.Secret{
@@ -692,12 +644,12 @@ func (r *EnvironmentReconciler) renderAutosignPolicyConfig(ctx context.Context, 
 	})
 
 	for _, p := range policies {
-		// Skip any:true policies (handled by autosign = true shortcut)
+		sb.WriteString(fmt.Sprintf("  - name: %s\n", p.Name))
+
 		if p.Spec.Any {
+			sb.WriteString("    any: true\n")
 			continue
 		}
-
-		sb.WriteString(fmt.Sprintf("  - name: %s\n", p.Name))
 
 		if p.Spec.Pattern != nil {
 			sb.WriteString("    pattern:\n")

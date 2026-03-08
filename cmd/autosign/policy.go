@@ -20,6 +20,7 @@ type PolicyConfig struct {
 // Policy defines a single signing policy.
 type Policy struct {
 	Name    string       `yaml:"name"`
+	Any     bool         `yaml:"any,omitempty"`
 	Pattern *PatternConf `yaml:"pattern,omitempty"`
 	PSK     *PSKConf     `yaml:"psk,omitempty"`
 	Token   *TokenConf   `yaml:"token,omitempty"`
@@ -139,6 +140,11 @@ func evaluatePolicies(cfg *PolicyConfig, certname string, csr *x509.CertificateR
 
 // evaluatePolicy checks a single policy (AND within). All set fields must match.
 func evaluatePolicy(policy Policy, certname string, csr *x509.CertificateRequest) bool {
+	// any: true approves unconditionally
+	if policy.Any {
+		return true
+	}
+
 	hasCondition := false
 
 	if policy.Pattern != nil {

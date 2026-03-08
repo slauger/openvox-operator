@@ -44,6 +44,11 @@ type SigningPolicySpec struct {
 	// +optional
 	Pattern *PatternSpec `json:"pattern,omitempty"`
 
+	// DNSAltNames defines allowed DNS subject alternative name patterns.
+	// If not set and Any is false, CSRs with SANs are denied by the autosign binary.
+	// +optional
+	DNSAltNames *PatternSpec `json:"dnsAltNames,omitempty"`
+
 	// CSRAttributes defines CSR extension attributes that must all match (AND logic).
 	// Each entry specifies an attribute name and the expected value (inline or from a Secret).
 	// +optional

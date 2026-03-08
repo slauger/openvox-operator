@@ -798,6 +798,11 @@ func (in *SigningPolicySpec) DeepCopyInto(out *SigningPolicySpec) {
 		*out = new(PatternSpec)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.DNSAltNames != nil {
+		in, out := &in.DNSAltNames, &out.DNSAltNames
+		*out = new(PatternSpec)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.CSRAttributes != nil {
 		in, out := &in.CSRAttributes, &out.CSRAttributes
 		*out = make([]CSRAttributeMatch, len(*in))

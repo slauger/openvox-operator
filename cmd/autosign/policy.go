@@ -22,6 +22,7 @@ type Policy struct {
 	Name          string             `yaml:"name"`
 	Any           bool               `yaml:"any,omitempty"`
 	Pattern       *PatternConf       `yaml:"pattern,omitempty"`
+	DNSAltNames   *PatternConf       `yaml:"dnsAltNames,omitempty"`
 	CSRAttributes []CSRAttributeConf `yaml:"csrAttributes,omitempty"`
 }
 
@@ -154,6 +155,16 @@ func evaluatePolicy(policy Policy, certname string, csr *x509.CertificateRequest
 		}
 	}
 
+	// SAN validation: if CSR has SANs, they must be explicitly allowed
+	if len(csr.DNSNames) > 0 {
+		if policy.DNSAltNames == nil {
+			return false
+		}
+		if !matchDNSAltNames(policy.DNSAltNames, csr.DNSNames) {
+			return false
+		}
+	}
+
 	// A policy with no conditions matches nothing
 	return hasCondition
 }
@@ -176,6 +187,23 @@ func matchCSRAttributes(attrs []CSRAttributeConf, csr *x509.CertificateRequest) 
 			return false
 		}
 		if val != attr.Value {
+			return false
+		}
+	}
+	return true
+}
+
+// matchDNSAltNames checks if all DNS SANs in the CSR match at least one allow pattern.
+func matchDNSAltNames(p *PatternConf, dnsNames []string) bool {
+	for _, san := range dnsNames {
+		matched := false
+		for _, pattern := range p.Allow {
+			if globMatch(pattern, san) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
 			return false
 		}
 	}

@@ -101,6 +101,20 @@ spec:
                   - name
                   type: object
                 type: array
+              dnsAltNames:
+                description: |-
+                  DNSAltNames defines allowed DNS subject alternative name patterns.
+                  If not set and Any is false, CSRs with SANs are denied by the autosign binary.
+                properties:
+                  allow:
+                    description: Allow is a list of glob patterns. The certname must
+                      match at least one.
+                    items:
+                      type: string
+                    type: array
+                required:
+                - allow
+                type: object
               pattern:
                 description: Pattern defines certname glob matching rules.
                 properties:

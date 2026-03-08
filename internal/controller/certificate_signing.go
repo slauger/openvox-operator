@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -83,10 +84,13 @@ func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openv
 	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode == http.StatusOK {
+		logger.Info("CSR submitted successfully", "certname", certname)
+	} else if resp.StatusCode == http.StatusBadRequest && strings.Contains(string(body), "already has a requested certificate") {
+		logger.Info("CSR already pending, proceeding to poll", "certname", certname)
+	} else {
 		return nil, nil, fmt.Errorf("CA rejected CSR (HTTP %d): %s", resp.StatusCode, string(body))
 	}
-	logger.Info("CSR submitted successfully", "certname", certname)
 
 	// Poll for signed certificate
 	certURL := fmt.Sprintf("%s/puppet-ca/v1/certificate/%s?environment=production", caBaseURL, certname)

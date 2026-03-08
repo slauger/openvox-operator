@@ -135,47 +135,10 @@ The `openvox-stack` chart deploys a complete OpenVox environment (Environment, C
 helm install production \
   oci://ghcr.io/slauger/charts/openvox-stack \
   --namespace openvox \
-  --create-namespace \
-  --set environment.image.tag=8.12.1
+  --create-namespace
 ```
 
-This creates a single CA+Server with autosign enabled. To add a second server pool for canary deployments:
-
-```yaml
-# values-production.yaml
-environment:
-  image:
-    tag: 8.12.1
-
-servers:
-  puppet:
-    ca: true
-    server: true
-    replicas: 1
-    resources:
-      limits:
-        memory: 2Gi
-    pool:
-      service:
-        type: LoadBalancer
-  canary:
-    ca: false
-    server: true
-    certificate:
-      certname: canary
-    replicas: 1
-    resources:
-      limits:
-        memory: 2Gi
-```
-
-```bash
-helm install production \
-  oci://ghcr.io/slauger/charts/openvox-stack \
-  --namespace openvox \
-  --create-namespace \
-  -f values-production.yaml
-```
+This creates a single CA+Server with autosign enabled. See the [documentation](https://slauger.github.io/openvox-operator) for advanced setups like multi-server pools and canary deployments.
 
 ## Documentation
 

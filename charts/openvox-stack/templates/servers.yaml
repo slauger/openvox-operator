@@ -1,0 +1,21 @@
+{{- range $key, $val := .Values.servers }}
+---
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: Server
+metadata:
+  name: {{ $key }}
+spec:
+  environmentRef: {{ include "openvox-stack.envName" $ }}
+  certificateRef: {{ include "openvox-stack.certName" (dict "key" $key "val" $val) }}
+  {{- if hasKey $val "ca" }}
+  ca: {{ $val.ca }}
+  {{- end }}
+  {{- if hasKey $val "server" }}
+  server: {{ $val.server }}
+  {{- end }}
+  replicas: {{ $val.replicas | default 1 }}
+  {{- with $val.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

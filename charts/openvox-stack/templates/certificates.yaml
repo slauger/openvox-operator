@@ -1,0 +1,18 @@
+{{- range $key, $val := .Values.servers }}
+---
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: Certificate
+metadata:
+  name: {{ include "openvox-stack.certName" (dict "key" $key "val" $val) }}
+spec:
+  authorityRef: {{ include "openvox-stack.caName" $ }}
+  certname: {{ $val.certificate.certname }}
+  dnsAltNames:
+    {{- $poolName := include "openvox-stack.poolName" (dict "key" $key "val" $val) }}
+    {{- $autoNames := list $poolName }}
+    {{- if ne $poolName "puppet" }}
+    {{- $autoNames = append $autoNames "puppet" }}
+    {{- end }}
+    {{- $allNames := concat $autoNames ($val.certificate.dnsAltNames | default list) | uniq }}
+    {{- toYaml $allNames | nindent 4 }}
+{{- end }}

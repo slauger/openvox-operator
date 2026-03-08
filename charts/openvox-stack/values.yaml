@@ -1,0 +1,44 @@
+environment:
+  name: production
+  image:
+    repository: ghcr.io/slauger/openvox-server
+    tag: "8.12.1"
+    pullPolicy: IfNotPresent
+  puppetdb:
+    serverUrls: []
+  puppet:
+    environmentTimeout: unlimited
+    storeconfigs: false
+    reports: store
+
+ca:
+  name: ""           # default: {envName}-ca
+  ttl: 5y
+  storage:
+    size: 1Gi
+    storageClass: ""
+
+signingPolicy:
+  enabled: true
+  name: ""           # default: {envName}-autosign
+  any: true
+
+servers:
+  puppet:
+    ca: true
+    server: true
+    certificate:
+      certname: puppet
+      dnsAltNames: []
+    replicas: 1
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        memory: 2Gi
+    pool:
+      name: ""       # default: server key name
+      service:
+        type: ClusterIP
+        port: 8140

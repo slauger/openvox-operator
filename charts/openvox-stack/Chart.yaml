@@ -1,0 +1,6 @@
+apiVersion: v2
+name: openvox-stack
+description: Deploy a complete OpenVox stack (Environment, CA, Servers, Pools)
+type: application
+version: 0.1.0
+appVersion: "8.12.1"

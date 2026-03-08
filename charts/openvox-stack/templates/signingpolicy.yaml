@@ -1,0 +1,9 @@
+{{- if .Values.signingPolicy.enabled }}
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: SigningPolicy
+metadata:
+  name: {{ include "openvox-stack.signingPolicyName" . }}
+spec:
+  certificateAuthorityRef: {{ include "openvox-stack.caName" . }}
+  any: {{ .Values.signingPolicy.any }}
+{{- end }}

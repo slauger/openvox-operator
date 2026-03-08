@@ -1,0 +1,12 @@
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: CertificateAuthority
+metadata:
+  name: {{ include "openvox-stack.caName" . }}
+spec:
+  environmentRef: {{ include "openvox-stack.envName" . }}
+  ttl: {{ .Values.ca.ttl }}
+  storage:
+    size: {{ .Values.ca.storage.size }}
+    {{- if .Values.ca.storage.storageClass }}
+    storageClass: {{ .Values.ca.storage.storageClass }}
+    {{- end }}

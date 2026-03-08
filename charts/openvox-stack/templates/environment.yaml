@@ -1,0 +1,22 @@
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: Environment
+metadata:
+  name: {{ include "openvox-stack.envName" . }}
+spec:
+  image:
+    repository: {{ .Values.environment.image.repository }}
+    tag: {{ .Values.environment.image.tag | quote }}
+    pullPolicy: {{ .Values.environment.image.pullPolicy }}
+  {{- with .Values.environment.puppetdb }}
+  {{- if .serverUrls }}
+  puppetdb:
+    serverUrls:
+      {{- toYaml .serverUrls | nindent 6 }}
+  {{- end }}
+  {{- end }}
+  {{- with .Values.environment.puppet }}
+  puppet:
+    environmentTimeout: {{ .environmentTimeout }}
+    storeconfigs: {{ .storeconfigs }}
+    reports: {{ .reports }}
+  {{- end }}

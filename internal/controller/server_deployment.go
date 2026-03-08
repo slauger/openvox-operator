@@ -120,10 +120,7 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, env *ope
 	caSecretName := ca.Status.CASecretName
 
 	volumeMounts := []corev1.VolumeMount{
-		{Name: "ssl-cert", MountPath: "/etc/puppetlabs/puppet/ssl/certs/puppet.pem", SubPath: "cert.pem", ReadOnly: true},
-		{Name: "ssl-cert", MountPath: "/etc/puppetlabs/puppet/ssl/private_keys/puppet.pem", SubPath: "key.pem", ReadOnly: true},
-		{Name: "ssl-ca", MountPath: "/etc/puppetlabs/puppet/ssl/certs/ca.pem", SubPath: "ca_crt.pem", ReadOnly: true},
-		{Name: "ssl-ca", MountPath: "/etc/puppetlabs/puppet/ssl/crl.pem", SubPath: "ca_crl.pem", ReadOnly: true},
+		{Name: "ssl", MountPath: "/etc/puppetlabs/puppet/ssl"},
 		{Name: "puppet-conf", MountPath: "/etc/puppetlabs/puppet/puppet.conf", SubPath: "puppet.conf", ReadOnly: true},
 		{Name: "puppetdb-conf", MountPath: "/etc/puppetlabs/puppet/puppetdb.conf", SubPath: "puppetdb.conf", ReadOnly: true},
 		{Name: "puppetserver-conf", MountPath: "/etc/puppetlabs/puppetserver/conf.d/puppetserver.conf", SubPath: "puppetserver.conf", ReadOnly: true},
@@ -133,9 +130,11 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, env *ope
 		{Name: "ca-cfg", MountPath: "/etc/puppetlabs/puppetserver/services.d/ca.cfg", SubPath: "ca.cfg", ReadOnly: true},
 	}
 
-	// SSL: individual file mounts via subPath keep the directory writable
+	// SSL: emptyDir populated by init container from secret volumes.
+	// OpenVox needs full read-write on the ssl directory (creates subdirs, syncs CRL, sets permissions).
 	defaultMode := int32(0640)
 	volumes := []corev1.Volume{
+		{Name: "ssl", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 		{
 			Name: "ssl-cert",
 			VolumeSource: corev1.VolumeSource{
@@ -233,19 +232,55 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, env *ope
 		},
 		Resources:    server.Spec.Resources,
 		VolumeMounts: volumeMounts,
+		StartupProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path:   "/status/v1/simple",
+					Port:   intstr.FromInt32(8140),
+					Scheme: corev1.URISchemeHTTPS,
+				},
+			},
+			PeriodSeconds:    5,
+			FailureThreshold: 60,
+		},
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
-				TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromInt32(8140)},
+				HTTPGet: &corev1.HTTPGetAction{
+					Path:   "/status/v1/simple",
+					Port:   intstr.FromInt32(8140),
+					Scheme: corev1.URISchemeHTTPS,
+				},
 			},
-			InitialDelaySeconds: 60,
-			PeriodSeconds:       10,
+			PeriodSeconds: 10,
 		},
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
-				TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromInt32(8140)},
+				HTTPGet: &corev1.HTTPGetAction{
+					Path:   "/status/v1/simple",
+					Port:   intstr.FromInt32(8140),
+					Scheme: corev1.URISchemeHTTPS,
+				},
 			},
-			InitialDelaySeconds: 120,
-			PeriodSeconds:       30,
+			PeriodSeconds: 30,
+		},
+	}
+
+	// Init container populates the writable ssl emptyDir from secret volumes
+	sslInitScript := `mkdir -p /ssl/certs /ssl/private_keys /ssl/public_keys /ssl/certificate_requests /ssl/private
+cp /ssl-cert/cert.pem /ssl/certs/puppet.pem
+cp /ssl-cert/key.pem /ssl/private_keys/puppet.pem
+cp /ssl-ca/ca_crt.pem /ssl/certs/ca.pem
+cp /ssl-ca/ca_crl.pem /ssl/crl.pem
+chmod 640 /ssl/private_keys/puppet.pem`
+	initContainer := corev1.Container{
+		Name:            "ssl-init",
+		Image:           image,
+		ImagePullPolicy: env.Spec.Image.PullPolicy,
+		Command:         []string{"sh", "-c", sslInitScript},
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: "ssl", MountPath: "/ssl"},
+			{Name: "ssl-cert", MountPath: "/ssl-cert", ReadOnly: true},
+			{Name: "ssl-ca", MountPath: "/ssl-ca", ReadOnly: true},
 		},
 	}
 
@@ -256,8 +291,9 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, env *ope
 			RunAsGroup:   int64Ptr(0),
 			RunAsNonRoot: boolPtr(true),
 		},
-		Containers: []corev1.Container{container},
-		Volumes:    volumes,
+		InitContainers: []corev1.Container{initContainer},
+		Containers:     []corev1.Container{container},
+		Volumes:        volumes,
 	}
 }
 

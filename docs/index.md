@@ -28,17 +28,6 @@ The operator manages OpenVox Server environments through a set of Custom Resourc
 | **Server** | OpenVox Server instance pool (CA and/or server role) |
 | **Pool** | Owns a Kubernetes Service, selects Servers via labels |
 
-Resources form a hierarchy:
-
-```
-Environment
-  ├─ CertificateAuthority (environmentRef → Environment)
-  │    ├─ SigningPolicy (certificateAuthorityRef → CertificateAuthority)
-  │    └─ Certificate (authorityRef → CertificateAuthority)
-  │         └─ Server (certificateRef → Certificate)
-  │              └─ Pool (selector → Server Pods)
-```
-
 An **Environment** holds shared configuration and connects to PuppetDB. A **CertificateAuthority** manages the CA infrastructure (PVC, setup Job, split Secrets for cert/key/CRL) and periodically refreshes the CRL. **SigningPolicy** resources define declarative rules for CSR approval (including DNS SAN validation). **Certificate** resources manage the lifecycle of individual certificates. **Server** resources reference a Certificate and can run as CA, server, or both. A **Pool** creates a Kubernetes Service that selects Server pods by label.
 
 ```mermaid

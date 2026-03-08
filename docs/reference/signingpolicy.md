@@ -29,6 +29,24 @@ spec:
       - "web-*"
 ```
 
+### DNS SAN Validation
+
+```yaml
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: SigningPolicy
+metadata:
+  name: allow-internal-sans
+spec:
+  certificateAuthorityRef: production-ca
+  pattern:
+    allow:
+      - "*.example.com"
+  dnsAltNames:
+    allow:
+      - "*.internal.example.com"
+      - "*.svc.cluster.local"
+```
+
 ### CSR Attribute Matching
 
 Match CSR extension attributes with inline values or Secret references:
@@ -79,6 +97,7 @@ This policy requires a matching certname pattern **and** a valid PSK **and** the
 | `certificateAuthorityRef` | string | **required** | Reference to the CertificateAuthority |
 | `any` | bool | `false` | Sign all CSRs unconditionally |
 | `pattern` | [PatternSpec](#patternspec) | - | Certname glob matching |
+| `dnsAltNames` | [PatternSpec](#patternspec) | - | Allowed DNS SAN patterns. If unset and `any` is false, CSRs with SANs are denied |
 | `csrAttributes` | [][CSRAttributeMatch](#csrattributematch) | - | CSR extension attributes that must all match (AND) |
 
 ### PatternSpec
@@ -127,12 +146,35 @@ Either `value` or `valueFrom` must be set.
 
 The `openvox-autosign` binary shipped in the openvox-server container image evaluates policies at CSR signing time:
 
-- Receives certname as argument, CSR on stdin
-- Evaluates all policies (OR between policies, AND within a policy)
-- **No policies** → deny all (exit 1)
-- **`any: true`** → approve unconditionally (exit 0)
-- **Pattern/CSR attributes** → evaluate rules
-- Exits 0 (sign) or 1 (deny)
+```mermaid
+flowchart TD
+    Start["CSR received<br/>(certname + CSR on stdin)"] --> Load["Load all SigningPolicies"]
+    Load --> Any{"Any policies?"}
+    Any -->|No| Deny
+
+    Any -->|Yes| Loop["Evaluate next policy"]
+    Loop --> CheckAny{"any: true?"}
+    CheckAny -->|Yes| Sign
+
+    CheckAny -->|No| CheckPattern{"pattern matches?"}
+    CheckPattern -->|No| Next
+    CheckPattern -->|Yes / not set| CheckSAN{"dnsAltNames matches?"}
+    CheckSAN -->|No| Next
+    CheckSAN -->|Yes / not set| CheckCSR{"csrAttributes match?"}
+    CheckCSR -->|No| Next
+    CheckCSR -->|Yes / not set| Sign
+
+    Next{"More policies?"} -->|Yes| Loop
+    Next -->|No| Deny
+
+    Sign["exit 0 (sign)"]
+    Deny["exit 1 (deny)"]
+```
+
+- **Between policies**: OR — any matching policy is sufficient
+- **Within a policy**: AND — all set fields must match
+- **No policies** → deny all
+- **`any: true`** → approve unconditionally
 
 ## Supported CSR Attributes
 

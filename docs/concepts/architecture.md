@@ -8,13 +8,22 @@ The openvox-operator follows the standard Kubernetes operator pattern: a control
 
 The operator uses multiple CRDs that form a hierarchy:
 
-```
-Environment
-  ├─ CertificateAuthority (environmentRef → Environment)
-  │    ├─ SigningPolicy (certificateAuthorityRef → CertificateAuthority)
-  │    └─ Certificate (authorityRef → CertificateAuthority)
-  │         └─ Server (certificateRef → Certificate, environmentRef → Environment)
-  │              └─ Pool (selector → Server Pods, environmentRef → Environment)
+```mermaid
+graph TD
+    Env["Environment"]
+    CA["CertificateAuthority"]
+    SP["SigningPolicy"]
+    Cert["Certificate"]
+    Srv["Server"]
+    Pool["Pool"]
+
+    Env -->|environmentRef| CA
+    CA -->|certificateAuthorityRef| SP
+    CA -->|authorityRef| Cert
+    Cert -->|certificateRef| Srv
+    Env -->|environmentRef| Srv
+    Srv -->|selector| Pool
+    Env -->|environmentRef| Pool
 ```
 
 - An **Environment** is the root resource. It generates ConfigMaps for puppet.conf/puppetdb.conf/webserver.conf and holds shared configuration.
@@ -29,8 +38,12 @@ Environment
 The Certificate Authority is managed by the CertificateAuthority controller:
 
 1. The CertificateAuthority controller creates a **PVC** for CA data and a **Job** that runs `puppetserver ca setup`
-2. The Job stores CA keys on the PVC and creates a Kubernetes **Secret** with public CA data (ca_crt.pem, ca_crl.pem, infra_crl.pem)
+2. The Job stores CA keys on the PVC and creates three Kubernetes **Secrets**:
+   - `{name}-ca` — public CA certificate (`ca_crt.pem`)
+   - `{name}-ca-key` — CA private key (`ca_key.pem`, never mounted in pods)
+   - `{name}-ca-crl` — CRL data (`ca_crl.pem`, `infra_crl.pem`)
 3. The CertificateAuthority transitions to the `Ready` phase
+4. The controller periodically fetches the CRL from the CA HTTP API and updates the CRL Secret (configurable via `crlRefreshInterval`, default `5m`)
 
 ## Certificate Lifecycle
 
@@ -48,20 +61,24 @@ sequenceDiagram
     participant Op as Operator
     participant CAJob as CA Setup Job
     participant PVC as CA PVC
-    participant CASec as CA Secret
+    participant CASec as CA Secrets (3x)
     participant CA as CA Server
     participant TLS as TLS Secret
     participant Srv as Server Deployment
 
     Op->>CAJob: Create CA setup Job
     CAJob->>PVC: Write CA data
-    CAJob->>CASec: Create CA Secret (certs + CRL)
+    CAJob->>CASec: Create ca, ca-key, ca-crl Secrets
     CAJob->>TLS: Export initial TLS Secret (cert + key)
     Op->>Srv: Create CA Deployment
     Op->>CA: Submit CSR via HTTP API
     CA-->>Op: Return signed certificate
     Op->>TLS: Create TLS Secret (cert + key)
     Op->>Srv: Create Server Deployment (mounts TLS + CA Secrets)
+    loop crlRefreshInterval (default 5m)
+        Op->>CA: Fetch CRL via HTTP API
+        Op->>CASec: Update ca-crl Secret
+    end
 ```
 
 ## Dedicated ServiceAccounts
@@ -71,8 +88,7 @@ The operator creates dedicated ServiceAccounts with minimal privileges:
 | ServiceAccount | Created by | Purpose | K8s API Token |
 |---|---|---|---|
 | `{env}-server` | Environment controller | All server pods | No (`automountServiceAccountToken: false`) |
-| `{ca}-ca-setup` | CertificateAuthority controller | CA setup job: creates CA Secret | Yes (scoped to CA Secret) |
-| `{cert}-cert-setup` | Certificate controller | Cert setup job: creates SSL Secret | Yes (scoped to SSL + CA Secrets) |
+| `{ca}-ca-setup` | CertificateAuthority controller | CA setup job: creates CA Secrets | Yes (scoped to `{ca}-ca`, `{ca}-ca-key`, `{ca}-ca-crl` Secrets) |
 
 The operator itself runs with its own ServiceAccount (managed by the Helm chart) with cluster-wide RBAC.
 

@@ -69,6 +69,61 @@ spec:
 | CA (`ca: true`) | `Recreate` | Only one pod can write to the CA PVC at a time |
 | Server only | `RollingUpdate` | Zero-downtime updates for stateless catalog compilation |
 
+## Pod Anatomy
+
+The operator builds different pod specs for CA and non-CA servers:
+
+```mermaid
+flowchart LR
+    subgraph "Pod (CA Server)"
+        direction TB
+        Init1["tls-init<br/>(init container)"]
+        Main1["openvox-server"]
+
+        Init1 --> Main1
+
+        subgraph Volumes
+            SSL1["ssl (emptyDir)"]
+            CERT1["ssl-cert (Secret: {cert}-tls)"]
+            CA1["ssl-ca (Secret: {ca}-ca)"]
+            CAPVC["ca-data (PVC: {ca}-data)"]
+            CFG1["ConfigMap: {env}-config"]
+            ASP["autosign-policy (Secret)"]
+        end
+    end
+```
+
+```mermaid
+flowchart LR
+    subgraph "Pod (Non-CA Server)"
+        direction TB
+        Init2["tls-init<br/>(init container)"]
+        Main2["openvox-server"]
+
+        Init2 --> Main2
+
+        subgraph Volumes
+            SSL2["ssl (emptyDir)"]
+            CERT2["ssl-cert (Secret: {cert}-tls)"]
+            CA2["ssl-ca (Secret: {ca}-ca)"]
+            CRL["ssl-ca-crl (Secret: {ca}-ca-crl)<br/>directory mount for kubelet auto-sync"]
+            CFG2["ConfigMap: {env}-config"]
+            CODE["code (PVC, optional)"]
+        end
+    end
+```
+
+Key differences:
+
+| | CA Server | Non-CA Server |
+|---|---|---|
+| CA PVC | Mounted read-write | Not mounted |
+| CRL | Read from CA PVC | Mounted as directory volume (kubelet auto-sync) |
+| Autosign Policy | Mounted from Secret | Not mounted |
+| webserver.conf | `webserver-ca.conf` (CRL from PVC) | `webserver.conf` (CRL from Secret mount) |
+| ca.cfg | `ca-enabled.cfg` | `ca-disabled.cfg` |
+| Strategy | Recreate | RollingUpdate |
+
 ## Created Resources
 
 | Resource | Name | Description |

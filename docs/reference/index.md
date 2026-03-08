@@ -20,7 +20,7 @@ Each resource references its parent. The operator reconciles them in order: an E
 | Kind | Short Name | Purpose |
 |---|---|---|
 | [Environment](environment.md) | `env` | Shared config (puppet.conf, auth.conf), PuppetDB connection |
-| [CertificateAuthority](certificateauthority.md) | `ca` | CA infrastructure: PVC, keys, public CA Secret |
+| [CertificateAuthority](certificateauthority.md) | `ca` | CA infrastructure: PVC, keys, 3 CA Secrets (cert, key, CRL) |
 | [SigningPolicy](signingpolicy.md) | `sp` | Declarative CSR signing policy for a CA |
 | [Certificate](certificate.md) | `cert` | Lifecycle of a single certificate (request, sign) |
 | [Server](server.md) | - | OpenVox Server Deployment (CA and/or server role) |

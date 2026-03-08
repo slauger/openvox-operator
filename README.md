@@ -8,8 +8,8 @@
 
 A Kubernetes Operator for running [OpenVox Server](https://github.com/OpenVoxProject) environments on **Kubernetes** and **OpenShift**.
 
-- 🔐 **Automated CA Lifecycle** - CA initialization, certificate signing and distribution - fully managed
-- 📜 **Declarative Signing Policies** - CSR approval via patterns, CSR attributes, or open signing - no autosign scripts
+- 🔐 **Automated CA Lifecycle** - CA initialization, certificate signing, distribution, and periodic CRL refresh - fully managed
+- 📜 **Declarative Signing Policies** - CSR approval via patterns, DNS SANs, CSR attributes, or open signing - no autosign scripts
 - 📦 **One Image, Two Roles** - Same rootless image runs as CA or server, configured by the operator
 - ⚡ **Scalable Servers** - Scale catalog compilation horizontally - multiple server pools with HPA
 - 🔄 **Multi-Version Deployments** - Run different server versions side by side - canary deployments, rolling upgrades
@@ -85,9 +85,9 @@ Environment
 | Kind | Purpose | Creates |
 |---|---|---|
 | **`Environment`** | Shared config (puppet.conf, auth.conf, etc.), PuppetDB connection | ConfigMaps, ServiceAccount |
-| **`CertificateAuthority`** | CA infrastructure: keys, signing, public certificates | PVC, CA Setup Job, CA Secret |
-| **`SigningPolicy`** | Declarative CSR signing policy (any, pattern, CSR attributes) | Autosign Policy Secret |
-| **`Certificate`** | Lifecycle of a single certificate (request, sign) | Cert Setup Job, SSL Secret |
+| **`CertificateAuthority`** | CA infrastructure: keys, signing, split Secrets (cert, key, CRL) | PVC, CA Setup Job, 3 CA Secrets |
+| **`SigningPolicy`** | Declarative CSR signing policy (any, pattern, DNS SANs, CSR attributes) | Autosign Policy Secret |
+| **`Certificate`** | Lifecycle of a single certificate (request, sign) | TLS Secret |
 | **`Server`** | OpenVox Server instance pool | Deployment, HPA |
 | **`Pool`** | Owns a Kubernetes Service that selects Server Pods | Service (type, annotations, port) |
 
@@ -117,25 +117,78 @@ This operator takes a **Kubernetes-native approach** that differs in several key
 | **Privileges** | Requires root | Fully rootless, random UID compatible |
 | **CA Management** | `puppetserver ca` CLI with CRuby shebang | Custom JRuby wrapper that routes through `clojure.main` |
 | **Certificates** | Each server has its own certificate | `Certificate` CRD manages the cert lifecycle - all replicas of a `Server` share the same certificate, enabling seamless horizontal scaling |
+| **CSR Signing** | `autosign.conf` or Ruby scripts | `SigningPolicy` CRD with declarative rules (any, pattern, DNS SANs, CSR attributes) |
+| **CRL** | File on disk, manual refresh | Split Secret (`{ca}-ca-crl`), operator-driven periodic refresh via CA HTTP API |
 | **Scaling** | Horizontal scaling possible but requires manual setup of additional server VMs | Horizontal via Deployment replicas and HPA |
 | **Code Deployment** | r10k installed on the VM, triggered by cron or webhook | `CodeDeploy` CRD (planned) manages r10k as a Kubernetes Job/CronJob |
 | **Multi-Version** | Separate VMs or manual package pinning | Multiple `Server` CRDs in the same `Pool` with different image tags |
 
 By eliminating system Ruby from the runtime image, the container has a smaller footprint and a reduced attack surface, avoiding the duplicate Ruby installation (CRuby + JRuby) that the OS packages carry.
 
-## Installation
+## Quick Start
+
+### 1. Install the Operator
 
 ```bash
 helm install openvox-operator \
   oci://ghcr.io/slauger/charts/openvox-operator \
-  --version 0.1.0 \
   --namespace openvox-system \
   --create-namespace
 ```
 
+### 2. Deploy a Stack
+
+The `openvox-stack` chart deploys a complete OpenVox environment (Environment, CertificateAuthority, SigningPolicy, Certificate, Server, Pool) with a single Helm release:
+
+```bash
+helm install production \
+  oci://ghcr.io/slauger/charts/openvox-stack \
+  --namespace openvox \
+  --create-namespace \
+  --set environment.image.tag=8.12.1
+```
+
+This creates a single CA+Server with autosign enabled. To add a second server pool for canary deployments:
+
+```yaml
+# values-production.yaml
+environment:
+  image:
+    tag: 8.12.1
+
+servers:
+  puppet:
+    ca: true
+    server: true
+    replicas: 1
+    resources:
+      limits:
+        memory: 2Gi
+    pool:
+      service:
+        type: LoadBalancer
+  canary:
+    ca: false
+    server: true
+    certificate:
+      certname: canary
+    replicas: 1
+    resources:
+      limits:
+        memory: 2Gi
+```
+
+```bash
+helm install production \
+  oci://ghcr.io/slauger/charts/openvox-stack \
+  --namespace openvox \
+  --create-namespace \
+  -f values-production.yaml
+```
+
 ## Documentation
 
-For getting started guides, examples, and detailed architecture documentation, see the [documentation](https://slauger.github.io/openvox-operator).
+For detailed architecture documentation and CRD reference, see the [documentation](https://slauger.github.io/openvox-operator).
 
 ## License
 

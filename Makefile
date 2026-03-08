@@ -51,7 +51,7 @@ docker-push: ## Push container image.
 
 ##@ Local Development
 
-LOCAL_TAG ?= $(shell git describe --always --dirty)
+LOCAL_TAG ?= $(shell git describe --always)
 
 .PHONY: local-build
 local-build: ## Build all images for local development (Docker Desktop K8s).

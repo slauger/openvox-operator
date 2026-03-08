@@ -12,6 +12,8 @@ graph TD
     Cert["Certificate"]
     Srv["Server"]
     Pool["Pool"]
+    CD["CodeDeploy (planned)"]
+    GC["GitCredential (planned)"]
 
     Env -->|environmentRef| CA
     CA -->|certificateAuthorityRef| SP
@@ -20,6 +22,9 @@ graph TD
     Env -->|environmentRef| Srv
     Srv -->|selector| Pool
     Env -->|environmentRef| Pool
+    CD -->|"code PVC"| Srv
+    GC -->|credentialRefs| CD
+    Env -->|environmentRef| CD
 ```
 
 Each resource references its parent. The operator reconciles them in order: an Environment must exist before a CertificateAuthority can reference it, a CertificateAuthority must be `Ready` before a Certificate can be signed, and a Certificate must be `Signed` before a Server creates its Deployment. SigningPolicies can be created at any time and take effect within ~60 seconds.
@@ -34,6 +39,14 @@ Each resource references its parent. The operator reconciles them in order: an E
 | [Certificate](certificate.md) | `cert` | Lifecycle of a single certificate (request, sign) |
 | [Server](server.md) | - | OpenVox Server Deployment (CA and/or server role) |
 | [Pool](pool.md) | - | Kubernetes Service that selects Server Pods |
+
+### Planned
+
+| Kind | Short Name | Purpose |
+|---|---|---|
+| CodeDeploy | `cd` | r10k code deployment (Deployment + PVC), environment cache clear |
+| GitCredential | `gc` | Pluggable Git authentication (SSH, HTTPS, GitHub App) |
+| CodeDeployTrigger | `cdt` | Webhook receiver for push-triggered deployments (Phase 2) |
 
 ## Shared Types
 

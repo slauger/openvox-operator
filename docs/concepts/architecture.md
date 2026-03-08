@@ -16,6 +16,8 @@ graph TD
     Cert["Certificate"]
     Srv["Server"]
     Pool["Pool"]
+    CD["CodeDeploy (planned)"]
+    GC["GitCredential (planned)"]
 
     Env -->|environmentRef| CA
     CA -->|certificateAuthorityRef| SP
@@ -24,6 +26,9 @@ graph TD
     Env -->|environmentRef| Srv
     Srv -->|selector| Pool
     Env -->|environmentRef| Pool
+    CD -->|"code PVC"| Srv
+    GC -->|credentialRefs| CD
+    Env -->|environmentRef| CD
 ```
 
 - An **Environment** is the root resource. It generates ConfigMaps for puppet.conf/puppetdb.conf/webserver.conf and holds shared configuration.
@@ -100,7 +105,66 @@ The operator itself runs with its own ServiceAccount (managed by the Helm chart)
 
 ## Code Deployment
 
-The CodeDeploy CRD (planned) manages r10k in a separate image. It creates a PVC for code storage that Servers mount read-only.
+The CodeDeploy CRD (planned) manages r10k via a long-running Go Agent in a Deployment. It creates two PVCs and keeps Puppet code in sync with a Git control repository.
+
+### Architecture
+
+```mermaid
+graph LR
+    Git["Git Repository"]
+    CD["CodeDeploy Pod<br/>(Go Agent + r10k)"]
+    PVC["Code PVC"]
+    Cache["Cache PVC"]
+    S1["Server Pod 1"]
+    S2["Server Pod 2"]
+    S3["Server Pod N"]
+
+    Git -->|git pull| CD
+    CD -->|r10k deploy| PVC
+    CD -->|git cache| Cache
+    PVC -->|read-only mount| S1
+    PVC -->|read-only mount| S2
+    PVC -->|read-only mount| S3
+    CD -->|DELETE /environment-cache| S1
+    CD -->|DELETE /environment-cache| S2
+    CD -->|DELETE /environment-cache| S3
+```
+
+### Sync Flow
+
+1. Go Agent starts and runs `r10k deploy environment -p`
+2. r10k writes code to the Code PVC
+3. Agent discovers Servers mounting this PVC (via Server CRDs matching `spec.code.claimName`)
+4. Agent calls `DELETE /puppet-admin-api/v1/environment-cache` on each Server pod (zero-downtime, no restart)
+5. Agent updates CodeDeploy status (`codeHash`, `lastSyncTime`)
+
+Re-sync is triggered by annotating the resource:
+
+```bash
+kubectl annotate codedeploy production-code \
+  openvox.voxpupuli.org/sync=$(date +%s) --overwrite
+```
+
+### Resources Created
+
+| Resource | Name | Description |
+|---|---|---|
+| PVC | `{name}-data` | Deployed code, mounted read-only by Servers |
+| PVC | `{name}-cache` | r10k Git cache (RWO, agent-only) |
+| Deployment | `{name}` | Go Agent (r10k runner + cache clearer) |
+| ConfigMap | `{name}-r10k-config` | Generated `r10k.yaml` |
+
+### Git Authentication
+
+The GitCredential CRD (planned) provides pluggable Git authentication, reusable across multiple CodeDeploys:
+
+| Type | Use Case |
+|---|---|
+| `ssh` | GitHub/GitLab SSH deploy keys |
+| `https` | Personal access tokens, deploy tokens |
+| `githubApp` | GitHub App with short-lived installation tokens |
+
+### Storage Considerations
 
 | Setup | Access Mode | Requirement |
 |---|---|---|
@@ -108,3 +172,11 @@ The CodeDeploy CRD (planned) manages r10k in a separate image. It creates a PVC 
 | Multi-Node | RWX | NFS, CephFS, EFS, Longhorn, etc. |
 
 For single-node setups, RWO with pod affinity is sufficient. Multi-node clusters require an RWX-capable storage provider.
+
+### Container Image
+
+The `openvox-codedeploy` image provides the runtime for the CodeDeploy agent:
+
+- UBI9 + System Ruby 3.3 + r10k gem
+- git + openssh-clients for repository access
+- Rootless (UID 1001) with OpenShift random-UID support

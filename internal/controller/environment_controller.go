@@ -644,7 +644,7 @@ func (r *EnvironmentReconciler) renderAutosignPolicyConfig(ctx context.Context, 
 	})
 
 	for _, p := range policies {
-		sb.WriteString(fmt.Sprintf("  - name: %s\n", p.Name))
+		fmt.Fprintf(&sb, "  - name: %s\n", p.Name)
 
 		if p.Spec.Any {
 			sb.WriteString("    any: true\n")

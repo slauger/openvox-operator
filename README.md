@@ -73,15 +73,6 @@ The CA server can be member of both pools - it handles CA requests via the `pupp
 
 All resources use the API group `openvox.voxpupuli.org/v1alpha1`.
 
-```
-Environment
-  ├─ CertificateAuthority (environmentRef → Environment)
-  │    ├─ SigningPolicy (certificateAuthorityRef → CertificateAuthority)
-  │    └─ Certificate (authorityRef → CertificateAuthority)
-  │         └─ Server (certificateRef → Certificate)
-  │              └─ Pool (selector → Server Pods)
-```
-
 | Kind | Purpose | Creates |
 |---|---|---|
 | **`Environment`** | Shared config (puppet.conf, auth.conf, etc.), PuppetDB connection | ConfigMaps, ServiceAccount |

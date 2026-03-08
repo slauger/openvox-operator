@@ -2,7 +2,7 @@ environment:
   name: production
   image:
     repository: ghcr.io/slauger/openvox-server
-    tag: "8.12.1"
+    tag: latest
     pullPolicy: IfNotPresent
   puppetdb:
     serverUrls: []

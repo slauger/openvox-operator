@@ -78,6 +78,11 @@ RUN tar -xzf /openvox-server-${OPENVOXSERVER_VERSION}.tar.gz \
     && install -d -m 0755 "${etc_dir}/code/environments" \
     && install -d -m 0755 "${etc_dir}/puppet" \
     && install -d -m 0755 "${etc_dir}/puppet/ssl" \
+    && install -d -m 0755 "${etc_dir}/puppet/ssl/certs" \
+    && install -d -m 0755 "${etc_dir}/puppet/ssl/private_keys" \
+    && install -d -m 0755 "${etc_dir}/puppet/ssl/public_keys" \
+    && install -d -m 0755 "${etc_dir}/puppet/ssl/certificate_requests" \
+    && install -d -m 0755 "${etc_dir}/puppet/ssl/private" \
     && install -d -m 0755 "${etc_dir}/puppetserver/conf.d" \
     && install -d -m 0755 "${etc_dir}/puppetserver/services.d" \
     && install -d -m 0755 "${run_dir}/puppetserver" \

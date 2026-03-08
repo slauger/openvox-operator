@@ -120,7 +120,10 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, env *ope
 	caSecretName := ca.Status.CASecretName
 
 	volumeMounts := []corev1.VolumeMount{
-		{Name: "ssl", MountPath: "/etc/puppetlabs/puppet/ssl"},
+		{Name: "ssl-cert", MountPath: "/etc/puppetlabs/puppet/ssl/certs/puppet.pem", SubPath: "cert.pem", ReadOnly: true},
+		{Name: "ssl-cert", MountPath: "/etc/puppetlabs/puppet/ssl/private_keys/puppet.pem", SubPath: "key.pem", ReadOnly: true},
+		{Name: "ssl-ca", MountPath: "/etc/puppetlabs/puppet/ssl/certs/ca.pem", SubPath: "ca_crt.pem", ReadOnly: true},
+		{Name: "ssl-ca", MountPath: "/etc/puppetlabs/puppet/ssl/crl.pem", SubPath: "ca_crl.pem", ReadOnly: true},
 		{Name: "puppet-conf", MountPath: "/etc/puppetlabs/puppet/puppet.conf", SubPath: "puppet.conf", ReadOnly: true},
 		{Name: "puppetdb-conf", MountPath: "/etc/puppetlabs/puppet/puppetdb.conf", SubPath: "puppetdb.conf", ReadOnly: true},
 		{Name: "puppetserver-conf", MountPath: "/etc/puppetlabs/puppetserver/conf.d/puppetserver.conf", SubPath: "puppetserver.conf", ReadOnly: true},
@@ -130,39 +133,27 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, env *ope
 		{Name: "ca-cfg", MountPath: "/etc/puppetlabs/puppetserver/services.d/ca.cfg", SubPath: "ca.cfg", ReadOnly: true},
 	}
 
-	// SSL volume: projected from server SSL Secret + CA Secret
+	// SSL: individual file mounts via subPath keep the directory writable
 	defaultMode := int32(0640)
-	sslVolume := corev1.Volume{
-		Name: "ssl",
-		VolumeSource: corev1.VolumeSource{
-			Projected: &corev1.ProjectedVolumeSource{
-				DefaultMode: &defaultMode,
-				Sources: []corev1.VolumeProjection{
-					{
-						Secret: &corev1.SecretProjection{
-							LocalObjectReference: corev1.LocalObjectReference{Name: sslSecretName},
-							Items: []corev1.KeyToPath{
-								{Key: "cert.pem", Path: "certs/puppet.pem"},
-								{Key: "key.pem", Path: "private_keys/puppet.pem"},
-							},
-						},
-					},
-					{
-						Secret: &corev1.SecretProjection{
-							LocalObjectReference: corev1.LocalObjectReference{Name: caSecretName},
-							Items: []corev1.KeyToPath{
-								{Key: "ca_crt.pem", Path: "certs/ca.pem"},
-								{Key: "ca_crl.pem", Path: "crl.pem"},
-							},
-						},
-					},
+	volumes := []corev1.Volume{
+		{
+			Name: "ssl-cert",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  sslSecretName,
+					DefaultMode: &defaultMode,
 				},
 			},
 		},
-	}
-
-	volumes := []corev1.Volume{
-		sslVolume,
+		{
+			Name: "ssl-ca",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  caSecretName,
+					DefaultMode: &defaultMode,
+				},
+			},
+		},
 		configMapVolume("puppet-conf", configMapName, "puppet.conf"),
 		configMapVolume("puppetdb-conf", configMapName, "puppetdb.conf"),
 		configMapVolume("puppetserver-conf", configMapName, "puppetserver.conf"),

@@ -35,25 +35,21 @@ graph TD
 
 ```mermaid
 graph LR
-    Agent1["🖥️ Agent"] --> LB
-    Agent2["🖥️ Agent"] --> LB
-    Agent3["🖥️ Agent"] --> LB
+    Agent["🖥️ Agents"] --> LB
 
     subgraph Kubernetes
         LB["🌐 Pool: puppet<br/>Service (LoadBalancer)"]
         CA_SVC["🔐 Pool: puppet-ca<br/>Service (ClusterIP)"]
 
-        LB --> S1["⚙️ Server: stable<br/>replica 1 - v8.12.1"]
-        LB --> S2["⚙️ Server: stable<br/>replica 2 - v8.12.1"]
-        LB --> S3["⚙️ Server: stable<br/>replica 3 - v8.12.1"]
-        LB --> C1["⚙️ Server: canary<br/>replica 1 - v8.13.0"]
+        LB --> CA["🔐 Server: ca<br/>replicas: 1"]
+        LB --> Stable["⚙️ Server: stable<br/>replicas: 3 - v8.12.1"]
+        LB --> Canary["⚙️ Server: canary<br/>replicas: 1 - v8.13.0"]
 
-        CA_SVC --> CA["🔐 Server: ca<br/>replica 1"]
-        CA_SVC --> C1
+        CA_SVC --> CA
     end
 ```
 
-The CA server is only reachable cluster-internally via ClusterIP. The `canary` server is member of both pools - it serves catalog requests from external agents via the LoadBalancer and handles CA requests internally.
+The CA server is member of both pools - it handles CA requests via the ClusterIP service and also serves catalog requests from external agents via the LoadBalancer.
 
 ## CRD Model
 

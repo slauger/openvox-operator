@@ -4,7 +4,7 @@ This guide sets up a minimal OpenVox Server environment with a single pod acting
 
 ## Minimal Setup
 
-Create an Environment and a Server:
+Create an Environment, CertificateAuthority, Certificate, Server, and Pool:
 
 ```yaml
 apiVersion: openvox.voxpupuli.org/v1alpha1
@@ -19,18 +19,44 @@ spec:
     autosign: "true"
 ---
 apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: CertificateAuthority
+metadata:
+  name: lab-ca
+spec:
+  environmentRef: lab
+---
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: Certificate
+metadata:
+  name: lab-cert
+spec:
+  authorityRef: lab-ca
+  certname: puppet
+  dnsAltNames:
+    - puppet
+    - lab-ca
+---
+apiVersion: openvox.voxpupuli.org/v1alpha1
 kind: Server
 metadata:
   name: puppet
 spec:
   environmentRef: lab
+  certificateRef: lab-cert
   ca: true
   server: true
-  certname: puppet
-  dnsAltNames:
-    - puppet
-    - puppet-ca
   replicas: 1
+---
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: Pool
+metadata:
+  name: puppet
+spec:
+  environmentRef: lab
+  selector:
+    openvox.voxpupuli.org/ca: "true"
+  service:
+    port: 8140
 ```
 
 Apply it:
@@ -41,23 +67,33 @@ kubectl apply -f environment.yaml
 
 The operator will:
 
-1. Create a CA setup Job to initialize the Certificate Authority
-2. Store CA certificates in a Kubernetes Secret
-3. Create a Deployment for the Server pod
-4. Create a Service for the CA
+1. Create a ConfigMap with puppet configuration
+2. Initialize the Certificate Authority (PVC, CA setup Job, CA Secret)
+3. Sign a certificate for the Server (cert setup Job, SSL Secret)
+4. Create a Deployment for the Server pod
+5. Create a Service via the Pool
 
 ## Verify
 
 ```bash
-kubectl get environment,server
+kubectl get environment,certificateauthority,certificate,server,pool
 ```
 
 ```
-NAME                                     CA READY   AGE
-environment.openvox.voxpupuli.org/lab    true       2m
+NAME                                        PHASE     AGE
+environment.openvox.voxpupuli.org/lab       Running   2m
 
-NAME                                     ENVIRONMENT   REPLICAS   READY
-server.openvox.voxpupuli.org/puppet      lab           1          1
+NAME                                                ENVIRONMENT   PHASE   AGE
+certificateauthority.openvox.voxpupuli.org/lab-ca   lab           Ready   2m
+
+NAME                                              AUTHORITY   CERTNAME   PHASE    AGE
+certificate.openvox.voxpupuli.org/lab-cert        lab-ca      puppet     Signed   2m
+
+NAME                                        ENVIRONMENT   REPLICAS   READY   PHASE     AGE
+server.openvox.voxpupuli.org/puppet         lab           1          1       Running   2m
+
+NAME                                        ENVIRONMENT   TYPE        ENDPOINTS   AGE
+pool.openvox.voxpupuli.org/puppet           lab           ClusterIP   1           2m
 ```
 
 ## Next Steps

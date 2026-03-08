@@ -6,13 +6,9 @@ metadata:
   namespace: openvox-system
 spec:
   environmentRef: production
+  certificateRef: ca-cert
   ca: true
   server: true
-  certname: puppet
-  dnsAltNames:
-    - puppet
-    - puppet-ca
-    - puppet-ca.openvox.svc
   replicas: 1
   resources:
     requests:

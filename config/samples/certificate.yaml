@@ -1,0 +1,10 @@
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: Certificate
+metadata:
+  name: ca-cert
+spec:
+  authorityRef: production-ca
+  certname: puppet
+  dnsAltNames:
+    - production-ca
+    - puppet

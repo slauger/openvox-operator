@@ -9,7 +9,6 @@ import (
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=env
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
-// +kubebuilder:printcolumn:name="CA Ready",type=boolean,JSONPath=`.status.caReady`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // Environment is the Schema for the environments API.
@@ -61,12 +60,11 @@ type CodeSpec struct {
 }
 
 // EnvironmentPhase represents the current lifecycle phase.
-// +kubebuilder:validation:Enum=Pending;CASetup;Running;Error
+// +kubebuilder:validation:Enum=Pending;Running;Error
 type EnvironmentPhase string
 
 const (
 	EnvironmentPhasePending EnvironmentPhase = "Pending"
-	EnvironmentPhaseCASetup EnvironmentPhase = "CASetup"
 	EnvironmentPhaseRunning EnvironmentPhase = "Running"
 	EnvironmentPhaseError   EnvironmentPhase = "Error"
 )
@@ -77,18 +75,6 @@ type EnvironmentStatus struct {
 	// +optional
 	Phase EnvironmentPhase `json:"phase,omitempty"`
 
-	// CAReady indicates whether the CA is initialized.
-	// +optional
-	CAReady bool `json:"caReady,omitempty"`
-
-	// CASecretName is the name of the CA marker Secret.
-	// +optional
-	CASecretName string `json:"caSecretName,omitempty"`
-
-	// CAServiceName is the name of the CA Service.
-	// +optional
-	CAServiceName string `json:"caServiceName,omitempty"`
-
 	// Conditions represent the latest available observations.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
@@ -96,8 +82,7 @@ type EnvironmentStatus struct {
 
 // Condition types for Environment.
 const (
-	ConditionCAInitialized = "CAInitialized"
-	ConditionConfigReady   = "ConfigReady"
+	ConditionConfigReady = "ConfigReady"
 )
 
 // --- Shared types used by multiple CRDs ---

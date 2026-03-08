@@ -30,9 +30,9 @@ Existing containers decide at startup whether to run as CA or server based on en
 | **Configuration** | `puppet config set`, entrypoint scripts, ENV vars | Declarative CRDs, operator renders ConfigMaps |
 | **Privileges** | Requires root | Fully rootless, random UID compatible |
 | **CA Management** | `puppetserver ca` CLI (CRuby) | Custom JRuby wrapper via `clojure.main` |
-| **Certificates** | Each server has its own certificate | All replicas of a Server share one certificate |
+| **Certificates** | Each server has its own certificate | `Certificate` CRD manages the cert lifecycle - all replicas of a Server share one certificate |
 | **Scaling** | Manual VM provisioning | Deployment replicas + HPA |
-| **Code Deployment** | r10k on the VM, cron/webhook | CodeDeploy CRD manages r10k as Job/CronJob |
+| **Code Deployment** | r10k on the VM, cron/webhook | CodeDeploy CRD (planned) manages r10k as Job/CronJob |
 | **Multi-Version** | Separate VMs or package pinning | Multiple Servers in the same Pool |
 
 ## Container Image

@@ -17,34 +17,43 @@ The operator manages OpenVox Server environments through a set of Custom Resourc
 
 | Kind | Purpose |
 |---|---|
-| **Environment** | Shared config, CA lifecycle, PuppetDB connection |
-| **Pool** | Owns a Kubernetes Service, selects Servers via labels |
+| **Environment** | Shared config (puppet.conf, auth.conf, etc.), PuppetDB connection |
+| **CertificateAuthority** | CA infrastructure: keys, signing, public certificates |
+| **Certificate** | Lifecycle of a single certificate (request, sign) |
 | **Server** | OpenVox Server instance pool (CA and/or server role) |
+| **Pool** | Owns a Kubernetes Service, selects Servers via labels |
 
-An **Environment** is the central resource that holds shared configuration, manages the Certificate Authority, and connects to PuppetDB. **Server** resources reference an Environment and can run as CA, server, or both. A **Pool** creates a Kubernetes Service that selects Server pods by label.
+Resources form a hierarchy:
+
+```
+Environment
+  └─ CertificateAuthority (environmentRef → Environment)
+       └─ Certificate (authorityRef → CertificateAuthority)
+            └─ Server (certificateRef → Certificate)
+                 └─ Pool (selector → Server Pods)
+```
+
+An **Environment** holds shared configuration and connects to PuppetDB. A **CertificateAuthority** manages the CA infrastructure (PVC, setup Job, CA Secret). **Certificate** resources manage the lifecycle of individual certificates. **Server** resources reference a Certificate and can run as CA, server, or both. A **Pool** creates a Kubernetes Service that selects Server pods by label.
 
 ```mermaid
 graph TD
     Op["OpenVox Operator"]
     Op -->|manages| Env
 
-    Env["Environment CRD<br/>production"]
-    Env --> CA["Server CRD: ca<br/>role: ca"]
-    Env --> Stable["Server CRD: stable<br/>role: server - v8.12.1"]
-    Env --> Canary["Server CRD: canary<br/>role: server - v8.13.0"]
+    Env["Environment<br/>production"]
+    Env --> CA_CRD["CertificateAuthority<br/>production-ca"]
+    CA_CRD --> Cert["Certificate: ca-cert"]
+    Cert --> CA["Server: ca<br/>ca: true, server: true"]
 
     CA --> CA_D["Deployment"]
-    Stable --> ST_D["Deployment"]
-    Canary --> CN_D["Deployment"]
 
     CA_D -->|mounts| CA_PVC["CA Data PVC"]
-    ST_D -->|mounts| Code_PVC["Code PVC (shared)"]
-    CN_D -->|mounts| Code_PVC
+    CA_D -->|mounts| Code_PVC["Code PVC (shared)"]
 ```
 
 ## Traffic Flow
 
-Agents connect to a Pool Service which load-balances across all Servers in the pool. The CA server has its own dedicated service for certificate operations.
+Agents connect to a Pool Service which load-balances across all Servers in the pool. The CA server has its own dedicated Pool for certificate operations.
 
 ```mermaid
 graph LR
@@ -53,7 +62,7 @@ graph LR
 
     subgraph Kubernetes
         LB["Pool: puppet<br/>Service (LoadBalancer)"]
-        CA_SVC["CA Service<br/>(LoadBalancer)"]
+        CA_SVC["Pool: puppet-ca<br/>Service (LoadBalancer)"]
 
         LB --> CA["Server: ca<br/>replicas: 1"]
         LB --> Stable["Server: stable<br/>replicas: 3"]
@@ -63,7 +72,7 @@ graph LR
     end
 ```
 
-The CA server can participate in both services - handling CA requests via the dedicated CA service and also serving catalog requests through the pool service.
+The CA server can participate in both pools - handling CA requests via the dedicated CA pool and also serving catalog requests through the server pool.
 
 ## License
 

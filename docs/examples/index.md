@@ -17,23 +17,49 @@ spec:
     autosign: "true"
 ---
 apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: CertificateAuthority
+metadata:
+  name: lab-ca
+spec:
+  environmentRef: lab
+---
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: Certificate
+metadata:
+  name: lab-cert
+spec:
+  authorityRef: lab-ca
+  certname: puppet
+  dnsAltNames:
+    - puppet
+    - lab-ca
+---
+apiVersion: openvox.voxpupuli.org/v1alpha1
 kind: Server
 metadata:
   name: puppet
 spec:
   environmentRef: lab
+  certificateRef: lab-cert
   ca: true
   server: true
-  certname: puppet
-  dnsAltNames:
-    - puppet
-    - puppet-ca
   replicas: 1
+---
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: Pool
+metadata:
+  name: puppet
+spec:
+  environmentRef: lab
+  selector:
+    openvox.voxpupuli.org/ca: "true"
+  service:
+    port: 8140
 ```
 
 ## Production - CA + Server Pool + Canary
 
-Separate CA server, a stable server pool with 3 replicas, and a canary server running a newer version. A Pool with a selector distributes traffic across all servers with the `server` role.
+Separate CA server, a stable server pool with 3 replicas, and a canary server running a newer version. Pools distribute traffic across matching servers.
 
 ```yaml
 apiVersion: openvox.voxpupuli.org/v1alpha1
@@ -60,6 +86,57 @@ spec:
     claimName: puppet-code
 ---
 apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: CertificateAuthority
+metadata:
+  name: production-ca
+spec:
+  environmentRef: production
+  storage:
+    size: 1Gi
+---
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: Certificate
+metadata:
+  name: ca-cert
+spec:
+  authorityRef: production-ca
+  certname: puppet
+  dnsAltNames:
+    - puppet
+    - production-ca
+---
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: Certificate
+metadata:
+  name: stable-cert
+spec:
+  authorityRef: production-ca
+  certname: puppet
+  dnsAltNames:
+    - puppet
+---
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: Certificate
+metadata:
+  name: canary-cert
+spec:
+  authorityRef: production-ca
+  certname: puppet
+  dnsAltNames:
+    - puppet
+---
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: Pool
+metadata:
+  name: production-ca
+spec:
+  environmentRef: production
+  selector:
+    openvox.voxpupuli.org/ca: "true"
+  service:
+    port: 8140
+---
+apiVersion: openvox.voxpupuli.org/v1alpha1
 kind: Pool
 metadata:
   name: puppet
@@ -77,12 +154,9 @@ metadata:
   name: ca
 spec:
   environmentRef: production
+  certificateRef: ca-cert
   ca: true
   server: true
-  certname: puppet
-  dnsAltNames:
-    - puppet
-    - puppet-ca
   replicas: 1
   resources:
     requests:
@@ -98,6 +172,7 @@ metadata:
   name: stable
 spec:
   environmentRef: production
+  certificateRef: stable-cert
   replicas: 3
   maxActiveInstances: 2
   resources:
@@ -114,6 +189,7 @@ metadata:
   name: canary
 spec:
   environmentRef: production
+  certificateRef: canary-cert
   image:
     tag: "8.13.0"
   replicas: 1

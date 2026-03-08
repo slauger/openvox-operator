@@ -3,11 +3,10 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -28,12 +27,11 @@ type ServerReconciler struct {
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=servers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=servers/finalizers,verbs=update
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=environments,verbs=get;list;watch
-// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=pools,verbs=get;list;watch
+// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificates,verbs=get;list;watch
+// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificateauthorities,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=secrets;serviceaccounts,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 
 func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -64,22 +62,35 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	// Reconcile cert setup RBAC (SA, Role, RoleBinding)
-	if err := r.reconcileCertSetupRBAC(ctx, server, env); err != nil {
-		return ctrl.Result{}, fmt.Errorf("reconciling cert setup RBAC: %w", err)
+	// Resolve Certificate — wait until phase is Signed
+	cert := &openvoxv1alpha1.Certificate{}
+	if err := r.Get(ctx, types.NamespacedName{Name: server.Spec.CertificateRef, Namespace: server.Namespace}, cert); err != nil {
+		if errors.IsNotFound(err) {
+			logger.Error(err, "referenced Certificate not found", "certificateRef", server.Spec.CertificateRef)
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
 	}
 
-	// Reconcile SSL certificates (runs CA setup job or cert bootstrap job)
-	result, err := r.reconcileCertSetupJob(ctx, server, env)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("reconciling cert setup: %w", err)
+	if cert.Status.Phase != openvoxv1alpha1.CertificatePhaseSigned || cert.Status.SecretName == "" {
+		logger.Info("waiting for Certificate to be signed", "certificate", cert.Name, "phase", cert.Status.Phase)
+		server.Status.Phase = openvoxv1alpha1.ServerPhaseWaitingForCert
+		_ = r.Status().Update(ctx, server)
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
-	if result.Requeue || result.RequeueAfter > 0 {
-		return result, nil
+
+	// Resolve CertificateAuthority (needed for CA PVC name when ca: true)
+	ca := &openvoxv1alpha1.CertificateAuthority{}
+	if err := r.Get(ctx, types.NamespacedName{Name: cert.Spec.AuthorityRef, Namespace: server.Namespace}, ca); err != nil {
+		if errors.IsNotFound(err) {
+			logger.Error(err, "referenced CertificateAuthority not found", "authorityRef", cert.Spec.AuthorityRef)
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
 	}
 
 	// Reconcile Deployment
-	if err := r.reconcileDeployment(ctx, server, env); err != nil {
+	if err := r.reconcileDeployment(ctx, server, env, cert, ca); err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconciling Deployment: %w", err)
 	}
 
@@ -103,10 +114,6 @@ func (r *ServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&openvoxv1alpha1.Server{}).
 		Owns(&appsv1.Deployment{}).
-		Owns(&batchv1.Job{}).
-		Owns(&corev1.ServiceAccount{}).
-		Owns(&rbacv1.Role{}).
-		Owns(&rbacv1.RoleBinding{}).
 		Watches(&corev1.Secret{}, enqueueServersForSecret(mgr.GetClient())).
 		Complete(r)
 }

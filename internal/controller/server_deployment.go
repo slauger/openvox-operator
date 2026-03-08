@@ -16,7 +16,7 @@ import (
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
 
-func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *openvoxv1alpha1.Server, env *openvoxv1alpha1.Environment) error {
+func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *openvoxv1alpha1.Server, env *openvoxv1alpha1.Environment, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority) error {
 	logger := log.FromContext(ctx)
 	deployName := server.Name
 	image := resolveImage(server, env)
@@ -51,13 +51,13 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 		return fmt.Errorf("computing ConfigMap hash: %w", err)
 	}
 
-	sslSecretName := fmt.Sprintf("%s-ssl", server.Name)
+	sslSecretName := cert.Status.SecretName
 	sslHash, err := r.secretHash(ctx, sslSecretName, server.Namespace)
 	if err != nil {
 		return fmt.Errorf("computing SSL Secret hash: %w", err)
 	}
 
-	caSecretName := fmt.Sprintf("%s-ca", server.Spec.EnvironmentRef)
+	caSecretName := ca.Status.CASecretName
 	caHash, err := r.secretHash(ctx, caSecretName, server.Namespace)
 	if err != nil {
 		return fmt.Errorf("computing CA Secret hash: %w", err)
@@ -93,7 +93,7 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 						Labels:      labels,
 						Annotations: annotations,
 					},
-					Spec: r.buildPodSpec(server, env, image, javaArgs, configMapName),
+					Spec: r.buildPodSpec(server, env, cert, ca, image, javaArgs, configMapName),
 				},
 			},
 		}
@@ -111,13 +111,13 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 	deploy.Spec.Strategy = strategy
 	deploy.Spec.Template.Labels = labels
 	deploy.Spec.Template.Annotations = annotations
-	deploy.Spec.Template.Spec = r.buildPodSpec(server, env, image, javaArgs, configMapName)
+	deploy.Spec.Template.Spec = r.buildPodSpec(server, env, cert, ca, image, javaArgs, configMapName)
 	return r.Update(ctx, deploy)
 }
 
-func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, env *openvoxv1alpha1.Environment, image, javaArgs, configMapName string) corev1.PodSpec {
-	sslSecretName := fmt.Sprintf("%s-ssl", server.Name)
-	caSecretName := fmt.Sprintf("%s-ca", server.Spec.EnvironmentRef)
+func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, env *openvoxv1alpha1.Environment, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, image, javaArgs, configMapName string) corev1.PodSpec {
+	sslSecretName := cert.Status.SecretName
+	caSecretName := ca.Status.CASecretName
 
 	volumeMounts := []corev1.VolumeMount{
 		{Name: "ssl", MountPath: "/etc/puppetlabs/puppet/ssl"},
@@ -173,6 +173,7 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, env *ope
 
 	// CA-specific: mount CA data PVC, use ca-enabled.cfg
 	if server.Spec.CA {
+		caPVCName := fmt.Sprintf("%s-data", ca.Name)
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      "ca-data",
 			MountPath: "/etc/puppetlabs/puppetserver/ca",
@@ -182,7 +183,7 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, env *ope
 				Name: "ca-data",
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: fmt.Sprintf("%s-ca-data", server.Spec.EnvironmentRef),
+						ClaimName: caPVCName,
 					},
 				},
 			},
@@ -257,7 +258,6 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, env *ope
 }
 
 // resolveJavaArgs determines JVM arguments for a Server.
-// Priority: explicit javaArgs > auto-calculated from memory limits > default.
 func resolveJavaArgs(server *openvoxv1alpha1.Server) string {
 	if server.Spec.JavaArgs != "" {
 		return server.Spec.JavaArgs

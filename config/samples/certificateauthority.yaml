@@ -1,0 +1,10 @@
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: CertificateAuthority
+metadata:
+  name: production-ca
+spec:
+  environmentRef: production
+  ttl: 157680000
+  autosign: "true"
+  storage:
+    size: 1Gi

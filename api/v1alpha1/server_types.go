@@ -37,6 +37,9 @@ type ServerSpec struct {
 	// EnvironmentRef references the Environment this Server belongs to.
 	EnvironmentRef string `json:"environmentRef"`
 
+	// CertificateRef references the Certificate whose SSL Secret is mounted into the Server pods.
+	CertificateRef string `json:"certificateRef"`
+
 	// Image overrides the Environment's default image.
 	// +optional
 	Image ImageSpec `json:"image,omitempty"`
@@ -79,15 +82,6 @@ type ServerSpec struct {
 	// Code overrides the Environment's code volume for this Server.
 	// +optional
 	Code *CodeSpec `json:"code,omitempty"`
-
-	// Certname is the certificate name for this Server.
-	// Defaults to the Server's name if not set.
-	// +optional
-	Certname string `json:"certname,omitempty"`
-
-	// DNSAltNames is a list of DNS alternative names for the server certificate.
-	// +optional
-	DNSAltNames []string `json:"dnsAltNames,omitempty"`
 }
 
 // AutoscalingSpec defines HPA settings.
@@ -113,15 +107,14 @@ type AutoscalingSpec struct {
 }
 
 // ServerPhase represents the current lifecycle phase of a Server.
-// +kubebuilder:validation:Enum=Pending;WaitingForCA;CertSetup;Running;Error
+// +kubebuilder:validation:Enum=Pending;WaitingForCert;Running;Error
 type ServerPhase string
 
 const (
-	ServerPhasePending      ServerPhase = "Pending"
-	ServerPhaseWaitingForCA ServerPhase = "WaitingForCA"
-	ServerPhaseCertSetup    ServerPhase = "CertSetup"
-	ServerPhaseRunning      ServerPhase = "Running"
-	ServerPhaseError        ServerPhase = "Error"
+	ServerPhasePending        ServerPhase = "Pending"
+	ServerPhaseWaitingForCert ServerPhase = "WaitingForCert"
+	ServerPhaseRunning        ServerPhase = "Running"
+	ServerPhaseError          ServerPhase = "Error"
 )
 
 // ServerStatus defines the observed state of Server.

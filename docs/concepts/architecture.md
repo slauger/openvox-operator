@@ -6,45 +6,57 @@ The openvox-operator follows the standard Kubernetes operator pattern: a control
 
 ## CRD Relationships
 
-The operator uses multiple CRDs that reference each other:
+The operator uses multiple CRDs that form a hierarchy:
 
 ```
-Environment <-- Server (environmentRef)
-Environment <-- Pool (environmentRef)
-Environment <-- CodeDeploy (environmentRef)
-Pool        <-- Server (poolRef)
+Environment
+  └─ CertificateAuthority (environmentRef → Environment)
+       └─ Certificate (authorityRef → CertificateAuthority)
+            └─ Server (certificateRef → Certificate, environmentRef → Environment)
+                 └─ Pool (selector → Server Pods, environmentRef → Environment)
 ```
 
-- An **Environment** is the root resource. It manages the CA lifecycle, generates ConfigMaps for puppet.conf/puppetdb.conf/webserver.conf, and holds shared configuration.
-- A **Server** references an Environment and optionally a Pool. It creates a Deployment (with Recreate strategy for CA, RollingUpdate for servers).
-- A **Pool** references an Environment and creates a Kubernetes Service. All Servers that reference the same Pool are selected by this Service.
-- A **CodeDeploy** references an Environment and manages r10k as a Job/CronJob with a shared PVC.
+- An **Environment** is the root resource. It generates ConfigMaps for puppet.conf/puppetdb.conf/webserver.conf and holds shared configuration.
+- A **CertificateAuthority** references an Environment and manages the CA infrastructure: PVC, setup Job, and CA Secret.
+- A **Certificate** references a CertificateAuthority and manages the lifecycle of a single certificate: signing Job and SSL Secret.
+- A **Server** references an Environment and a Certificate. It creates a Deployment (with Recreate strategy for CA, RollingUpdate for servers). The Server waits for the Certificate to reach the `Signed` phase before creating its Deployment.
+- A **Pool** references an Environment and creates a Kubernetes Service. Server pods are selected by label.
 
 ## CA Lifecycle
 
-The Certificate Authority is fully managed by the operator:
+The Certificate Authority is managed by the CertificateAuthority controller:
 
-1. The Environment controller creates a CA setup **Job** that runs `puppetserver ca setup`
-2. The Job stores CA certificates in a **PVC** and creates a Kubernetes **Secret** with public CA data (ca_crt.pem, ca_crl.pem)
-3. The CA Server mounts the CA PVC directly
-4. Non-CA Servers mount the CA Secret (read-only) and bootstrap their SSL certificates against the CA Service
+1. The CertificateAuthority controller creates a **PVC** for CA data and a **Job** that runs `puppetserver ca setup`
+2. The Job stores CA keys on the PVC and creates a Kubernetes **Secret** with public CA data (ca_crt.pem, ca_crl.pem, infra_crl.pem)
+3. The CertificateAuthority transitions to the `Ready` phase
+
+## Certificate Lifecycle
+
+Certificates are managed by the Certificate controller:
+
+1. The Certificate controller waits for the referenced CertificateAuthority to be `Ready`
+2. It determines the signing strategy:
+   - **Local signing**: If no CA server is running, the Job mounts the CA PVC directly and signs locally
+   - **HTTP bootstrap**: If a CA server is running, the Job runs `puppet ssl bootstrap` against the CA service
+3. The Job creates an SSL **Secret** with cert.pem and key.pem
+4. The Certificate transitions to the `Signed` phase
 
 ```mermaid
 sequenceDiagram
     participant Op as Operator
-    participant Job as CA Setup Job
+    participant CAJob as CA Setup Job
     participant PVC as CA PVC
-    participant Secret as CA Secret
-    participant CA as CA Server
-    participant Srv as Server
+    participant CASec as CA Secret
+    participant CertJob as Cert Setup Job
+    participant SSLSec as SSL Secret
+    participant Srv as Server Deployment
 
-    Op->>Job: Create CA setup Job
-    Job->>PVC: Write CA data
-    Job->>Secret: Create CA Secret (certs + CRL)
-    Op->>CA: Create Deployment (mounts PVC)
-    Op->>Srv: Create Deployment (mounts Secret)
-    Srv->>CA: SSL bootstrap (puppet ssl bootstrap)
-    CA-->>Srv: Signed certificate
+    Op->>CAJob: Create CA setup Job
+    CAJob->>PVC: Write CA data
+    CAJob->>CASec: Create CA Secret (certs + CRL)
+    Op->>CertJob: Create cert setup Job
+    CertJob->>SSLSec: Create SSL Secret (cert + key)
+    Op->>Srv: Create Deployment (mounts SSL + CA Secrets)
 ```
 
 ## Dedicated ServiceAccounts
@@ -54,7 +66,8 @@ The operator creates dedicated ServiceAccounts with minimal privileges:
 | ServiceAccount | Created by | Purpose | K8s API Token |
 |---|---|---|---|
 | `{env}-server` | Environment controller | All server pods | No (`automountServiceAccountToken: false`) |
-| `{server}-cert-setup` | Server controller | Cert setup job: creates/updates SSL Secrets | Yes (scoped to specific Secrets) |
+| `{ca}-ca-setup` | CertificateAuthority controller | CA setup job: creates CA Secret | Yes (scoped to CA Secret) |
+| `{cert}-cert-setup` | Certificate controller | Cert setup job: creates SSL Secret | Yes (scoped to SSL + CA Secrets) |
 
 The operator itself runs with its own ServiceAccount (managed by the Helm chart) with cluster-wide RBAC.
 
@@ -66,7 +79,7 @@ The operator itself runs with its own ServiceAccount (managed by the Helm chart)
 
 ## Code Deployment
 
-The CodeDeploy CRD manages r10k in a separate image. It creates a PVC for code storage that Servers mount read-only.
+The CodeDeploy CRD (planned) manages r10k in a separate image. It creates a PVC for code storage that Servers mount read-only.
 
 | Setup | Access Mode | Requirement |
 |---|---|---|

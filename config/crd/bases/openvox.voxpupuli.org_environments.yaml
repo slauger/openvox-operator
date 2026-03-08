@@ -20,9 +20,6 @@ spec:
     - jsonPath: .status.phase
       name: Phase
       type: string
-    - jsonPath: .status.caReady
-      name: CA Ready
-      type: boolean
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -196,15 +193,6 @@ spec:
           status:
             description: EnvironmentStatus defines the observed state of Environment.
             properties:
-              caReady:
-                description: CAReady indicates whether the CA is initialized.
-                type: boolean
-              caSecretName:
-                description: CASecretName is the name of the CA marker Secret.
-                type: string
-              caServiceName:
-                description: CAServiceName is the name of the CA Service.
-                type: string
               conditions:
                 description: Conditions represent the latest available observations.
                 items:
@@ -266,7 +254,6 @@ spec:
                 description: Phase is the current lifecycle phase.
                 enum:
                 - Pending
-                - CASetup
                 - Running
                 - Error
                 type: string

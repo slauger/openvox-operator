@@ -18,10 +18,15 @@ graph TD
     Op["🦊 OpenVox Operator"]
     Op -->|manages| Env
 
-    Env["📋 Environment CRD<br/>production"]
-    Env --> CA["🔐 Server CRD: ca<br/>role: ca + server"]
-    Env --> Stable["⚙️ Server CRD: stable<br/>role: server - v8.8.1"]
-    Env --> Canary["⚙️ Server CRD: canary<br/>role: server - v8.9.0"]
+    Env["📋 Environment<br/>production"]
+    Env --> CA_CRD["🔐 CertificateAuthority<br/>production-ca"]
+    CA_CRD --> Cert_CA["📜 Certificate: ca-cert"]
+    CA_CRD --> Cert_Stable["📜 Certificate: stable-cert"]
+    CA_CRD --> Cert_Canary["📜 Certificate: canary-cert"]
+
+    Cert_CA --> CA["⚙️ Server: ca<br/>ca: true, server: true"]
+    Cert_Stable --> Stable["⚙️ Server: stable<br/>v8.12.1"]
+    Cert_Canary --> Canary["⚙️ Server: canary<br/>v8.13.0"]
 
     CA --> CA_D["Deployment"]
     Stable --> ST_D["Deployment"]
@@ -58,16 +63,35 @@ The CA server can be member of both pools - it handles CA requests via the `pupp
 
 All resources use the API group `openvox.voxpupuli.org/v1alpha1`.
 
+```
+Environment
+  └─ CertificateAuthority (environmentRef → Environment)
+       └─ Certificate (authorityRef → CertificateAuthority)
+            └─ Server (certificateRef → Certificate)
+                 └─ Pool (selector → Server Pods)
+```
+
 | Kind | Purpose | Creates |
 |---|---|---|
-| **`Environment`** | Shared config, CA lifecycle, OpenVox DB connection | ConfigMaps, CA Job, CA Secret, CA PVC, CA Service |
-| **`Pool`** | Owns a Kubernetes Service | Service (type, annotations, port) |
+| **`Environment`** | Shared config (puppet.conf, auth.conf, etc.), PuppetDB connection | ConfigMaps, ServiceAccount |
+| **`CertificateAuthority`** | CA infrastructure: keys, signing, public certificates | PVC, CA Setup Job, CA Secret |
+| **`Certificate`** | Lifecycle of a single certificate (request, sign) | Cert Setup Job, SSL Secret |
 | **`Server`** | OpenVox Server instance pool | Deployment, HPA |
-| **`CodeDeploy`** | r10k code deployment from Git | PVC, Job, CronJob |
-| **`SigningPolicy`** | Policy-based CSR approval (psk, pattern, token, any) | — |
-| **`CertificateRequest`** | Represents a pending/signed CSR | — |
-| *`Database`* | *OpenVox DB (future)* | *StatefulSet, Service* |
+| **`Pool`** | Owns a Kubernetes Service that selects Server Pods | Service (type, annotations, port) |
 
+### Planned (not yet implemented)
+
+| Kind | Purpose |
+|---|---|
+| **`CodeDeploy`** | r10k code deployment from Git (PVC, Job, CronJob) |
+| **`SigningPolicy`** | Policy-based CSR approval (psk, pattern, token, any) |
+| *`Database`* | *OpenVox DB (StatefulSet, Service)* |
+
+### Why separate CRDs for CA and Certificates?
+
+Traditional Puppet/OpenVox Server bundles CA management, certificate signing, and server runtime into a single process. This works on VMs where `puppetserver ca` (a CRuby CLI) manages everything locally. In Kubernetes, that approach doesn't work: the container image has **no system Ruby** - only JRuby embedded in the server JAR. The operator uses a custom JRuby wrapper that calls CA operations through `clojure.main` instead.
+
+By separating the CA lifecycle (`CertificateAuthority`) from certificate signing (`Certificate`) and from the server runtime (`Server`), each concern becomes independently manageable. Certificates can be issued before a server is running, revoked without restarting pods, and the CA can be initialized once while multiple servers share the same signed certificate for horizontal scaling.
 
 ## Differences to VM-based Installations
 
@@ -81,9 +105,9 @@ This operator takes a **Kubernetes-native approach** that differs in several key
 | **Configuration** | `puppet.conf` managed via `puppet config set`, Puppet modules, or config management | Declarative CRDs, operator renders ConfigMaps and Secrets |
 | **Privileges** | Requires root | Fully rootless, random UID compatible |
 | **CA Management** | `puppetserver ca` CLI with CRuby shebang | Custom JRuby wrapper that routes through `clojure.main` |
-| **Certificates** | Each server has its own certificate | All replicas of a `Server` share the same certificate, enabling seamless horizontal scaling |
+| **Certificates** | Each server has its own certificate | `Certificate` CRD manages the cert lifecycle - all replicas of a `Server` share the same certificate, enabling seamless horizontal scaling |
 | **Scaling** | Horizontal scaling possible but requires manual setup of additional server VMs | Horizontal via Deployment replicas and HPA |
-| **Code Deployment** | r10k installed on the VM, triggered by cron or webhook | `CodeDeploy` CRD manages r10k as a Kubernetes Job/CronJob |
+| **Code Deployment** | r10k installed on the VM, triggered by cron or webhook | `CodeDeploy` CRD (planned) manages r10k as a Kubernetes Job/CronJob |
 | **Multi-Version** | Separate VMs or manual package pinning | Multiple `Server` CRDs in the same `Pool` with different image tags |
 
 By eliminating system Ruby from the runtime image, the container has a smaller footprint and a reduced attack surface, avoiding the duplicate Ruby installation (CRuby + JRuby) that the OS packages carry.

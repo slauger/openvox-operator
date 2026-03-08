@@ -88,10 +88,9 @@ spec:
                   CA enables the Certificate Authority role on this Server.
                   When true, pods mount the CA data PVC and run as CA.
                 type: boolean
-              certname:
-                description: |-
-                  Certname is the certificate name for this Server.
-                  Defaults to the Server's name if not set.
+              certificateRef:
+                description: CertificateRef references the Certificate whose SSL Secret
+                  is mounted into the Server pods.
                 type: string
               code:
                 description: Code overrides the Environment's code volume for this
@@ -104,12 +103,6 @@ spec:
                 required:
                 - claimName
                 type: object
-              dnsAltNames:
-                description: DNSAltNames is a list of DNS alternative names for the
-                  server certificate.
-                items:
-                  type: string
-                type: array
               environmentRef:
                 description: EnvironmentRef references the Environment this Server
                   belongs to.
@@ -230,6 +223,7 @@ spec:
                   A Server with both CA and Server serves as a combined CA+server.
                 type: boolean
             required:
+            - certificateRef
             - environmentRef
             type: object
           status:
@@ -300,8 +294,7 @@ spec:
                 description: Phase is the current lifecycle phase.
                 enum:
                 - Pending
-                - WaitingForCA
-                - CertSetup
+                - WaitingForCert
                 - Running
                 - Error
                 type: string

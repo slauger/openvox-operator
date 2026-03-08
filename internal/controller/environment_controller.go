@@ -8,11 +8,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -30,7 +28,7 @@ type EnvironmentReconciler struct {
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=environments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=environments/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=environments/finalizers,verbs=update
-// +kubebuilder:rbac:groups="",resources=configmaps;services;serviceaccounts;persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=configmaps;serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 
 func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -64,28 +62,12 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		LastTransitionTime: metav1.Now(),
 	})
 
-	// Step 1b: Ensure server ServiceAccount exists
+	// Step 2: Ensure server ServiceAccount exists
 	if err := r.reconcileServerServiceAccount(ctx, env); err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconciling server ServiceAccount: %w", err)
 	}
 
-	// Step 2: Ensure CA PVC exists
-	if err := r.reconcileCAPVC(ctx, env); err != nil {
-		return ctrl.Result{}, fmt.Errorf("reconciling CA PVC: %w", err)
-	}
-
-	// Step 3: CA Service
-	if err := r.reconcileCAService(ctx, env); err != nil {
-		return ctrl.Result{}, fmt.Errorf("reconciling CA Service: %w", err)
-	}
-
-	// Step 4: Default Server Service
-	if err := r.reconcileServerService(ctx, env); err != nil {
-		return ctrl.Result{}, fmt.Errorf("reconciling Server Service: %w", err)
-	}
-
 	// Update status
-	env.Status.CAServiceName = fmt.Sprintf("%s-ca", env.Name)
 	env.Status.Phase = openvoxv1alpha1.EnvironmentPhaseRunning
 
 	if err := r.Status().Update(ctx, env); err != nil {
@@ -99,9 +81,7 @@ func (r *EnvironmentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&openvoxv1alpha1.Environment{}).
 		Owns(&corev1.ConfigMap{}).
-		Owns(&corev1.Service{}).
 		Owns(&corev1.ServiceAccount{}).
-		Owns(&corev1.PersistentVolumeClaim{}).
 		Complete(r)
 }
 
@@ -546,101 +526,4 @@ func (r *EnvironmentReconciler) reconcileServerServiceAccount(ctx context.Contex
 	} else {
 		return err
 	}
-}
-
-// --- CA PVC ---
-
-func (r *EnvironmentReconciler) reconcileCAPVC(ctx context.Context, env *openvoxv1alpha1.Environment) error {
-	pvcName := fmt.Sprintf("%s-ca-data", env.Name)
-
-	pvc := &corev1.PersistentVolumeClaim{}
-	err := r.Get(ctx, types.NamespacedName{Name: pvcName, Namespace: env.Namespace}, pvc)
-	if errors.IsNotFound(err) {
-		storageSize := "1Gi"
-		if env.Spec.CA.Storage.Size != "" {
-			storageSize = env.Spec.CA.Storage.Size
-		}
-
-		pvc = &corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      pvcName,
-				Namespace: env.Namespace,
-				Labels:    environmentLabels(env.Name),
-			},
-			Spec: corev1.PersistentVolumeClaimSpec{
-				AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-				Resources: corev1.VolumeResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceStorage: resource.MustParse(storageSize),
-					},
-				},
-			},
-		}
-
-		if env.Spec.CA.Storage.StorageClass != "" {
-			pvc.Spec.StorageClassName = &env.Spec.CA.Storage.StorageClass
-		}
-
-		if err := controllerutil.SetControllerReference(env, pvc, r.Scheme); err != nil {
-			return err
-		}
-		return r.Create(ctx, pvc)
-	}
-	return err
-}
-
-// --- Default Services ---
-
-func (r *EnvironmentReconciler) reconcileServerService(ctx context.Context, env *openvoxv1alpha1.Environment) error {
-	return r.reconcileEnvironmentService(ctx, env, fmt.Sprintf("%s-server", env.Name), map[string]string{
-		LabelEnvironment: env.Name,
-		LabelRole:        RoleServer,
-	})
-}
-
-func (r *EnvironmentReconciler) reconcileCAService(ctx context.Context, env *openvoxv1alpha1.Environment) error {
-	return r.reconcileEnvironmentService(ctx, env, fmt.Sprintf("%s-ca", env.Name), map[string]string{
-		LabelEnvironment: env.Name,
-		LabelCA:          "true",
-	})
-}
-
-func (r *EnvironmentReconciler) reconcileEnvironmentService(ctx context.Context, env *openvoxv1alpha1.Environment, svcName string, selector map[string]string) error {
-	logger := log.FromContext(ctx)
-	labels := environmentLabels(env.Name)
-
-	svc := &corev1.Service{}
-	err := r.Get(ctx, types.NamespacedName{Name: svcName, Namespace: env.Namespace}, svc)
-	if errors.IsNotFound(err) {
-		logger.Info("creating Environment Service", "name", svcName)
-		svc = &corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      svcName,
-				Namespace: env.Namespace,
-				Labels:    labels,
-			},
-			Spec: corev1.ServiceSpec{
-				Selector: selector,
-				Ports: []corev1.ServicePort{
-					{
-						Name:       "https",
-						Port:       8140,
-						TargetPort: intstr.FromInt32(8140),
-						Protocol:   corev1.ProtocolTCP,
-					},
-				},
-			},
-		}
-		if err := controllerutil.SetControllerReference(env, svc, r.Scheme); err != nil {
-			return err
-		}
-		return r.Create(ctx, svc)
-	} else if err != nil {
-		return err
-	}
-
-	// Update existing service
-	svc.Labels = labels
-	svc.Spec.Selector = selector
-	return r.Update(ctx, svc)
 }

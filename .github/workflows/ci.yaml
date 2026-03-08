@@ -17,6 +17,7 @@ jobs:
     uses: ./.github/workflows/shellcheck.yaml
 
   openvox-operator:
+    needs: go
     uses: ./.github/workflows/container-build.yaml
     permissions:
       contents: read
@@ -27,6 +28,7 @@ jobs:
       context: '.'
 
   openvox-server:
+    needs: shellcheck
     uses: ./.github/workflows/container-build.yaml
     permissions:
       contents: read

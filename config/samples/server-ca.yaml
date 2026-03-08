@@ -11,4 +11,14 @@ spec:
   poolRefs:
     - puppet
   replicas: 1
-  javaArgs: "-Xms512m -Xmx1024m"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+  # javaArgs is auto-calculated from memory limits (Xms=Xmx=90%)
+  # With 2Gi limit: -Xms1843m -Xmx1843m
+  # Override explicitly if needed:
+  # javaArgs: "-Xms512m -Xmx1536m"

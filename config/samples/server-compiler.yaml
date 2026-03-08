@@ -10,4 +10,12 @@ spec:
     - puppet
   replicas: 2
   maxActiveInstances: 2
-  javaArgs: "-Xms512m -Xmx1024m"
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+    limits:
+      cpu: "4"
+      memory: 4Gi
+  # javaArgs is auto-calculated from memory limits (Xms=Xmx=90%)
+  # With 4Gi limit: -Xms3686m -Xmx3686m

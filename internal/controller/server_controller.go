@@ -118,10 +118,7 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 		replicas = *server.Spec.Replicas
 	}
 
-	javaArgs := "-Xms512m -Xmx1024m"
-	if server.Spec.JavaArgs != "" {
-		javaArgs = server.Spec.JavaArgs
-	}
+	javaArgs := resolveJavaArgs(server)
 
 	// Determine role
 	role := RoleCompiler
@@ -336,6 +333,22 @@ func (r *ServerReconciler) getReadyReplicas(ctx context.Context, server *openvox
 		return 0
 	}
 	return deploy.Status.ReadyReplicas
+}
+
+// resolveJavaArgs determines JVM arguments for a Server.
+// Priority: explicit javaArgs > auto-calculated from memory limits > default.
+func resolveJavaArgs(server *openvoxv1alpha1.Server) string {
+	if server.Spec.JavaArgs != "" {
+		return server.Spec.JavaArgs
+	}
+
+	// Auto-calculate from memory limits: 90% for both Xms and Xmx
+	if memLimit, ok := server.Spec.Resources.Limits[corev1.ResourceMemory]; ok {
+		heapMB := memLimit.Value() * 9 / 10 / (1024 * 1024)
+		return fmt.Sprintf("-Xms%dm -Xmx%dm", heapMB, heapMB)
+	}
+
+	return "-Xms512m -Xmx1024m"
 }
 
 // configMapVolume creates a Volume from a ConfigMap key where key name == path.

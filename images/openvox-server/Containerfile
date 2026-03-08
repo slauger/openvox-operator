@@ -11,7 +11,7 @@
 ################################################################################
 # Stage: base — JRE + minimal runtime deps (no Ruby)
 ################################################################################
-FROM registry.access.redhat.com/ubi9/ubi:9.7 AS base
+FROM registry.access.redhat.com/ubi9/ubi:9.7-1771346757 AS base
 
 ARG JDK_VERSION=17
 

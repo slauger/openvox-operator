@@ -5,7 +5,7 @@ metadata:
   name: production-server
   namespace: openvox-system
 spec:
-  environmentRef: production
+  configRef: production
   certificateRef: ca-cert
   ca: true
   server: true

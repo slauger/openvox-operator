@@ -5,7 +5,7 @@ kind: Server
 metadata:
   name: {{ include "openvox-stack.serverName" (dict "root" $ "entry" $entry) }}
 spec:
-  environmentRef: {{ include "openvox-stack.envName" $ }}
+  configRef: {{ include "openvox-stack.configName" $ }}
   certificateRef: {{ include "openvox-stack.certName" (dict "root" $ "entry" $entry) }}
   {{- if hasKey $entry "ca" }}
   ca: {{ $entry.ca }}

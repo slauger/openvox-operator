@@ -1,6 +1,6 @@
 # Server
 
-A Server creates a Deployment of OpenVox Server pods. It references a Certificate for SSL and an Environment for shared configuration. A Server can run as CA, as a catalog server, or both.
+A Server creates a Deployment of OpenVox Server pods. It references a Certificate for SSL and a Config for shared configuration. A Server can run as CA, as a catalog server, or both.
 
 ## Example
 
@@ -10,7 +10,7 @@ kind: Server
 metadata:
   name: production-ca
 spec:
-  environmentRef: production
+  configRef: production
   certificateRef: production-cert
   ca: true
   server: true
@@ -23,9 +23,9 @@ spec:
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `environmentRef` | string | **required** | Reference to the Environment |
+| `configRef` | string | **required** | Reference to the Config |
 | `certificateRef` | string | **required** | Reference to the Certificate whose SSL Secret is mounted |
-| `image` | [ImageSpec](index.md#imagespec) | - | Override the Environment's default image |
+| `image` | [ImageSpec](index.md#imagespec) | - | Override the Config's default image |
 | `ca` | bool | `false` | Enable CA role (mounts CA PVC) |
 | `server` | bool | `true` | Enable server role (catalog compilation, file serving) |
 | `replicas` | int32 | `1` | Number of pod replicas |
@@ -33,7 +33,7 @@ spec:
 | `resources` | ResourceRequirements | - | CPU/memory requests and limits |
 | `javaArgs` | string | `-Xms512m -Xmx1024m` | JVM arguments |
 | `maxActiveInstances` | int32 | `2` | Number of JRuby instances per pod |
-| `code` | [CodeSpec](index.md#codespec) | - | Override the Environment's code volume |
+| `code` | [CodeSpec](index.md#codespec) | - | Override the Config's code volume |
 
 ### AutoscalingSpec
 

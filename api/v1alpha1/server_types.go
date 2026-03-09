@@ -7,7 +7,7 @@ import (
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Environment",type=string,JSONPath=`.spec.environmentRef`
+// +kubebuilder:printcolumn:name="Config",type=string,JSONPath=`.spec.configRef`
 // +kubebuilder:printcolumn:name="Replicas",type=integer,JSONPath=`.spec.replicas`
 // +kubebuilder:printcolumn:name="Ready",type=integer,JSONPath=`.status.ready`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
@@ -34,13 +34,13 @@ type ServerList struct {
 
 // ServerSpec defines the desired state of Server.
 type ServerSpec struct {
-	// EnvironmentRef references the Environment this Server belongs to.
-	EnvironmentRef string `json:"environmentRef"`
+	// ConfigRef references the Config this Server belongs to.
+	ConfigRef string `json:"configRef"`
 
 	// CertificateRef references the Certificate whose SSL Secret is mounted into the Server pods.
 	CertificateRef string `json:"certificateRef"`
 
-	// Image overrides the Environment's default image.
+	// Image overrides the Config's default image.
 	// +optional
 	Image ImageSpec `json:"image,omitempty"`
 
@@ -79,7 +79,7 @@ type ServerSpec struct {
 	// +optional
 	MaxActiveInstances int32 `json:"maxActiveInstances,omitempty"`
 
-	// Code overrides the Environment's code volume for this Server.
+	// Code overrides the Config's code volume for this Server.
 	// +optional
 	Code *CodeSpec `json:"code,omitempty"`
 }

@@ -1,7 +1,7 @@
 # nameOverride: ""
 # fullnameOverride: ""
 
-environment:
+config:
   name: ""             # default: Release name
   image:
     repository: ghcr.io/slauger/openvox-server

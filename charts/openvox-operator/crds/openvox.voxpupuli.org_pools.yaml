@@ -15,8 +15,8 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.environmentRef
-      name: Environment
+    - jsonPath: .spec.configRef
+      name: Config
       type: string
     - jsonPath: .spec.service.type
       name: Type
@@ -54,9 +54,8 @@ spec:
           spec:
             description: PoolSpec defines the desired state of Pool.
             properties:
-              environmentRef:
-                description: EnvironmentRef references the Environment this Pool belongs
-                  to.
+              configRef:
+                description: ConfigRef references the Config this Pool belongs to.
                 type: string
               route:
                 description: Route configures external access via Gateway API TLSRoute.
@@ -100,8 +99,8 @@ spec:
                   type: string
                 description: |-
                   Selector is a set of labels used to select Server Pods for this Pool's Service.
-                  The environment label is always added automatically.
-                  If empty or nil, the Pool selects all Server Pods in the Environment.
+                  The config label is always added automatically.
+                  If empty or nil, the Pool selects all Server Pods in the Config.
                 type: object
               service:
                 description: Service defines the Kubernetes Service configuration.
@@ -141,7 +140,7 @@ spec:
                     type: string
                 type: object
             required:
-            - environmentRef
+            - configRef
             type: object
           status:
             description: PoolStatus defines the observed state of Pool.

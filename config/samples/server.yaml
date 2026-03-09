@@ -5,7 +5,7 @@ metadata:
   name: stable
   namespace: openvox-system
 spec:
-  environmentRef: production
+  configRef: production
   certificateRef: stable-cert
   replicas: 2
   maxActiveInstances: 2

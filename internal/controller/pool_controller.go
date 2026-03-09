@@ -48,11 +48,11 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, err
 	}
 
-	// Validate environmentRef
-	env := &openvoxv1alpha1.Environment{}
-	if err := r.Get(ctx, types.NamespacedName{Name: pool.Spec.EnvironmentRef, Namespace: pool.Namespace}, env); err != nil {
+	// Validate configRef
+	cfg := &openvoxv1alpha1.Config{}
+	if err := r.Get(ctx, types.NamespacedName{Name: pool.Spec.ConfigRef, Namespace: pool.Namespace}, cfg); err != nil {
 		if errors.IsNotFound(err) {
-			logger.Error(err, "referenced Environment not found", "environmentRef", pool.Spec.EnvironmentRef)
+			logger.Error(err, "referenced Config not found", "configRef", pool.Spec.ConfigRef)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
@@ -130,11 +130,11 @@ func (r *PoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // poolServiceSelector builds the label selector for a Pool's Service.
-// It merges the user-defined Selector with the auto-injected environment label.
-// If no Selector is defined, only the environment label is used (selects all Pods in the Environment).
+// It merges the user-defined Selector with the auto-injected config label.
+// If no Selector is defined, only the config label is used (selects all Pods in the Config).
 func poolServiceSelector(pool *openvoxv1alpha1.Pool) map[string]string {
 	sel := map[string]string{
-		LabelEnvironment: pool.Spec.EnvironmentRef,
+		LabelConfig: pool.Spec.ConfigRef,
 	}
 	for k, v := range pool.Spec.Selector {
 		sel[k] = v
@@ -161,7 +161,7 @@ func (r *PoolReconciler) reconcileService(ctx context.Context, pool *openvoxv1al
 			svcType = pool.Spec.Service.Type
 		}
 
-		labels := environmentLabels(pool.Spec.EnvironmentRef)
+		labels := configLabels(pool.Spec.ConfigRef)
 		labels[poolLabel(pool.Name)] = "true"
 
 		// Merge additional labels
@@ -213,7 +213,7 @@ func (r *PoolReconciler) reconcileService(ctx context.Context, pool *openvoxv1al
 	}
 
 	// Update labels
-	labels := environmentLabels(pool.Spec.EnvironmentRef)
+	labels := configLabels(pool.Spec.ConfigRef)
 	labels[poolLabel(pool.Name)] = "true"
 	for k, v := range pool.Spec.Service.Labels {
 		labels[k] = v
@@ -319,7 +319,7 @@ func (r *PoolReconciler) injectDNSAltNames(ctx context.Context, pool *openvoxv1a
 
 	servers := &openvoxv1alpha1.ServerList{}
 	if err := r.List(ctx, servers, client.InNamespace(pool.Namespace),
-		client.MatchingFields{"spec.environmentRef": pool.Spec.EnvironmentRef}); err != nil {
+		client.MatchingFields{"spec.configRef": pool.Spec.ConfigRef}); err != nil {
 		// Fall back to listing all servers and filtering manually
 		if err := r.List(ctx, servers, client.InNamespace(pool.Namespace)); err != nil {
 			return fmt.Errorf("listing Servers: %w", err)
@@ -331,7 +331,7 @@ func (r *PoolReconciler) injectDNSAltNames(ctx context.Context, pool *openvoxv1a
 	for i := range servers.Items {
 		server := &servers.Items[i]
 
-		if server.Spec.EnvironmentRef != pool.Spec.EnvironmentRef {
+		if server.Spec.ConfigRef != pool.Spec.ConfigRef {
 			continue
 		}
 

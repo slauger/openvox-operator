@@ -66,7 +66,7 @@ func findCAServiceName(ctx context.Context, reader client.Reader, ca *openvoxv1a
 
 	var caServerName string
 	for _, server := range serverList.Items {
-		if server.Spec.EnvironmentRef == ca.Spec.EnvironmentRef && server.Spec.CA {
+		if server.Spec.ConfigRef == ca.Spec.ConfigRef && server.Spec.CA {
 			if server.Status.Phase == openvoxv1alpha1.ServerPhaseRunning {
 				caServerName = server.Name
 				break
@@ -84,7 +84,7 @@ func findCAServiceName(ctx context.Context, reader client.Reader, ca *openvoxv1a
 	}
 
 	for _, pool := range poolList.Items {
-		if pool.Spec.EnvironmentRef != ca.Spec.EnvironmentRef {
+		if pool.Spec.ConfigRef != ca.Spec.ConfigRef {
 			continue
 		}
 		if pool.Spec.Selector[LabelServer] == caServerName || pool.Spec.Selector[LabelCA] == "true" {
@@ -96,23 +96,23 @@ func findCAServiceName(ctx context.Context, reader client.Reader, ca *openvoxv1a
 }
 
 // resolveCode determines the code source for a Server.
-// Priority: Server override > Environment default.
-func resolveCode(server *openvoxv1alpha1.Server, env *openvoxv1alpha1.Environment) *openvoxv1alpha1.CodeSpec {
+// Priority: Server override > Config default.
+func resolveCode(server *openvoxv1alpha1.Server, cfg *openvoxv1alpha1.Config) *openvoxv1alpha1.CodeSpec {
 	if server.Spec.Code != nil {
 		return server.Spec.Code
 	}
-	return env.Spec.Code
+	return cfg.Spec.Code
 }
 
 // resolveImage determines the container image for a Server.
-// Priority: Server override > Environment default.
-func resolveImage(server *openvoxv1alpha1.Server, env *openvoxv1alpha1.Environment) string {
+// Priority: Server override > Config default.
+func resolveImage(server *openvoxv1alpha1.Server, cfg *openvoxv1alpha1.Config) string {
 	if server.Spec.Image.Tag != "" {
-		repo := env.Spec.Image.Repository
+		repo := cfg.Spec.Image.Repository
 		if server.Spec.Image.Repository != "" {
 			repo = server.Spec.Image.Repository
 		}
 		return fmt.Sprintf("%s:%s", repo, server.Spec.Image.Tag)
 	}
-	return fmt.Sprintf("%s:%s", env.Spec.Image.Repository, env.Spec.Image.Tag)
+	return fmt.Sprintf("%s:%s", cfg.Spec.Image.Repository, cfg.Spec.Image.Tag)
 }

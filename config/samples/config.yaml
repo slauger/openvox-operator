@@ -1,6 +1,6 @@
 ---
 apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: Environment
+kind: Config
 metadata:
   name: production
   namespace: openvox

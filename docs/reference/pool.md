@@ -10,7 +10,7 @@ kind: Pool
 metadata:
   name: puppet
 spec:
-  environmentRef: production
+  configRef: production
   selector:
     openvox.voxpupuli.org/role: server
   service:
@@ -22,8 +22,8 @@ spec:
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `environmentRef` | string | **required** | Reference to the Environment |
-| `selector` | map[string]string | - | Label selector for Server pods. The environment label is added automatically. If empty, selects all Servers in the Environment. |
+| `configRef` | string | **required** | Reference to the Config |
+| `selector` | map[string]string | - | Label selector for Server pods. The config label is added automatically. If empty, selects all Servers in the Config. |
 | `service` | [PoolServiceSpec](#poolservicespec) | - | Kubernetes Service configuration |
 | `route` | [PoolRouteSpec](#poolroutespec) | - | Gateway API TLSRoute configuration (see [Gateway API](../concepts/gateway-api.md)) |
 
@@ -79,7 +79,7 @@ kind: Pool
 metadata:
   name: puppet-ca
 spec:
-  environmentRef: production
+  configRef: production
   selector:
     openvox.voxpupuli.org/ca: "true"
   service:
@@ -92,7 +92,7 @@ kind: Pool
 metadata:
   name: puppet
 spec:
-  environmentRef: production
+  configRef: production
   selector:
     openvox.voxpupuli.org/role: server
   service:
@@ -110,7 +110,7 @@ kind: Pool
 metadata:
   name: puppet
 spec:
-  environmentRef: production
+  configRef: production
   selector:
     openvox.voxpupuli.org/role: server
   service:

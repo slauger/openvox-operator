@@ -4,16 +4,16 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.5
-  name: environments.openvox.voxpupuli.org
+  name: configs.openvox.voxpupuli.org
 spec:
   group: openvox.voxpupuli.org
   names:
-    kind: Environment
-    listKind: EnvironmentList
-    plural: environments
+    kind: Config
+    listKind: ConfigList
+    plural: configs
     shortNames:
-    - env
-    singular: environment
+    - cfg
+    singular: config
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -27,7 +27,7 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          Environment is the Schema for the environments API.
+          Config is the Schema for the configs API.
           It manages shared configuration (puppet.conf, auth.conf) and PuppetDB connection.
         properties:
           apiVersion:
@@ -48,11 +48,11 @@ spec:
           metadata:
             type: object
           spec:
-            description: EnvironmentSpec defines the desired state of Environment.
+            description: ConfigSpec defines the desired state of Config.
             properties:
               code:
                 description: |-
-                  Code defines the Puppet code source for all Servers in this Environment.
+                  Code defines the Puppet code source for all Servers in this Config.
                   Only applied to Servers with server=true.
                 properties:
                   claimName:
@@ -82,7 +82,7 @@ spec:
                   rule: self.image != '' || self.claimName != ''
               image:
                 description: Image defines the default container image for all Servers
-                  in this Environment.
+                  in this Config.
                 properties:
                   pullPolicy:
                     default: IfNotPresent
@@ -163,7 +163,7 @@ spec:
             - image
             type: object
           status:
-            description: EnvironmentStatus defines the observed state of Environment.
+            description: ConfigStatus defines the observed state of Config.
             properties:
               conditions:
                 description: Conditions represent the latest available observations.

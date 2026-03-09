@@ -29,8 +29,8 @@ func enqueueCertificatesForSecret(c client.Client) handler.EventHandler {
 		}
 
 		// CA Secret change → reconcile all Certificates referencing CAs in this environment
-		envName := labels[LabelEnvironment]
-		if envName == "" {
+		cfgName := labels[LabelConfig]
+		if cfgName == "" {
 			return nil
 		}
 
@@ -45,7 +45,7 @@ func enqueueCertificatesForSecret(c client.Client) handler.EventHandler {
 			if err := c.Get(ctx, types.NamespacedName{Name: cert.Spec.AuthorityRef, Namespace: cert.Namespace}, ca); err != nil {
 				continue
 			}
-			if ca.Spec.EnvironmentRef == envName {
+			if ca.Spec.ConfigRef == cfgName {
 				requests = append(requests, ctrl.Request{
 					NamespacedName: types.NamespacedName{
 						Name:      cert.Name,

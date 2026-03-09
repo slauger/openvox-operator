@@ -6,7 +6,7 @@ metadata:
     {{- include "openvox-operator.labels" . | nindent 4 }}
 rules:
   - apiGroups: ["openvox.voxpupuli.org"]
-    resources: ["environments", "pools", "servers", "certificateauthorities", "certificates", "signingpolicies"]
+    resources: ["configs", "pools", "servers", "certificateauthorities", "certificates", "signingpolicies"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["openvox.voxpupuli.org"]
     resources: ["environments/status", "pools/status", "servers/status", "certificateauthorities/status", "certificates/status", "signingpolicies/status"]

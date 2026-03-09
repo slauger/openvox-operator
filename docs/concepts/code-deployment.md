@@ -6,7 +6,7 @@ Code is only mounted on pods with `server: true`. CA-only pods are not affected 
 
 ## OCI Image Volumes (recommended)
 
-Package Puppet code as an OCI image and reference it in the Environment. The operator mounts it as a read-only [image volume](https://kubernetes.io/docs/concepts/storage/volumes/#image) directly into the pod.
+Package Puppet code as an OCI image and reference it in the Config. The operator mounts it as a read-only [image volume](https://kubernetes.io/docs/concepts/storage/volumes/#image) directly into the pod.
 
 **Requirements:** Kubernetes 1.31+ with the `ImageVolume` feature gate enabled.
 
@@ -38,13 +38,13 @@ control-repo/
       data/
 ```
 
-### Configuring the Environment
+### Configuring the Config
 
-Set `code.image` on the Environment to apply the code to all Servers:
+Set `code.image` on the Config to apply the code to all Servers:
 
 ```yaml
 apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: Environment
+kind: Config
 metadata:
   name: production
 spec:
@@ -78,7 +78,7 @@ spec:
 
 ### Per-Server Override
 
-A Server can override the Environment's code source. This is useful for testing new code on a canary server:
+A Server can override the Config's code source. This is useful for testing new code on a canary server:
 
 ```yaml
 apiVersion: openvox.voxpupuli.org/v1alpha1
@@ -86,7 +86,7 @@ kind: Server
 metadata:
   name: canary
 spec:
-  environmentRef: production
+  configRef: production
   certificateRef: canary-cert
   code:
     image: ghcr.io/example/puppet-code:v2.0.0-rc1
@@ -98,7 +98,7 @@ Reference an existing PVC containing Puppet code. The PVC must be pre-populated 
 
 ```yaml
 apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: Environment
+kind: Config
 metadata:
   name: production
 spec:

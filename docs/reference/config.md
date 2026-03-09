@@ -1,12 +1,12 @@
-# Environment
+# Config
 
-An Environment holds shared configuration for all Servers: the default container image, puppet.conf settings, and PuppetDB connection. It is the root resource in the CRD hierarchy. CA settings (`ca_ttl`, `autosign`) are automatically pulled from the CertificateAuthority referencing this Environment.
+A Config holds shared configuration for all Servers: the default container image, puppet.conf settings, and PuppetDB connection. It is the root resource in the CRD hierarchy. CA settings (`ca_ttl`, `autosign`) are automatically pulled from the CertificateAuthority referencing this Config.
 
 ## Example
 
 ```yaml
 apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: Environment
+kind: Config
 metadata:
   name: production
 spec:
@@ -59,7 +59,7 @@ spec:
 
 | Phase | Description |
 |---|---|
-| `Pending` | Environment created, waiting for reconciliation |
+| `Pending` | Config created, waiting for reconciliation |
 | `Running` | ConfigMap created, ready for use |
 | `Error` | Reconciliation failed |
 

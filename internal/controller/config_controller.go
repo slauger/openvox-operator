@@ -22,24 +22,24 @@ import (
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
 
-// EnvironmentReconciler reconciles an Environment object.
-type EnvironmentReconciler struct {
+// ConfigReconciler reconciles a Config object.
+type ConfigReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=environments,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=environments/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=environments/finalizers,verbs=update
+// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=configs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=configs/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=configs/finalizers,verbs=update
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=signingpolicies,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=signingpolicies/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=configmaps;serviceaccounts;secrets,verbs=get;list;watch;create;update;patch;delete
 
-func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	env := &openvoxv1alpha1.Environment{}
-	if err := r.Get(ctx, req.NamespacedName, env); err != nil {
+	cfg := &openvoxv1alpha1.Config{}
+	if err := r.Get(ctx, req.NamespacedName, cfg); err != nil {
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
@@ -47,19 +47,19 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// Set initial phase
-	if env.Status.Phase == "" {
-		env.Status.Phase = openvoxv1alpha1.EnvironmentPhasePending
-		if err := r.Status().Update(ctx, env); err != nil {
+	if cfg.Status.Phase == "" {
+		cfg.Status.Phase = openvoxv1alpha1.ConfigPhasePending
+		if err := r.Status().Update(ctx, cfg); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
 
 	// Step 1: Reconcile ConfigMaps
 	logger.Info("reconciling ConfigMaps")
-	if err := r.reconcileConfigMap(ctx, env); err != nil {
+	if err := r.reconcileConfigMap(ctx, cfg); err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconciling ConfigMaps: %w", err)
 	}
-	meta.SetStatusCondition(&env.Status.Conditions, metav1.Condition{
+	meta.SetStatusCondition(&cfg.Status.Conditions, metav1.Condition{
 		Type:               openvoxv1alpha1.ConditionConfigReady,
 		Status:             metav1.ConditionTrue,
 		Reason:             "ConfigMapsCreated",
@@ -67,57 +67,57 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		LastTransitionTime: metav1.Now(),
 	})
 
-	// Step 2: Reconcile autosign policy Secrets for all CAs in this Environment
-	if err := r.reconcileAutosignSecrets(ctx, env); err != nil {
+	// Step 2: Reconcile autosign policy Secrets for all CAs in this Config
+	if err := r.reconcileAutosignSecrets(ctx, cfg); err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconciling autosign Secrets: %w", err)
 	}
 
 	// Step 3: Ensure server ServiceAccount exists
-	if err := r.reconcileServerServiceAccount(ctx, env); err != nil {
+	if err := r.reconcileServerServiceAccount(ctx, cfg); err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconciling server ServiceAccount: %w", err)
 	}
 
 	// Update status
-	env.Status.Phase = openvoxv1alpha1.EnvironmentPhaseRunning
+	cfg.Status.Phase = openvoxv1alpha1.ConfigPhaseRunning
 
-	if err := r.Status().Update(ctx, env); err != nil {
+	if err := r.Status().Update(ctx, cfg); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func (r *EnvironmentReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *ConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&openvoxv1alpha1.Environment{}).
+		For(&openvoxv1alpha1.Config{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&corev1.Secret{}).
 		Watches(&openvoxv1alpha1.SigningPolicy{}, handler.EnqueueRequestsFromMapFunc(
-			r.enqueueEnvironmentsForSigningPolicy(mgr.GetClient()),
+			r.enqueueConfigsForSigningPolicy(mgr.GetClient()),
 		)).
 		Complete(r)
 }
 
 // --- ConfigMap ---
 
-func (r *EnvironmentReconciler) reconcileConfigMap(ctx context.Context, env *openvoxv1alpha1.Environment) error {
+func (r *ConfigReconciler) reconcileConfigMap(ctx context.Context, cfg *openvoxv1alpha1.Config) error {
 	logger := log.FromContext(ctx)
-	configMapName := fmt.Sprintf("%s-config", env.Name)
+	configMapName := fmt.Sprintf("%s-config", cfg.Name)
 
-	puppetConf, err := r.renderPuppetConf(ctx, env)
+	puppetConf, err := r.renderPuppetConf(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("rendering puppet.conf: %w", err)
 	}
 
-	ca := r.findCertificateAuthority(ctx, env)
+	ca := r.findCertificateAuthority(ctx, cfg)
 
 	data := map[string]string{
 		"puppet.conf":       puppetConf,
-		"puppetdb.conf":     r.renderPuppetDBConf(env),
-		"webserver.conf":    r.renderWebserverConf(env),
-		"webserver-ca.conf": r.renderWebserverConfCA(env),
-		"puppetserver.conf": r.renderPuppetserverConf(env),
+		"puppetdb.conf":     r.renderPuppetDBConf(cfg),
+		"webserver.conf":    r.renderWebserverConf(cfg),
+		"webserver-ca.conf": r.renderWebserverConfCA(cfg),
+		"puppetserver.conf": r.renderPuppetserverConf(cfg),
 		"auth.conf":         r.renderAuthConf(),
 		"ca.conf":           r.renderCAConf(ca),
 		"product.conf":      "product: {\n    check-for-updates: false\n}\n",
@@ -126,18 +126,18 @@ func (r *EnvironmentReconciler) reconcileConfigMap(ctx context.Context, env *ope
 	}
 
 	cm := &corev1.ConfigMap{}
-	err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: env.Namespace}, cm)
+	err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: cfg.Namespace}, cm)
 	if errors.IsNotFound(err) {
 		logger.Info("creating ConfigMap", "name", configMapName)
 		cm = &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      configMapName,
-				Namespace: env.Namespace,
-				Labels:    environmentLabels(env.Name),
+				Namespace: cfg.Namespace,
+				Labels:    configLabels(cfg.Name),
 			},
 			Data: data,
 		}
-		if err := controllerutil.SetControllerReference(env, cm, r.Scheme); err != nil {
+		if err := controllerutil.SetControllerReference(cfg, cm, r.Scheme); err != nil {
 			return err
 		}
 		return r.Create(ctx, cm)
@@ -149,20 +149,20 @@ func (r *EnvironmentReconciler) reconcileConfigMap(ctx context.Context, env *ope
 	return r.Update(ctx, cm)
 }
 
-func (r *EnvironmentReconciler) findCertificateAuthority(ctx context.Context, env *openvoxv1alpha1.Environment) *openvoxv1alpha1.CertificateAuthority {
+func (r *ConfigReconciler) findCertificateAuthority(ctx context.Context, cfg *openvoxv1alpha1.Config) *openvoxv1alpha1.CertificateAuthority {
 	caList := &openvoxv1alpha1.CertificateAuthorityList{}
-	if err := r.List(ctx, caList, client.InNamespace(env.Namespace)); err != nil {
+	if err := r.List(ctx, caList, client.InNamespace(cfg.Namespace)); err != nil {
 		return nil
 	}
 	for i := range caList.Items {
-		if caList.Items[i].Spec.EnvironmentRef == env.Name {
+		if caList.Items[i].Spec.ConfigRef == cfg.Name {
 			return &caList.Items[i]
 		}
 	}
 	return nil
 }
 
-func (r *EnvironmentReconciler) renderPuppetConf(ctx context.Context, env *openvoxv1alpha1.Environment) (string, error) {
+func (r *ConfigReconciler) renderPuppetConf(ctx context.Context, cfg *openvoxv1alpha1.Config) (string, error) {
 	var sb strings.Builder
 	sb.WriteString("[main]\n")
 	sb.WriteString("confdir = /etc/puppetlabs/puppet\n")
@@ -172,33 +172,33 @@ func (r *EnvironmentReconciler) renderPuppetConf(ctx context.Context, env *openv
 	sb.WriteString("rundir = /var/run/puppetlabs\n")
 	sb.WriteString("manage_internal_file_permissions = false\n")
 
-	if env.Spec.Puppet.EnvironmentPath != "" {
-		fmt.Fprintf(&sb, "environmentpath = %s\n", env.Spec.Puppet.EnvironmentPath)
+	if cfg.Spec.Puppet.EnvironmentPath != "" {
+		fmt.Fprintf(&sb, "environmentpath = %s\n", cfg.Spec.Puppet.EnvironmentPath)
 	}
 
-	if env.Spec.Puppet.HieraConfig != "" {
-		fmt.Fprintf(&sb, "hiera_config = %s\n", env.Spec.Puppet.HieraConfig)
+	if cfg.Spec.Puppet.HieraConfig != "" {
+		fmt.Fprintf(&sb, "hiera_config = %s\n", cfg.Spec.Puppet.HieraConfig)
 	}
 
 	sb.WriteString("\n[server]\n")
 
-	if env.Spec.Puppet.EnvironmentTimeout != "" {
-		fmt.Fprintf(&sb, "environment_timeout = %s\n", env.Spec.Puppet.EnvironmentTimeout)
+	if cfg.Spec.Puppet.EnvironmentTimeout != "" {
+		fmt.Fprintf(&sb, "environment_timeout = %s\n", cfg.Spec.Puppet.EnvironmentTimeout)
 	}
 
-	if env.Spec.Puppet.Storeconfigs {
+	if cfg.Spec.Puppet.Storeconfigs {
 		sb.WriteString("storeconfigs = true\n")
-		if env.Spec.Puppet.StoreBackend != "" {
-			fmt.Fprintf(&sb, "storeconfigs_backend = %s\n", env.Spec.Puppet.StoreBackend)
+		if cfg.Spec.Puppet.StoreBackend != "" {
+			fmt.Fprintf(&sb, "storeconfigs_backend = %s\n", cfg.Spec.Puppet.StoreBackend)
 		}
 	}
 
-	if env.Spec.Puppet.Reports != "" {
-		fmt.Fprintf(&sb, "reports = %s\n", env.Spec.Puppet.Reports)
+	if cfg.Spec.Puppet.Reports != "" {
+		fmt.Fprintf(&sb, "reports = %s\n", cfg.Spec.Puppet.Reports)
 	}
 
-	// CA settings from CertificateAuthority (if one exists for this Environment)
-	if ca := r.findCertificateAuthority(ctx, env); ca != nil {
+	// CA settings from CertificateAuthority (if one exists for this Config)
+	if ca := r.findCertificateAuthority(ctx, cfg); ca != nil {
 		if ca.Spec.TTL != "" {
 			ttlSeconds, err := openvoxv1alpha1.ParseDurationToSeconds(ca.Spec.TTL)
 			if err != nil {
@@ -216,24 +216,24 @@ func (r *EnvironmentReconciler) renderPuppetConf(ctx context.Context, env *openv
 		fmt.Fprintf(&sb, "autosign = %s\n", autosignBinaryPath)
 	}
 
-	for k, v := range env.Spec.Puppet.ExtraConfig {
+	for k, v := range cfg.Spec.Puppet.ExtraConfig {
 		fmt.Fprintf(&sb, "%s = %s\n", k, v)
 	}
 
 	return sb.String(), nil
 }
 
-func (r *EnvironmentReconciler) renderPuppetDBConf(env *openvoxv1alpha1.Environment) string {
-	if len(env.Spec.PuppetDB.ServerURLs) == 0 {
+func (r *ConfigReconciler) renderPuppetDBConf(cfg *openvoxv1alpha1.Config) string {
+	if len(cfg.Spec.PuppetDB.ServerURLs) == 0 {
 		return "[main]\nserver_urls = https://openvoxdb:8081\nsoft_write_failure = true\n"
 	}
 	return fmt.Sprintf("[main]\nserver_urls = %s\nsoft_write_failure = true\n",
-		strings.Join(env.Spec.PuppetDB.ServerURLs, ","))
+		strings.Join(cfg.Spec.PuppetDB.ServerURLs, ","))
 }
 
 // renderWebserverConf returns the webserver.conf for non-CA servers.
 // CRL is read from the kubelet-synced secret mount at /etc/puppetlabs/puppet/crl/.
-func (r *EnvironmentReconciler) renderWebserverConf(env *openvoxv1alpha1.Environment) string {
+func (r *ConfigReconciler) renderWebserverConf(cfg *openvoxv1alpha1.Config) string {
 	return `webserver: {
     client-auth: want
     ssl-host: 0.0.0.0
@@ -248,7 +248,7 @@ func (r *EnvironmentReconciler) renderWebserverConf(env *openvoxv1alpha1.Environ
 
 // renderWebserverConfCA returns the webserver.conf for CA servers.
 // CRL is read from the PVC-backed ssl directory, managed by Puppetserver itself.
-func (r *EnvironmentReconciler) renderWebserverConfCA(env *openvoxv1alpha1.Environment) string {
+func (r *ConfigReconciler) renderWebserverConfCA(cfg *openvoxv1alpha1.Config) string {
 	return `webserver: {
     client-auth: want
     ssl-host: 0.0.0.0
@@ -261,7 +261,7 @@ func (r *EnvironmentReconciler) renderWebserverConfCA(env *openvoxv1alpha1.Envir
 `
 }
 
-func (r *EnvironmentReconciler) renderPuppetserverConf(env *openvoxv1alpha1.Environment) string {
+func (r *ConfigReconciler) renderPuppetserverConf(cfg *openvoxv1alpha1.Config) string {
 	return `jruby-puppet: {
     ruby-load-path: [/opt/puppetlabs/puppet/lib/ruby/vendor_ruby]
     gem-home: /opt/puppetlabs/server/data/puppetserver/jruby-gems
@@ -287,7 +287,7 @@ dropsonde: {
 `
 }
 
-func (r *EnvironmentReconciler) renderAuthConf() string {
+func (r *ConfigReconciler) renderAuthConf() string {
 	return `authorization: {
     version: 1
     rules: [
@@ -568,7 +568,7 @@ func (r *EnvironmentReconciler) renderAuthConf() string {
 `
 }
 
-func (r *EnvironmentReconciler) renderCAConf(ca *openvoxv1alpha1.CertificateAuthority) string {
+func (r *ConfigReconciler) renderCAConf(ca *openvoxv1alpha1.CertificateAuthority) string {
 	allowSANs := true
 	if ca != nil {
 		allowSANs = ca.Spec.AllowSubjectAltNames
@@ -581,7 +581,7 @@ func (r *EnvironmentReconciler) renderCAConf(ca *openvoxv1alpha1.CertificateAuth
 const autosignBinaryPath = "/usr/local/bin/openvox-autosign"
 
 // findSigningPolicies returns all SigningPolicies referencing the given CA.
-func (r *EnvironmentReconciler) findSigningPolicies(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority) []openvoxv1alpha1.SigningPolicy {
+func (r *ConfigReconciler) findSigningPolicies(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority) []openvoxv1alpha1.SigningPolicy {
 	list := &openvoxv1alpha1.SigningPolicyList{}
 	if err := r.List(ctx, list, client.InNamespace(ca.Namespace)); err != nil {
 		return nil
@@ -595,18 +595,18 @@ func (r *EnvironmentReconciler) findSigningPolicies(ctx context.Context, ca *ope
 	return result
 }
 
-// reconcileAutosignSecrets reconciles autosign policy Secrets for all CAs in this Environment.
-func (r *EnvironmentReconciler) reconcileAutosignSecrets(ctx context.Context, env *openvoxv1alpha1.Environment) error {
+// reconcileAutosignSecrets reconciles autosign policy Secrets for all CAs in this Config.
+func (r *ConfigReconciler) reconcileAutosignSecrets(ctx context.Context, cfg *openvoxv1alpha1.Config) error {
 	caList := &openvoxv1alpha1.CertificateAuthorityList{}
-	if err := r.List(ctx, caList, client.InNamespace(env.Namespace)); err != nil {
+	if err := r.List(ctx, caList, client.InNamespace(cfg.Namespace)); err != nil {
 		return err
 	}
 	for i := range caList.Items {
 		ca := &caList.Items[i]
-		if ca.Spec.EnvironmentRef != env.Name {
+		if ca.Spec.ConfigRef != cfg.Name {
 			continue
 		}
-		if err := r.reconcileAutosignSecret(ctx, env, ca); err != nil {
+		if err := r.reconcileAutosignSecret(ctx, cfg, ca); err != nil {
 			return fmt.Errorf("reconciling autosign Secret for CA %s: %w", ca.Name, err)
 		}
 	}
@@ -616,14 +616,14 @@ func (r *EnvironmentReconciler) reconcileAutosignSecrets(ctx context.Context, en
 // reconcileAutosignSecret renders the autosign policy config YAML into a Secret.
 // The Secret is always created — the binary handles all cases (no policies = deny all,
 // any:true = approve all). This keeps puppet.conf static and avoids pod restarts.
-func (r *EnvironmentReconciler) reconcileAutosignSecret(ctx context.Context, env *openvoxv1alpha1.Environment, ca *openvoxv1alpha1.CertificateAuthority) error {
+func (r *ConfigReconciler) reconcileAutosignSecret(ctx context.Context, cfg *openvoxv1alpha1.Config, ca *openvoxv1alpha1.CertificateAuthority) error {
 	logger := log.FromContext(ctx)
 	secretName := fmt.Sprintf("%s-autosign-policy", ca.Name)
 
 	policies := r.findSigningPolicies(ctx, ca)
 
 	// Render policy config YAML
-	policyYAML, renderErr := r.renderAutosignPolicyConfig(ctx, env.Namespace, policies)
+	policyYAML, renderErr := r.renderAutosignPolicyConfig(ctx, cfg.Namespace, policies)
 	if renderErr != nil {
 		return fmt.Errorf("rendering autosign policy config: %w", renderErr)
 	}
@@ -638,18 +638,18 @@ func (r *EnvironmentReconciler) reconcileAutosignSecret(ctx context.Context, env
 	}
 
 	existing := &corev1.Secret{}
-	err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: env.Namespace}, existing)
+	err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cfg.Namespace}, existing)
 	if errors.IsNotFound(err) {
 		logger.Info("creating autosign policy Secret", "name", secretName)
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      secretName,
-				Namespace: env.Namespace,
-				Labels:    environmentLabels(env.Name),
+				Namespace: cfg.Namespace,
+				Labels:    configLabels(cfg.Name),
 			},
 			Data: data,
 		}
-		if err := controllerutil.SetControllerReference(env, secret, r.Scheme); err != nil {
+		if err := controllerutil.SetControllerReference(cfg, secret, r.Scheme); err != nil {
 			return err
 		}
 		return r.Create(ctx, secret)
@@ -662,7 +662,7 @@ func (r *EnvironmentReconciler) reconcileAutosignSecret(ctx context.Context, env
 }
 
 // renderAutosignPolicyConfig renders the policy config YAML that openvox-autosign reads.
-func (r *EnvironmentReconciler) renderAutosignPolicyConfig(ctx context.Context, namespace string, policies []openvoxv1alpha1.SigningPolicy) (string, error) {
+func (r *ConfigReconciler) renderAutosignPolicyConfig(ctx context.Context, namespace string, policies []openvoxv1alpha1.SigningPolicy) (string, error) {
 	var sb strings.Builder
 	sb.WriteString("policies:\n")
 
@@ -718,7 +718,7 @@ func (r *EnvironmentReconciler) renderAutosignPolicyConfig(ctx context.Context, 
 }
 
 // resolveSecretKey reads a specific key from a Secret.
-func (r *EnvironmentReconciler) resolveSecretKey(ctx context.Context, namespace, secretName, key string) (string, error) {
+func (r *ConfigReconciler) resolveSecretKey(ctx context.Context, namespace, secretName, key string) (string, error) {
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret); err != nil {
 		return "", fmt.Errorf("getting Secret %s: %w", secretName, err)
@@ -731,7 +731,7 @@ func (r *EnvironmentReconciler) resolveSecretKey(ctx context.Context, namespace,
 }
 
 // updateSigningPolicyStatus sets the phase and condition on a SigningPolicy.
-func (r *EnvironmentReconciler) updateSigningPolicyStatus(ctx context.Context, sp *openvoxv1alpha1.SigningPolicy, err error) {
+func (r *ConfigReconciler) updateSigningPolicyStatus(ctx context.Context, sp *openvoxv1alpha1.SigningPolicy, err error) {
 	if err != nil {
 		sp.Status.Phase = openvoxv1alpha1.SigningPolicyPhaseError
 		meta.SetStatusCondition(&sp.Status.Conditions, metav1.Condition{
@@ -754,8 +754,8 @@ func (r *EnvironmentReconciler) updateSigningPolicyStatus(ctx context.Context, s
 	_ = r.Status().Update(ctx, sp)
 }
 
-// enqueueEnvironmentsForSigningPolicy maps SigningPolicy changes to Environment reconciles.
-func (r *EnvironmentReconciler) enqueueEnvironmentsForSigningPolicy(c client.Reader) handler.MapFunc {
+// enqueueConfigsForSigningPolicy maps SigningPolicy changes to Config reconciles.
+func (r *ConfigReconciler) enqueueConfigsForSigningPolicy(c client.Reader) handler.MapFunc {
 	return func(ctx context.Context, obj client.Object) []reconcile.Request {
 		sp, ok := obj.(*openvoxv1alpha1.SigningPolicy)
 		if !ok {
@@ -768,30 +768,30 @@ func (r *EnvironmentReconciler) enqueueEnvironmentsForSigningPolicy(c client.Rea
 			return nil
 		}
 
-		// Enqueue the Environment referenced by the CA
+		// Enqueue the Config referenced by the CA
 		return []reconcile.Request{
-			{NamespacedName: types.NamespacedName{Name: ca.Spec.EnvironmentRef, Namespace: ca.Namespace}},
+			{NamespacedName: types.NamespacedName{Name: ca.Spec.ConfigRef, Namespace: ca.Namespace}},
 		}
 	}
 }
 
 // --- Server ServiceAccount ---
 
-func (r *EnvironmentReconciler) reconcileServerServiceAccount(ctx context.Context, env *openvoxv1alpha1.Environment) error {
-	saName := fmt.Sprintf("%s-server", env.Name)
+func (r *ConfigReconciler) reconcileServerServiceAccount(ctx context.Context, cfg *openvoxv1alpha1.Config) error {
+	saName := fmt.Sprintf("%s-server", cfg.Name)
 	automount := false
 
 	sa := &corev1.ServiceAccount{}
-	if err := r.Get(ctx, types.NamespacedName{Name: saName, Namespace: env.Namespace}, sa); errors.IsNotFound(err) {
+	if err := r.Get(ctx, types.NamespacedName{Name: saName, Namespace: cfg.Namespace}, sa); errors.IsNotFound(err) {
 		sa = &corev1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      saName,
-				Namespace: env.Namespace,
-				Labels:    environmentLabels(env.Name),
+				Namespace: cfg.Namespace,
+				Labels:    configLabels(cfg.Name),
 			},
 			AutomountServiceAccountToken: &automount,
 		}
-		if err := controllerutil.SetControllerReference(env, sa, r.Scheme); err != nil {
+		if err := controllerutil.SetControllerReference(cfg, sa, r.Scheme); err != nil {
 			return err
 		}
 		return r.Create(ctx, sa)

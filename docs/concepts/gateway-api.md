@@ -50,7 +50,7 @@ kind: Pool
 metadata:
   name: puppet
 spec:
-  environmentRef: production
+  configRef: production
   selector:
     openvox.voxpupuli.org/role: server
   service:

@@ -1,26 +1,26 @@
 apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: Environment
+kind: Config
 metadata:
-  name: {{ include "openvox-stack.envName" . }}
+  name: {{ include "openvox-stack.configName" . }}
 spec:
   image:
-    repository: {{ .Values.environment.image.repository }}
-    tag: {{ .Values.environment.image.tag | quote }}
-    pullPolicy: {{ .Values.environment.image.pullPolicy }}
-  {{- with .Values.environment.puppetdb }}
+    repository: {{ .Values.config.image.repository }}
+    tag: {{ .Values.config.image.tag | quote }}
+    pullPolicy: {{ .Values.config.image.pullPolicy }}
+  {{- with .Values.config.puppetdb }}
   {{- if .serverUrls }}
   puppetdb:
     serverUrls:
       {{- toYaml .serverUrls | nindent 6 }}
   {{- end }}
   {{- end }}
-  {{- with .Values.environment.puppet }}
+  {{- with .Values.config.puppet }}
   puppet:
     environmentTimeout: {{ .environmentTimeout }}
     storeconfigs: {{ .storeconfigs }}
     reports: {{ .reports }}
   {{- end }}
-  {{- with .Values.environment.code }}
+  {{- with .Values.config.code }}
   {{- if or .image .claimName }}
   code:
     {{- with .image }}

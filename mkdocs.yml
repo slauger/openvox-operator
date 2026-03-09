@@ -64,7 +64,7 @@ nav:
       - Overview: examples/index.md
   - Reference:
       - Overview: reference/index.md
-      - Environment: reference/environment.md
+      - Config: reference/config.md
       - CertificateAuthority: reference/certificateauthority.md
       - SigningPolicy: reference/signingpolicy.md
       - Certificate: reference/certificate.md

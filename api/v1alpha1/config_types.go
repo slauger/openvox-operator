@@ -7,32 +7,32 @@ import (
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:shortName=env
+// +kubebuilder:resource:shortName=cfg
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
-// Environment is the Schema for the environments API.
+// Config is the Schema for the configs API.
 // It manages shared configuration (puppet.conf, auth.conf) and PuppetDB connection.
-type Environment struct {
+type Config struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   EnvironmentSpec   `json:"spec,omitempty"`
-	Status EnvironmentStatus `json:"status,omitempty"`
+	Spec   ConfigSpec   `json:"spec,omitempty"`
+	Status ConfigStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// EnvironmentList contains a list of Environment.
-type EnvironmentList struct {
+// ConfigList contains a list of Config.
+type ConfigList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Environment `json:"items"`
+	Items           []Config `json:"items"`
 }
 
-// EnvironmentSpec defines the desired state of Environment.
-type EnvironmentSpec struct {
-	// Image defines the default container image for all Servers in this Environment.
+// ConfigSpec defines the desired state of Config.
+type ConfigSpec struct {
+	// Image defines the default container image for all Servers in this Config.
 	Image ImageSpec `json:"image"`
 
 	// PuppetDB defines the PuppetDB connection settings.
@@ -43,7 +43,7 @@ type EnvironmentSpec struct {
 	// +optional
 	Puppet PuppetSpec `json:"puppet,omitempty"`
 
-	// Code defines the Puppet code source for all Servers in this Environment.
+	// Code defines the Puppet code source for all Servers in this Config.
 	// Only applied to Servers with server=true.
 	// +optional
 	Code *CodeSpec `json:"code,omitempty"`
@@ -75,28 +75,28 @@ type CodeSpec struct {
 	ImagePullSecret string `json:"imagePullSecret,omitempty"`
 }
 
-// EnvironmentPhase represents the current lifecycle phase.
+// ConfigPhase represents the current lifecycle phase.
 // +kubebuilder:validation:Enum=Pending;Running;Error
-type EnvironmentPhase string
+type ConfigPhase string
 
 const (
-	EnvironmentPhasePending EnvironmentPhase = "Pending"
-	EnvironmentPhaseRunning EnvironmentPhase = "Running"
-	EnvironmentPhaseError   EnvironmentPhase = "Error"
+	ConfigPhasePending ConfigPhase = "Pending"
+	ConfigPhaseRunning ConfigPhase = "Running"
+	ConfigPhaseError   ConfigPhase = "Error"
 )
 
-// EnvironmentStatus defines the observed state of Environment.
-type EnvironmentStatus struct {
+// ConfigStatus defines the observed state of Config.
+type ConfigStatus struct {
 	// Phase is the current lifecycle phase.
 	// +optional
-	Phase EnvironmentPhase `json:"phase,omitempty"`
+	Phase ConfigPhase `json:"phase,omitempty"`
 
 	// Conditions represent the latest available observations.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
-// Condition types for Environment.
+// Condition types for Config.
 const (
 	ConditionConfigReady = "ConfigReady"
 )
@@ -191,5 +191,5 @@ type PuppetDBSpec struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&Environment{}, &EnvironmentList{})
+	SchemeBuilder.Register(&Config{}, &ConfigList{})
 }

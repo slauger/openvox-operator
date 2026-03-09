@@ -57,10 +57,8 @@ LOCAL_TAG ?= $(shell git describe --always)
 local-build: ## Build all images for local development (Docker Desktop K8s).
 	$(CONTAINER_TOOL) build -t openvox-operator:$(LOCAL_TAG) -f images/openvox-operator/Containerfile .
 	$(CONTAINER_TOOL) build -t openvox-server:$(LOCAL_TAG) -f images/openvox-server/Containerfile .
-	$(CONTAINER_TOOL) build -t openvox-codedeploy:$(LOCAL_TAG) -f images/openvox-codedeploy/Containerfile .
 	@echo "Built openvox-operator:$(LOCAL_TAG)"
 	@echo "Built openvox-server:$(LOCAL_TAG)"
-	@echo "Built openvox-codedeploy:$(LOCAL_TAG)"
 
 .PHONY: local-deploy
 local-deploy: local-build install ## Build images, install CRDs, and deploy operator via Helm.

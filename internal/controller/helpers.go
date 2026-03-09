@@ -95,6 +95,15 @@ func findCAServiceName(ctx context.Context, reader client.Reader, ca *openvoxv1a
 	return ""
 }
 
+// resolveCode determines the code source for a Server.
+// Priority: Server override > Environment default.
+func resolveCode(server *openvoxv1alpha1.Server, env *openvoxv1alpha1.Environment) *openvoxv1alpha1.CodeSpec {
+	if server.Spec.Code != nil {
+		return server.Spec.Code
+	}
+	return env.Spec.Code
+}
+
 // resolveImage determines the container image for a Server.
 // Priority: Server override > Environment default.
 func resolveImage(server *openvoxv1alpha1.Server, env *openvoxv1alpha1.Environment) string {

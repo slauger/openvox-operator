@@ -40,13 +40,3 @@ jobs:
       image_name: openvox-server
       dockerfile: images/openvox-server/Containerfile
       context: '.'
-
-  openvox-codedeploy:
-    uses: ./.github/workflows/container-build.yaml
-    permissions:
-      contents: read
-      packages: write
-    with:
-      image_name: openvox-codedeploy
-      dockerfile: images/openvox-codedeploy/Containerfile
-      context: '.'

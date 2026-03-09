@@ -42,12 +42,35 @@ type EnvironmentSpec struct {
 	// Puppet defines shared puppet.conf settings.
 	// +optional
 	Puppet PuppetSpec `json:"puppet,omitempty"`
+
+	// Code defines the Puppet code source for all Servers in this Environment.
+	// Only applied to Servers with server=true.
+	// +optional
+	Code *CodeSpec `json:"code,omitempty"`
 }
 
-// CodeSpec references an existing PVC containing Puppet code.
+// CodeSpec defines the source of Puppet code to mount into Server pods.
+// Either ClaimName (PVC) or Image (OCI image volume) may be set, not both.
 type CodeSpec struct {
-	// ClaimName is the name of an existing PVC containing Puppet code.
-	ClaimName string `json:"claimName"`
+	// ClaimName references an existing PVC containing Puppet code.
+	// Mutually exclusive with Image.
+	// +optional
+	ClaimName string `json:"claimName,omitempty"`
+
+	// Image is an OCI image reference containing Puppet code.
+	// Mounted as a read-only image volume (requires Kubernetes 1.31+).
+	// Mutually exclusive with ClaimName.
+	// +optional
+	Image string `json:"image,omitempty"`
+
+	// ImagePullPolicy defines when to pull the code image.
+	// +kubebuilder:default="IfNotPresent"
+	// +optional
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+
+	// ImagePullSecret references a Secret for pulling from private registries.
+	// +optional
+	ImagePullSecret string `json:"imagePullSecret,omitempty"`
 }
 
 // EnvironmentPhase represents the current lifecycle phase.

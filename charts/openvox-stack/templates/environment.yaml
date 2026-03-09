@@ -20,3 +20,20 @@ spec:
     storeconfigs: {{ .storeconfigs }}
     reports: {{ .reports }}
   {{- end }}
+  {{- with .Values.environment.code }}
+  {{- if or .image .claimName }}
+  code:
+    {{- with .image }}
+    image: {{ . }}
+    {{- end }}
+    {{- with .imagePullPolicy }}
+    imagePullPolicy: {{ . }}
+    {{- end }}
+    {{- with .imagePullSecret }}
+    imagePullSecret: {{ . }}
+    {{- end }}
+    {{- with .claimName }}
+    claimName: {{ . }}
+    {{- end }}
+  {{- end }}
+  {{- end }}

@@ -107,4 +107,4 @@ pool.openvox.voxpupuli.org/puppet           lab           ClusterIP   1         
 
 ## Next Steps
 
-See the [Examples](../examples/index.md) section for production setups with separate CA, server pools, canary deployments, and code deployment via r10k.
+See the [Examples](../examples/index.md) section for production setups with separate CA, server pools, canary deployments, and code deployment via OCI image volumes.

@@ -34,7 +34,7 @@ Existing containers decide at startup whether to run as CA or server based on en
 | **CSR Signing** | `autosign.conf` or Ruby scripts | `SigningPolicy` CRD with declarative rules (any, pattern, CSR attributes, DNS SAN validation) |
 | **CRL** | File on disk, manual refresh | Split Secret (`{ca}-ca-crl`), operator-driven periodic refresh via CA HTTP API |
 | **Scaling** | Manual VM provisioning | Deployment replicas + HPA |
-| **Code Deployment** | r10k on the VM, cron/webhook | CodeDeploy CRD (planned) runs r10k via long-running Go Agent, auto-clears environment cache |
+| **Code Deployment** | r10k on the VM, cron/webhook | OCI image volumes or PVC — code packaged as immutable container images |
 | **Multi-Version** | Separate VMs or package pinning | Multiple Servers in the same Pool |
 
 ## Container Image

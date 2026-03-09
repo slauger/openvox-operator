@@ -97,11 +97,24 @@ spec:
                   Server.
                 properties:
                   claimName:
-                    description: ClaimName is the name of an existing PVC containing
-                      Puppet code.
+                    description: |-
+                      ClaimName references an existing PVC containing Puppet code.
+                      Mutually exclusive with Image.
                     type: string
-                required:
-                - claimName
+                  image:
+                    description: |-
+                      Image is an OCI image reference containing Puppet code.
+                      Mounted as a read-only image volume (requires Kubernetes 1.31+).
+                      Mutually exclusive with ClaimName.
+                    type: string
+                  imagePullPolicy:
+                    default: IfNotPresent
+                    description: ImagePullPolicy defines when to pull the code image.
+                    type: string
+                  imagePullSecret:
+                    description: ImagePullSecret references a Secret for pulling from
+                      private registries.
+                    type: string
                 type: object
               environmentRef:
                 description: EnvironmentRef references the Environment this Server

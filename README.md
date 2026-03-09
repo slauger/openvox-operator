@@ -86,7 +86,6 @@ All resources use the API group `openvox.voxpupuli.org/v1alpha1`.
 
 | Kind | Purpose |
 |---|---|
-| **`CodeDeploy`** | r10k code deployment from Git (PVC, Job, CronJob) |
 | *`Database`* | *OpenVox DB (StatefulSet, Service)* |
 
 ## Differences to VM-based Installations
@@ -105,7 +104,7 @@ This operator takes a **Kubernetes-native approach** that differs in several key
 | **CSR Signing** | `autosign.conf` or Ruby scripts | `SigningPolicy` CRD with declarative rules (any, pattern, DNS SANs, CSR attributes) |
 | **CRL** | File on disk, manual refresh | Split Secret (`{ca}-ca-crl`), operator-driven periodic refresh via CA HTTP API |
 | **Scaling** | Horizontal scaling possible but requires manual setup of additional server VMs | Horizontal via Deployment replicas and HPA |
-| **Code Deployment** | r10k installed on the VM, triggered by cron or webhook | `CodeDeploy` CRD (planned) manages r10k as a Kubernetes Job/CronJob |
+| **Code Deployment** | r10k installed on the VM, triggered by cron or webhook | OCI image volumes or PVC — code packaged as immutable container images |
 | **Multi-Version** | Separate VMs or manual package pinning | Multiple `Server` CRDs in the same `Pool` with different image tags |
 
 By eliminating system Ruby from the runtime image, the container has a smaller footprint and a reduced attack surface, avoiding the duplicate Ruby installation (CRuby + JRuby) that the OS packages carry.

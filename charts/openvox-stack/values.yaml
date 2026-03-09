@@ -13,6 +13,11 @@ environment:
     environmentTimeout: unlimited
     storeconfigs: false
     reports: store
+  code:
+    image: ""
+    imagePullPolicy: IfNotPresent
+    imagePullSecret: ""
+    claimName: ""
 
 ca:
   name: ""             # default: {fullname}-ca

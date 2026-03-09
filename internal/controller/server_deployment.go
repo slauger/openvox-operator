@@ -69,6 +69,13 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 		"openvox.voxpupuli.org/ca-secret-hash":  caHash,
 	}
 
+	// Add code image annotation for server:true pods to trigger rollout on image change
+	if server.Spec.Server {
+		if code := resolveCode(server, env); code != nil && code.Image != "" {
+			annotations["openvox.voxpupuli.org/code-image"] = code.Image
+		}
+	}
+
 	deploy := &appsv1.Deployment{}
 	err = r.Get(ctx, types.NamespacedName{Name: deployName, Namespace: server.Namespace}, deploy)
 	if errors.IsNotFound(err) {
@@ -232,22 +239,41 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, env *ope
 		)
 	}
 
-	// Code volume from Server spec
-	if server.Spec.Code != nil {
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      "code",
-			MountPath: env.Spec.Puppet.EnvironmentPath,
-			ReadOnly:  true,
-		})
-		volumes = append(volumes, corev1.Volume{
-			Name: "code",
-			VolumeSource: corev1.VolumeSource{
-				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: server.Spec.Code.ClaimName,
-					ReadOnly:  true,
-				},
-			},
-		})
+	// Code volume: only mounted for server:true pods (CA-only pods don't compile catalogs)
+	if server.Spec.Server {
+		if code := resolveCode(server, env); code != nil {
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      "code",
+				MountPath: env.Spec.Puppet.EnvironmentPath,
+				ReadOnly:  true,
+			})
+			switch {
+			case code.Image != "":
+				pullPolicy := code.ImagePullPolicy
+				if pullPolicy == "" {
+					pullPolicy = corev1.PullIfNotPresent
+				}
+				volumes = append(volumes, corev1.Volume{
+					Name: "code",
+					VolumeSource: corev1.VolumeSource{
+						Image: &corev1.ImageVolumeSource{
+							Reference:  code.Image,
+							PullPolicy: pullPolicy,
+						},
+					},
+				})
+			case code.ClaimName != "":
+				volumes = append(volumes, corev1.Volume{
+					Name: "code",
+					VolumeSource: corev1.VolumeSource{
+						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+							ClaimName: code.ClaimName,
+							ReadOnly:  true,
+						},
+					},
+				})
+			}
+		}
 	}
 
 	container := corev1.Container{
@@ -315,7 +341,7 @@ chmod 640 /ssl/private_keys/puppet.pem`
 		},
 	}
 
-	return corev1.PodSpec{
+	podSpec := corev1.PodSpec{
 		ServiceAccountName: fmt.Sprintf("%s-server", server.Spec.EnvironmentRef),
 		SecurityContext: &corev1.PodSecurityContext{
 			RunAsUser:    int64Ptr(1001),
@@ -326,6 +352,17 @@ chmod 640 /ssl/private_keys/puppet.pem`
 		Containers:     []corev1.Container{container},
 		Volumes:        volumes,
 	}
+
+	// Add imagePullSecrets for code image if configured
+	if server.Spec.Server {
+		if code := resolveCode(server, env); code != nil && code.ImagePullSecret != "" {
+			podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, corev1.LocalObjectReference{
+				Name: code.ImagePullSecret,
+			})
+		}
+	}
+
+	return podSpec
 }
 
 // resolveJavaArgs determines JVM arguments for a Server.

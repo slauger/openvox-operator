@@ -75,6 +75,11 @@ spec:
                       private registries.
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: image and claimName are mutually exclusive
+                  rule: '!(self.image != '''' && self.claimName != '''')'
+                - message: either image or claimName must be set
+                  rule: self.image != '' || self.claimName != ''
               image:
                 description: Image defines the default container image for all Servers
                   in this Environment.

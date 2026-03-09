@@ -51,6 +51,8 @@ type EnvironmentSpec struct {
 
 // CodeSpec defines the source of Puppet code to mount into Server pods.
 // Either ClaimName (PVC) or Image (OCI image volume) may be set, not both.
+// +kubebuilder:validation:XValidation:rule="!(self.image != '' && self.claimName != '')",message="image and claimName are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="self.image != '' || self.claimName != ''",message="either image or claimName must be set"
 type CodeSpec struct {
 	// ClaimName references an existing PVC containing Puppet code.
 	// Mutually exclusive with Image.

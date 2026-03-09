@@ -1,14 +1,14 @@
 # Quick Start
 
-This guide sets up a minimal OpenVox Server environment with a single pod acting as both CA and server.
+This guide sets up a minimal OpenVox Server deployment with a single pod acting as both CA and server.
 
 ## Minimal Setup
 
-Create an Environment, CertificateAuthority, SigningPolicy, Certificate, Server, and Pool:
+Create a Config, CertificateAuthority, SigningPolicy, Certificate, Server, and Pool:
 
 ```yaml
 apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: Environment
+kind: Config
 metadata:
   name: lab
 spec:
@@ -21,7 +21,7 @@ kind: CertificateAuthority
 metadata:
   name: lab-ca
 spec:
-  environmentRef: lab
+  configRef: lab
 ---
 apiVersion: openvox.voxpupuli.org/v1alpha1
 kind: SigningPolicy
@@ -47,7 +47,7 @@ kind: Server
 metadata:
   name: puppet
 spec:
-  environmentRef: lab
+  configRef: lab
   certificateRef: lab-cert
   ca: true
   server: true
@@ -58,7 +58,7 @@ kind: Pool
 metadata:
   name: puppet
 spec:
-  environmentRef: lab
+  configRef: lab
   selector:
     openvox.voxpupuli.org/ca: "true"
   service:
@@ -68,7 +68,7 @@ spec:
 Apply it:
 
 ```bash
-kubectl apply -f environment.yaml
+kubectl apply -f config.yaml
 ```
 
 The operator will:
@@ -82,15 +82,15 @@ The operator will:
 ## Verify
 
 ```bash
-kubectl get environment,certificateauthority,signingpolicy,certificate,server,pool
+kubectl get config,certificateauthority,signingpolicy,certificate,server,pool
 ```
 
 ```
 NAME                                        PHASE     AGE
-environment.openvox.voxpupuli.org/lab       Running   2m
+config.openvox.voxpupuli.org/lab            Running   2m
 
-NAME                                                ENVIRONMENT   PHASE   AGE
-certificateauthority.openvox.voxpupuli.org/lab-ca   lab           Ready   2m
+NAME                                                CONFIG   PHASE   AGE
+certificateauthority.openvox.voxpupuli.org/lab-ca   lab      Ready   2m
 
 NAME                                                     CA       PHASE    AGE
 signingpolicy.openvox.voxpupuli.org/lab-autosign         lab-ca   Active   2m
@@ -98,11 +98,11 @@ signingpolicy.openvox.voxpupuli.org/lab-autosign         lab-ca   Active   2m
 NAME                                              AUTHORITY   CERTNAME   PHASE    AGE
 certificate.openvox.voxpupuli.org/lab-cert        lab-ca      puppet     Signed   2m
 
-NAME                                        ENVIRONMENT   REPLICAS   READY   PHASE     AGE
-server.openvox.voxpupuli.org/puppet         lab           1          1       Running   2m
+NAME                                        CONFIG   REPLICAS   READY   PHASE     AGE
+server.openvox.voxpupuli.org/puppet         lab      1          1       Running   2m
 
-NAME                                        ENVIRONMENT   TYPE        ENDPOINTS   AGE
-pool.openvox.voxpupuli.org/puppet           lab           ClusterIP   1           2m
+NAME                                        CONFIG   TYPE        ENDPOINTS   AGE
+pool.openvox.voxpupuli.org/puppet           lab      ClusterIP   1           2m
 ```
 
 ## Next Steps

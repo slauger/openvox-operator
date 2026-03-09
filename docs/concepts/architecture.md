@@ -10,27 +10,27 @@ The operator uses multiple CRDs that form a hierarchy:
 
 ```mermaid
 graph TD
-    Env["Environment"]
+    Cfg["Config"]
     CA["CertificateAuthority"]
     SP["SigningPolicy"]
     Cert["Certificate"]
     Srv["Server"]
     Pool["Pool"]
-    Env -->|environmentRef| CA
+    Cfg -->|configRef| CA
     CA -->|certificateAuthorityRef| SP
     CA -->|authorityRef| Cert
     Cert -->|certificateRef| Srv
-    Env -->|environmentRef| Srv
+    Cfg -->|configRef| Srv
     Srv -->|selector| Pool
-    Env -->|environmentRef| Pool
+    Cfg -->|configRef| Pool
 ```
 
-- An **Environment** is the root resource. It generates ConfigMaps for puppet.conf/puppetdb.conf/webserver.conf and holds shared configuration.
-- A **CertificateAuthority** references an Environment and manages the CA infrastructure: PVC, setup Job, and CA Secret.
-- A **SigningPolicy** references a CertificateAuthority and defines declarative CSR signing rules (any, pattern match, or CSR attribute match). The Environment controller renders all SigningPolicies into an autosign policy file.
+- A **Config** is the root resource. It generates ConfigMaps for puppet.conf/puppetdb.conf/webserver.conf and holds shared configuration.
+- A **CertificateAuthority** references a Config and manages the CA infrastructure: PVC, setup Job, and CA Secret.
+- A **SigningPolicy** references a CertificateAuthority and defines declarative CSR signing rules (any, pattern match, or CSR attribute match). The Config controller renders all SigningPolicies into an autosign policy file.
 - A **Certificate** references a CertificateAuthority and manages the lifecycle of a single certificate: signing Job and TLS Secret.
-- A **Server** references an Environment and a Certificate. It creates a Deployment (with Recreate strategy for CA, RollingUpdate for servers). The Server waits for the Certificate to reach the `Signed` phase before creating its Deployment.
-- A **Pool** references an Environment and creates a Kubernetes Service. Server pods are selected by label.
+- A **Server** references a Config and a Certificate. It creates a Deployment (with Recreate strategy for CA, RollingUpdate for servers). The Server waits for the Certificate to reach the `Signed` phase before creating its Deployment.
+- A **Pool** references a Config and creates a Kubernetes Service. Server pods are selected by label.
 
 ## Why Separate CRDs for CA and Certificates?
 
@@ -92,7 +92,7 @@ The operator creates dedicated ServiceAccounts with minimal privileges:
 
 | ServiceAccount | Created by | Purpose | K8s API Token |
 |---|---|---|---|
-| `{env}-server` | Environment controller | All server pods | No (`automountServiceAccountToken: false`) |
+| `{cfg}-server` | Config controller | All server pods | No (`automountServiceAccountToken: false`) |
 | `{ca}-ca-setup` | CertificateAuthority controller | CA setup job: creates CA Secrets | Yes (scoped to `{ca}-ca`, `{ca}-ca-key`, `{ca}-ca-crl` Secrets) |
 
 The operator itself runs with its own ServiceAccount (managed by the Helm chart) with cluster-wide RBAC.
@@ -105,11 +105,11 @@ The operator itself runs with its own ServiceAccount (managed by the Helm chart)
 
 ## Code Deployment
 
-Puppet code is deployed to Server pods via the `CodeSpec` on the Environment or Server CRD. Two modes are supported:
+Puppet code is deployed to Server pods via the `CodeSpec` on the Config or Server CRD. Two modes are supported:
 
 ### OCI Image Volume (recommended)
 
-Package Puppet code as an OCI image and reference it in the Environment's `code.image` field. The operator mounts it as a read-only image volume (requires Kubernetes 1.31+). Code changes are rolled out by updating the image reference.
+Package Puppet code as an OCI image and reference it in the Config's `code.image` field. The operator mounts it as a read-only image volume (requires Kubernetes 1.31+). Code changes are rolled out by updating the image reference.
 
 ### PVC
 

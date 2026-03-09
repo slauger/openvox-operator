@@ -15,8 +15,8 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.environmentRef
-      name: Environment
+    - jsonPath: .spec.configRef
+      name: Config
       type: string
     - jsonPath: .spec.replicas
       name: Replicas
@@ -93,8 +93,7 @@ spec:
                   is mounted into the Server pods.
                 type: string
               code:
-                description: Code overrides the Environment's code volume for this
-                  Server.
+                description: Code overrides the Config's code volume for this Server.
                 properties:
                   claimName:
                     description: |-
@@ -121,12 +120,11 @@ spec:
                   rule: '!(self.image != '''' && self.claimName != '''')'
                 - message: either image or claimName must be set
                   rule: self.image != '' || self.claimName != ''
-              environmentRef:
-                description: EnvironmentRef references the Environment this Server
-                  belongs to.
+              configRef:
+                description: ConfigRef references the Config this Server belongs to.
                 type: string
               image:
-                description: Image overrides the Environment's default image.
+                description: Image overrides the Config's default image.
                 properties:
                   pullPolicy:
                     default: IfNotPresent
@@ -242,7 +240,7 @@ spec:
                 type: boolean
             required:
             - certificateRef
-            - environmentRef
+            - configRef
             type: object
           status:
             description: ServerStatus defines the observed state of Server.

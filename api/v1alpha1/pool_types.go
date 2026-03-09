@@ -7,7 +7,7 @@ import (
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Environment",type=string,JSONPath=`.spec.environmentRef`
+// +kubebuilder:printcolumn:name="Config",type=string,JSONPath=`.spec.configRef`
 // +kubebuilder:printcolumn:name="Type",type=string,JSONPath=`.spec.service.type`
 // +kubebuilder:printcolumn:name="Endpoints",type=integer,JSONPath=`.status.endpoints`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
@@ -33,12 +33,12 @@ type PoolList struct {
 
 // PoolSpec defines the desired state of Pool.
 type PoolSpec struct {
-	// EnvironmentRef references the Environment this Pool belongs to.
-	EnvironmentRef string `json:"environmentRef"`
+	// ConfigRef references the Config this Pool belongs to.
+	ConfigRef string `json:"configRef"`
 
 	// Selector is a set of labels used to select Server Pods for this Pool's Service.
-	// The environment label is always added automatically.
-	// If empty or nil, the Pool selects all Server Pods in the Environment.
+	// The config label is always added automatically.
+	// If empty or nil, the Pool selects all Server Pods in the Config.
 	// +optional
 	Selector map[string]string `json:"selector,omitempty"`
 

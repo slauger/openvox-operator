@@ -19,13 +19,13 @@ A Kubernetes Operator that maps [OpenVox Server](https://github.com/OpenVoxProje
 
 ## How It Works
 
-The operator manages OpenVox Server environments through a set of Custom Resource Definitions (CRDs):
+The operator manages OpenVox Server infrastructure through a set of Custom Resource Definitions (CRDs):
 
 | Kind | Purpose | Creates |
 |---|---|---|
-| **Environment** | Shared config (puppet.conf, auth.conf, etc.), PuppetDB connection | ConfigMaps, Secrets, ServiceAccount |
+| **Config** | Shared config (puppet.conf, auth.conf, etc.), PuppetDB connection | ConfigMaps, Secrets, ServiceAccount |
 | **CertificateAuthority** | CA infrastructure: keys, signing, split Secrets (cert, key, CRL) | PVC, Job, ServiceAccount, Role, RoleBinding, 3 Secrets |
-| **SigningPolicy** | Declarative CSR signing policy (any, pattern, CSR attributes) | *(rendered into Environment's autosign Secret)* |
+| **SigningPolicy** | Declarative CSR signing policy (any, pattern, CSR attributes) | *(rendered into Config's autosign Secret)* |
 | **Certificate** | Lifecycle of a single certificate (request, sign) | TLS Secret |
 | **Server** | OpenVox Server instance pool (CA and/or server role) | Deployment |
 | **Pool** | Service + optional Gateway API TLSRoute for Server Pods | Service, TLSRoute (optional) |

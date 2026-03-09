@@ -16,10 +16,10 @@ import (
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
 
-func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *openvoxv1alpha1.Server, env *openvoxv1alpha1.Environment, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority) error {
+func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *openvoxv1alpha1.Server, cfg *openvoxv1alpha1.Config, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority) error {
 	logger := log.FromContext(ctx)
 	deployName := server.Name
-	image := resolveImage(server, env)
+	image := resolveImage(server, cfg)
 
 	replicas := int32(1)
 	if server.Spec.Replicas != nil {
@@ -27,13 +27,18 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 	}
 
 	javaArgs := resolveJavaArgs(server)
+	// Override max-active-instances via JVM system property.
+	// The ConfigMap sets max-active-instances: 1 as a safe default,
+	// but each Server can specify its own value. HOCON's Typesafe Config
+	// library resolves -D system properties as overrides.
+	javaArgs = fmt.Sprintf("%s -Djruby-puppet.max-active-instances=%d", javaArgs, server.Spec.MaxActiveInstances)
 
 	role := RoleServer
 	if server.Spec.CA && !server.Spec.Server {
 		role = RoleCA
 	}
 
-	labels := serverLabels(server.Spec.EnvironmentRef, server.Name, role)
+	labels := serverLabels(server.Spec.ConfigRef, server.Name, role)
 	if server.Spec.CA {
 		labels[LabelCA] = "true"
 	}
@@ -43,7 +48,7 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 		strategy = appsv1.DeploymentStrategy{Type: appsv1.RecreateDeploymentStrategyType}
 	}
 
-	configMapName := fmt.Sprintf("%s-config", server.Spec.EnvironmentRef)
+	configMapName := fmt.Sprintf("%s-config", server.Spec.ConfigRef)
 
 	// Compute hashes for automatic rollout on config/secret changes
 	configHash, err := r.configMapHash(ctx, configMapName, server.Namespace)
@@ -71,7 +76,7 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 
 	// Add code image annotation for server:true pods to trigger rollout on image change
 	if server.Spec.Server {
-		if code := resolveCode(server, env); code != nil && code.Image != "" {
+		if code := resolveCode(server, cfg); code != nil && code.Image != "" {
 			annotations["openvox.voxpupuli.org/code-image"] = code.Image
 		}
 	}
@@ -100,7 +105,7 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 						Labels:      labels,
 						Annotations: annotations,
 					},
-					Spec: r.buildPodSpec(server, env, cert, ca, image, javaArgs, configMapName),
+					Spec: r.buildPodSpec(server, cfg, cert, ca, image, javaArgs, configMapName),
 				},
 			},
 		}
@@ -118,11 +123,11 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 	deploy.Spec.Strategy = strategy
 	deploy.Spec.Template.Labels = labels
 	deploy.Spec.Template.Annotations = annotations
-	deploy.Spec.Template.Spec = r.buildPodSpec(server, env, cert, ca, image, javaArgs, configMapName)
+	deploy.Spec.Template.Spec = r.buildPodSpec(server, cfg, cert, ca, image, javaArgs, configMapName)
 	return r.Update(ctx, deploy)
 }
 
-func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, env *openvoxv1alpha1.Environment, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, image, javaArgs, configMapName string) corev1.PodSpec {
+func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *openvoxv1alpha1.Config, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, image, javaArgs, configMapName string) corev1.PodSpec {
 	sslSecretName := cert.Status.SecretName
 	caSecretName := ca.Status.CASecretName
 
@@ -136,6 +141,8 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, env *ope
 		{Name: "auth-conf", MountPath: "/etc/puppetlabs/puppetserver/conf.d/auth.conf", SubPath: "auth.conf", ReadOnly: true},
 		{Name: "ca-conf", MountPath: "/etc/puppetlabs/puppetserver/conf.d/ca.conf", SubPath: "ca.conf", ReadOnly: true},
 		{Name: "ca-cfg", MountPath: "/etc/puppetlabs/puppetserver/services.d/ca.cfg", SubPath: "ca.cfg", ReadOnly: true},
+		{Name: "logback-xml", MountPath: "/etc/puppetlabs/puppetserver/logback.xml", SubPath: "logback.xml", ReadOnly: true},
+		{Name: "metrics-conf", MountPath: "/etc/puppetlabs/puppetserver/conf.d/metrics.conf", SubPath: "metrics.conf", ReadOnly: true},
 	}
 
 	// SSL: emptyDir populated by init container from secret volumes.
@@ -169,6 +176,8 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, env *ope
 		configMapVolume("auth-conf", configMapName, "auth.conf"),
 		configMapVolume("ca-conf", configMapName, "ca.conf"),
 		configMapVolume("product-conf", configMapName, "product.conf"),
+		configMapVolume("logback-xml", configMapName, "logback.xml"),
+		configMapVolume("metrics-conf", configMapName, "metrics.conf"),
 	}
 
 	// Non-CA pods: mount CRL secret as directory (NOT SubPath) for kubelet auto-sync,
@@ -217,7 +226,7 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, env *ope
 			configMapVolumeWithKey("ca-cfg", configMapName, "ca-enabled.cfg", "ca.cfg"),
 		)
 
-		// Mount autosign policy Secret (always present, managed by Environment controller)
+		// Mount autosign policy Secret (always present, managed by Config controller)
 		autosignSecretName := fmt.Sprintf("%s-autosign-policy", ca.Name)
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      "autosign-policy",
@@ -241,10 +250,10 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, env *ope
 
 	// Code volume: only mounted for server:true pods (CA-only pods don't compile catalogs)
 	if server.Spec.Server {
-		if code := resolveCode(server, env); code != nil {
+		if code := resolveCode(server, cfg); code != nil {
 			volumeMounts = append(volumeMounts, corev1.VolumeMount{
 				Name:      "code",
-				MountPath: env.Spec.Puppet.EnvironmentPath,
+				MountPath: cfg.Spec.Puppet.EnvironmentPath,
 				ReadOnly:  true,
 			})
 			switch {
@@ -279,7 +288,7 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, env *ope
 	container := corev1.Container{
 		Name:            "openvox-server",
 		Image:           image,
-		ImagePullPolicy: env.Spec.Image.PullPolicy,
+		ImagePullPolicy: cfg.Spec.Image.PullPolicy,
 		Env: []corev1.EnvVar{
 			{Name: "JAVA_ARGS", Value: javaArgs},
 		},
@@ -332,7 +341,7 @@ chmod 640 /ssl/private_keys/puppet.pem`
 	initContainer := corev1.Container{
 		Name:            "tls-init",
 		Image:           image,
-		ImagePullPolicy: env.Spec.Image.PullPolicy,
+		ImagePullPolicy: cfg.Spec.Image.PullPolicy,
 		Command:         []string{"sh", "-c", sslInitScript},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: "ssl", MountPath: "/ssl"},
@@ -342,7 +351,7 @@ chmod 640 /ssl/private_keys/puppet.pem`
 	}
 
 	podSpec := corev1.PodSpec{
-		ServiceAccountName: fmt.Sprintf("%s-server", server.Spec.EnvironmentRef),
+		ServiceAccountName: fmt.Sprintf("%s-server", server.Spec.ConfigRef),
 		SecurityContext: &corev1.PodSecurityContext{
 			RunAsUser:    int64Ptr(1001),
 			RunAsGroup:   int64Ptr(0),
@@ -355,7 +364,7 @@ chmod 640 /ssl/private_keys/puppet.pem`
 
 	// Add imagePullSecrets for code image if configured
 	if server.Spec.Server {
-		if code := resolveCode(server, env); code != nil && code.ImagePullSecret != "" {
+		if code := resolveCode(server, cfg); code != nil && code.ImagePullSecret != "" {
 			podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, corev1.LocalObjectReference{
 				Name: code.ImagePullSecret,
 			})

@@ -6,7 +6,7 @@ A single Server with both CA and server role enabled. Suitable for development a
 
 ```yaml
 apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: Environment
+kind: Config
 metadata:
   name: lab
 spec:
@@ -19,7 +19,7 @@ kind: CertificateAuthority
 metadata:
   name: lab-ca
 spec:
-  environmentRef: lab
+  configRef: lab
 ---
 apiVersion: openvox.voxpupuli.org/v1alpha1
 kind: SigningPolicy
@@ -45,7 +45,7 @@ kind: Server
 metadata:
   name: puppet
 spec:
-  environmentRef: lab
+  configRef: lab
   certificateRef: lab-cert
   ca: true
   server: true
@@ -56,7 +56,7 @@ kind: Pool
 metadata:
   name: puppet
 spec:
-  environmentRef: lab
+  configRef: lab
   selector:
     openvox.voxpupuli.org/ca: "true"
   service:
@@ -69,7 +69,7 @@ Separate CA server, a stable server pool with 3 replicas, and a canary server ru
 
 ```yaml
 apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: Environment
+kind: Config
 metadata:
   name: production
 spec:
@@ -90,7 +90,7 @@ kind: CertificateAuthority
 metadata:
   name: production-ca
 spec:
-  environmentRef: production
+  configRef: production
   storage:
     size: 1Gi
 ---
@@ -138,7 +138,7 @@ kind: Pool
 metadata:
   name: production-ca
 spec:
-  environmentRef: production
+  configRef: production
   selector:
     openvox.voxpupuli.org/ca: "true"
   service:
@@ -149,7 +149,7 @@ kind: Pool
 metadata:
   name: puppet
 spec:
-  environmentRef: production
+  configRef: production
   selector:
     openvox.voxpupuli.org/role: server
   service:
@@ -161,7 +161,7 @@ kind: Server
 metadata:
   name: ca
 spec:
-  environmentRef: production
+  configRef: production
   certificateRef: ca-cert
   ca: true
   server: true
@@ -179,7 +179,7 @@ kind: Server
 metadata:
   name: stable
 spec:
-  environmentRef: production
+  configRef: production
   certificateRef: stable-cert
   replicas: 3
   maxActiveInstances: 2
@@ -198,7 +198,7 @@ kind: Server
 metadata:
   name: canary
 spec:
-  environmentRef: production
+  configRef: production
   certificateRef: canary-cert
   image:
     tag: "8.13.0"

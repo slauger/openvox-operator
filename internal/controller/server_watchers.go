@@ -21,8 +21,8 @@ func enqueueServersForSecret(c client.Client) handler.EventHandler {
 			return nil
 		}
 
-		envName := labels[LabelEnvironment]
-		if envName == "" {
+		cfgName := labels[LabelConfig]
+		if cfgName == "" {
 			return nil
 		}
 
@@ -33,7 +33,7 @@ func enqueueServersForSecret(c client.Client) handler.EventHandler {
 
 		var requests []ctrl.Request
 		for _, server := range serverList.Items {
-			if server.Spec.EnvironmentRef == envName {
+			if server.Spec.ConfigRef == cfgName {
 				requests = append(requests, ctrl.Request{
 					NamespacedName: types.NamespacedName{
 						Name:      server.Name,

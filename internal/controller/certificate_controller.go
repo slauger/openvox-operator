@@ -29,7 +29,7 @@ type CertificateReconciler struct {
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificates/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificates/finalizers,verbs=update
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificateauthorities,verbs=get;list;watch
-// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=environments,verbs=get;list;watch
+// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=configs,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=servers,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=pools,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
@@ -164,7 +164,7 @@ func (r *CertificateReconciler) reconcileCertSigning(ctx context.Context, cert *
 
 // createOrUpdateTLSSecret creates or updates a Secret containing cert.pem and key.pem.
 func (r *CertificateReconciler) createOrUpdateTLSSecret(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, name string, certPEM, keyPEM []byte) error {
-	labels := environmentLabels(ca.Spec.EnvironmentRef)
+	labels := configLabels(ca.Spec.ConfigRef)
 	labels["openvox.voxpupuli.org/certificate"] = cert.Name
 
 	secret := &corev1.Secret{}

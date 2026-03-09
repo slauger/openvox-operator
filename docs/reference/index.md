@@ -6,29 +6,29 @@ All resources use the API group `openvox.voxpupuli.org/v1alpha1`.
 
 ```mermaid
 graph TD
-    Env["Environment"]
+    Cfg["Config"]
     CA["CertificateAuthority"]
     SP["SigningPolicy"]
     Cert["Certificate"]
     Srv["Server"]
     Pool["Pool"]
 
-    Env -->|environmentRef| CA
+    Cfg -->|configRef| CA
     CA -->|certificateAuthorityRef| SP
     CA -->|authorityRef| Cert
     Cert -->|certificateRef| Srv
-    Env -->|environmentRef| Srv
+    Cfg -->|configRef| Srv
     Srv -->|selector| Pool
-    Env -->|environmentRef| Pool
+    Cfg -->|configRef| Pool
 ```
 
-Each resource references its parent. The operator reconciles them in order: an Environment must exist before a CertificateAuthority can reference it, a CertificateAuthority must be `Ready` before a Certificate can be signed, and a Certificate must be `Signed` before a Server creates its Deployment. SigningPolicies can be created at any time and take effect within ~60 seconds.
+Each resource references its parent. The operator reconciles them in order: a Config must exist before a CertificateAuthority can reference it, a CertificateAuthority must be `Ready` before a Certificate can be signed, and a Certificate must be `Signed` before a Server creates its Deployment. SigningPolicies can be created at any time and take effect within ~60 seconds.
 
 ## Resources
 
 | Kind | Short Name | Purpose |
 |---|---|---|
-| [Environment](environment.md) | `env` | Shared config (puppet.conf, auth.conf), PuppetDB connection |
+| [Config](config.md) | `cfg` | Shared config (puppet.conf, auth.conf), PuppetDB connection |
 | [CertificateAuthority](certificateauthority.md) | `ca` | CA infrastructure: PVC, keys, 3 CA Secrets (cert, key, CRL) |
 | [SigningPolicy](signingpolicy.md) | `sp` | Declarative CSR signing policy for a CA |
 | [Certificate](certificate.md) | `cert` | Lifecycle of a single certificate (request, sign) |
@@ -57,7 +57,7 @@ These types are reused across multiple CRDs.
 
 ### CodeSpec
 
-Used by [Environment](environment.md) and [Server](server.md) to define the Puppet code source. Either `claimName` or `image` may be set, not both.
+Used by [Config](config.md) and [Server](server.md) to define the Puppet code source. Either `claimName` or `image` may be set, not both.
 
 | Field | Type | Default | Description |
 |---|---|---|---|

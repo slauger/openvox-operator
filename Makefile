@@ -79,9 +79,9 @@ local-stack: ## Deploy openvox-stack via Helm with local images.
 	helm upgrade --install openvox-stack charts/openvox-stack \
 		--namespace $(STACK_NAMESPACE) --create-namespace \
 		--values $(STACK_VALUES) \
-		--set environment.image.repository=openvox-server \
-		--set environment.image.tag=$(LOCAL_TAG) \
-		--set environment.image.pullPolicy=Never
+		--set config.image.repository=openvox-server \
+		--set config.image.tag=$(LOCAL_TAG) \
+		--set config.image.pullPolicy=Never
 	@echo ""
 	@echo "Stack deployed with openvox-server:$(LOCAL_TAG) in $(STACK_NAMESPACE) using $(STACK_VALUES)"
 

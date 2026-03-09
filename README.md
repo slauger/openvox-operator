@@ -28,10 +28,10 @@ A Kubernetes Operator that maps [OpenVox Server](https://github.com/OpenVoxProje
 ```mermaid
 graph TD
     Op["🦊 OpenVox Operator"]
-    Op -->|manages| Env
+    Op -->|manages| Cfg
 
-    Env["📋 Environment<br/>production"]
-    Env --> CA_CRD["🔐 CertificateAuthority<br/>production-ca"]
+    Cfg["📋 Config<br/>production"]
+    Cfg --> CA_CRD["🔐 CertificateAuthority<br/>production-ca"]
     CA_CRD --> Cert_CA["📜 Certificate: ca-cert"]
     CA_CRD --> Cert_Stable["📜 Certificate: stable-cert"]
     CA_CRD --> Cert_Canary["📜 Certificate: canary-cert"]
@@ -50,7 +50,7 @@ graph TD
     CN_D -->|mounts| Code
 ```
 
-An **Environment** is the root resource - it holds shared configuration (puppet.conf, PuppetDB connection) and manages code deployment. A **CertificateAuthority** initializes the CA infrastructure and periodically refreshes the CRL. Each **Certificate** is signed by the CA and stored as a Kubernetes Secret. A **Server** references a Certificate and creates a Deployment - it can run as CA, catalog server, or both. **Pools** create Services that select Server pods by label, with optional Gateway API TLSRoute for SNI-based routing.
+A **Config** is the root resource - it holds shared configuration (puppet.conf, PuppetDB connection) and manages code deployment. A **CertificateAuthority** initializes the CA infrastructure and periodically refreshes the CRL. Each **Certificate** is signed by the CA and stored as a Kubernetes Secret. A **Server** references a Certificate and creates a Deployment - it can run as CA, catalog server, or both. **Pools** create Services that select Server pods by label, with optional Gateway API TLSRoute for SNI-based routing.
 
 Puppet code is mounted into Server pods via **OCI image volumes** (immutable, automatic rollout on image change, K8s 1.31+) or a **PVC** (mutable, externally managed). See [Code Deployment](docs/concepts/code-deployment.md) for details.
 
@@ -105,9 +105,9 @@ All resources use the API group `openvox.voxpupuli.org/v1alpha1`.
 
 | Kind | Purpose | Creates |
 |---|---|---|
-| **`Environment`** | Shared config (puppet.conf, auth.conf, etc.), PuppetDB connection | ConfigMaps, Secrets, ServiceAccount |
+| **`Config`** | Shared config (puppet.conf, auth.conf, etc.), PuppetDB connection | ConfigMaps, Secrets, ServiceAccount |
 | **`CertificateAuthority`** | CA infrastructure: keys, signing, split Secrets (cert, key, CRL) | PVC, Job, ServiceAccount, Role, RoleBinding, 3 Secrets |
-| **`SigningPolicy`** | Declarative CSR signing policy (any, pattern, DNS SANs, CSR attributes) | *(rendered into Environment's autosign Secret)* |
+| **`SigningPolicy`** | Declarative CSR signing policy (any, pattern, DNS SANs, CSR attributes) | *(rendered into Config's autosign Secret)* |
 | **`Certificate`** | Lifecycle of a single certificate (request, sign) | TLS Secret |
 | **`Server`** | OpenVox Server instance pool (CA and/or server role) | Deployment |
 | **`Pool`** | Service + optional Gateway API TLSRoute for Server Pods | Service, TLSRoute (optional) |
@@ -153,7 +153,7 @@ helm install openvox-operator \
 
 ### 2. Deploy a Stack
 
-The `openvox-stack` chart deploys a complete OpenVox environment (Environment, CertificateAuthority, SigningPolicy, Certificate, Server, Pool) with a single Helm release:
+The `openvox-stack` chart deploys a complete OpenVox stack (Config, CertificateAuthority, SigningPolicy, Certificate, Server, Pool) with a single Helm release:
 
 ```bash
 helm install production \

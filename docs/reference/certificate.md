@@ -69,7 +69,7 @@ flowchart TD
     CreateSecret --> Signed["Phase: Signed"]
 ```
 
-The controller discovers the CA Service automatically by finding Servers with `ca: true` in the same Environment and the Pools whose selector matches them.
+The controller discovers the CA Service automatically by finding Servers with `ca: true` in the same Config and the Pools whose selector matches them.
 
 ## Created Resources
 

@@ -17,8 +17,8 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.environmentRef
-      name: Environment
+    - jsonPath: .spec.configRef
+      name: Config
       type: string
     - jsonPath: .status.phase
       name: Phase
@@ -58,16 +58,15 @@ spec:
                 description: AllowSubjectAltNames controls whether SANs are allowed
                   in CSRs.
                 type: boolean
+              configRef:
+                description: ConfigRef references the Config this CA belongs to.
+                type: string
               crlRefreshInterval:
                 default: 5m
                 description: |-
                   CRLRefreshInterval defines how often the operator fetches the CRL from the CA
                   and updates the CRL Secret. Only applies to non-CA servers.
                   Uses Go duration format: "5m", "1h", "30s".
-                type: string
-              environmentRef:
-                description: EnvironmentRef references the Environment this CA belongs
-                  to.
                 type: string
               intermediateCA:
                 description: IntermediateCA configures an intermediate CA setup.
@@ -104,7 +103,7 @@ spec:
                   Plain numbers are interpreted as seconds for backwards compatibility.
                 type: string
             required:
-            - environmentRef
+            - configRef
             type: object
           status:
             description: CertificateAuthorityStatus defines the observed state of

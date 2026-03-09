@@ -26,7 +26,7 @@ type ServerReconciler struct {
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=servers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=servers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=servers/finalizers,verbs=update
-// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=environments,verbs=get;list;watch
+// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=configs,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificates,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificateauthorities,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
@@ -52,11 +52,11 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 	}
 
-	// Resolve Environment
-	env := &openvoxv1alpha1.Environment{}
-	if err := r.Get(ctx, types.NamespacedName{Name: server.Spec.EnvironmentRef, Namespace: server.Namespace}, env); err != nil {
+	// Resolve Config
+	cfg := &openvoxv1alpha1.Config{}
+	if err := r.Get(ctx, types.NamespacedName{Name: server.Spec.ConfigRef, Namespace: server.Namespace}, cfg); err != nil {
 		if errors.IsNotFound(err) {
-			logger.Error(err, "referenced Environment not found", "environmentRef", server.Spec.EnvironmentRef)
+			logger.Error(err, "referenced Config not found", "configRef", server.Spec.ConfigRef)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
@@ -90,7 +90,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	// Reconcile Deployment
-	if err := r.reconcileDeployment(ctx, server, env, cert, ca); err != nil {
+	if err := r.reconcileDeployment(ctx, server, cfg, cert, ca); err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconciling Deployment: %w", err)
 	}
 

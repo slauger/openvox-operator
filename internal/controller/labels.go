@@ -2,32 +2,32 @@ package controller
 
 const (
 	// Label keys used across all resources.
-	LabelEnvironment = "openvox.voxpupuli.org/environment"
-	LabelPoolPrefix  = "openvox.voxpupuli.org/pool-"
-	LabelServer      = "openvox.voxpupuli.org/server"
-	LabelRole        = "openvox.voxpupuli.org/role"
-	LabelCA          = "openvox.voxpupuli.org/ca"
+	LabelConfig     = "openvox.voxpupuli.org/config"
+	LabelPoolPrefix = "openvox.voxpupuli.org/pool-"
+	LabelServer     = "openvox.voxpupuli.org/server"
+	LabelRole       = "openvox.voxpupuli.org/role"
+	LabelCA         = "openvox.voxpupuli.org/ca"
 
 	// Role values.
 	RoleCA     = "ca"
 	RoleServer = "server"
 )
 
-// environmentLabels returns labels for resources owned by an Environment.
-func environmentLabels(envName string) map[string]string {
+// configLabels returns labels for resources owned by a Config.
+func configLabels(cfgName string) map[string]string {
 	return map[string]string{
 		"app.kubernetes.io/name":       "openvox",
 		"app.kubernetes.io/managed-by": "openvox-operator",
-		LabelEnvironment:               envName,
+		LabelConfig:                    cfgName,
 	}
 }
 
 // serverLabels returns labels for Pods/resources owned by a Server.
-func serverLabels(envName, serverName, role string) map[string]string {
+func serverLabels(cfgName, serverName, role string) map[string]string {
 	labels := map[string]string{
 		"app.kubernetes.io/name":       "openvox",
 		"app.kubernetes.io/managed-by": "openvox-operator",
-		LabelEnvironment:               envName,
+		LabelConfig:                    cfgName,
 		LabelServer:                    serverName,
 		LabelRole:                      role,
 	}

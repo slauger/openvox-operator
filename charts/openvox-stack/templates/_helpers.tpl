@@ -7,10 +7,10 @@ Defaults to the Release name, overridable via fullnameOverride.
 {{- end }}
 
 {{/*
-Environment name — defaults to fullname.
+Config name — defaults to fullname.
 */}}
-{{- define "openvox-stack.envName" -}}
-{{- .Values.environment.name | default (include "openvox-stack.fullname" .) }}
+{{- define "openvox-stack.configName" -}}
+{{- .Values.config.name | default (include "openvox-stack.fullname" .) }}
 {{- end }}
 
 {{/*

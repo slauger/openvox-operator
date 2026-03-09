@@ -16,6 +16,8 @@ A Kubernetes Operator for running [OpenVox Server](https://github.com/OpenVoxPro
 - 🔒 **Rootless & OpenShift Ready** - Random UID compatible, no root, no ezbake, no privilege escalation
 - 🪶 **Minimal Image** - UBI9-based, no system Ruby, no ezbake packaging - smaller footprint, fewer updates
 - 🧠 **Auto-tuned JVM** - Heap size calculated from memory limits (90%) - no manual `-Xmx` tuning needed
+- 📦 **OCI Image Volumes** - Package Puppet code as OCI images, deploy immutably with automatic rollout (K8s 1.31+)
+- 🌐 **Gateway API** - SNI-based TLSRoute support - share a single LoadBalancer across environments via TLS passthrough
 - 🔃 **Automatic Config Rollout** - Config and certificate changes trigger rolling restarts automatically
 - ☸️ **Kubernetes-Native** - All config via ConfigMaps/Secrets - no entrypoint scripts, no ENV translation
 
@@ -43,21 +45,26 @@ graph TD
     Canary --> CN_D["Deployment"]
 
     CA_D -->|mounts| CA_PVC["💾 CA Data PVC (RWO)"]
-    CA_D -->|mounts| Code_PVC
-    ST_D -->|mounts| Code_PVC["📦 Code PVC (RWX)"]
-    CN_D -->|mounts| Code_PVC
+    CA_D -->|mounts| Code["📦 Code<br/>(OCI Image or PVC)"]
+    ST_D -->|mounts| Code
+    CN_D -->|mounts| Code
 ```
 
 ### Pool Traffic Flow
 
+Pools can expose Servers via dedicated LoadBalancer Services or share a single LoadBalancer using Gateway API TLSRoute with SNI-based routing:
+
 ```mermaid
 graph LR
-    Agent["🖥️ Agents"] --> LB
+    Agent["🖥️ Agents"] --> GW
     Agent --> CA_SVC
 
     subgraph Kubernetes
-        LB["🌐 Pool: puppet<br/>Service (LoadBalancer)"]
-        CA_SVC["🔐 Pool: puppet-ca<br/>Service (LoadBalancer)"]
+        GW["🌐 Gateway<br/>(shared LoadBalancer)"]
+        CA_SVC["🔐 Pool: puppet-ca<br/>Service (ClusterIP)"]
+
+        GW -->|"TLSRoute<br/>SNI: puppet.example.com"| LB["Pool: puppet<br/>Service (ClusterIP)"]
+        GW -->|"TLSRoute<br/>SNI: puppet-ca.example.com"| CA_SVC
 
         LB --> CA["🔐 Server: ca<br/>replicas: 1"]
         LB --> Stable["⚙️ Server: stable<br/>replicas: 3 - v8.12.1"]
@@ -67,7 +74,7 @@ graph LR
     end
 ```
 
-The CA server can be member of both pools - it handles CA requests via the `puppet-ca` service and can also serve catalog requests from external agents via the `puppet` service.
+The CA server can be member of both pools - it handles CA requests via the `puppet-ca` service and can also serve catalog requests from external agents via the `puppet` service. Gateway API support is optional - Pools work with plain LoadBalancer/NodePort Services without it.
 
 ## CRD Model
 
@@ -75,12 +82,12 @@ All resources use the API group `openvox.voxpupuli.org/v1alpha1`.
 
 | Kind | Purpose | Creates |
 |---|---|---|
-| **`Environment`** | Shared config (puppet.conf, auth.conf, etc.), PuppetDB connection | ConfigMaps, ServiceAccount |
-| **`CertificateAuthority`** | CA infrastructure: keys, signing, split Secrets (cert, key, CRL) | PVC, CA Setup Job, 3 CA Secrets |
-| **`SigningPolicy`** | Declarative CSR signing policy (any, pattern, DNS SANs, CSR attributes) | Autosign Policy Secret |
+| **`Environment`** | Shared config (puppet.conf, auth.conf, etc.), PuppetDB connection | ConfigMaps, Secrets, ServiceAccount |
+| **`CertificateAuthority`** | CA infrastructure: keys, signing, split Secrets (cert, key, CRL) | PVC, Job, ServiceAccount, Role, RoleBinding, 3 Secrets |
+| **`SigningPolicy`** | Declarative CSR signing policy (any, pattern, DNS SANs, CSR attributes) | *(rendered into Environment's autosign Secret)* |
 | **`Certificate`** | Lifecycle of a single certificate (request, sign) | TLS Secret |
-| **`Server`** | OpenVox Server instance pool | Deployment, HPA |
-| **`Pool`** | Owns a Kubernetes Service that selects Server Pods | Service (type, annotations, port) |
+| **`Server`** | OpenVox Server instance pool (CA and/or server role) | Deployment |
+| **`Pool`** | Service + optional Gateway API TLSRoute for Server Pods | Service, TLSRoute (optional) |
 
 ### Planned (not yet implemented)
 

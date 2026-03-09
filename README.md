@@ -6,7 +6,7 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/slauger/openvox-operator.svg)](https://pkg.go.dev/github.com/slauger/openvox-operator)
 [![License](https://img.shields.io/github/license/slauger/openvox-operator)](LICENSE)
 
-A Kubernetes Operator for running [OpenVox Server](https://github.com/OpenVoxProject) environments on **Kubernetes** and **OpenShift**.
+A Kubernetes Operator that maps [OpenVox Server](https://github.com/OpenVoxProject) infrastructure onto native building blocks — CRDs, Secrets, OCI image volumes, and Gateway API — for running Puppet on **Kubernetes** and **OpenShift**.
 
 - 🔐 **Automated CA Lifecycle** - CA initialization, certificate signing, distribution, and periodic CRL refresh - fully managed
 - 📜 **Declarative Signing Policies** - CSR approval via patterns, DNS SANs, CSR attributes, or open signing - no autosign scripts

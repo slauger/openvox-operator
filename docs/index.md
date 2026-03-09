@@ -1,6 +1,6 @@
 # OpenVox Operator
 
-A Kubernetes Operator for running [OpenVox Server](https://github.com/OpenVoxProject) environments on **Kubernetes** and **OpenShift**.
+A Kubernetes Operator that maps [OpenVox Server](https://github.com/OpenVoxProject) infrastructure onto native building blocks — CRDs, Secrets, OCI image volumes, and Gateway API — for running Puppet on **Kubernetes** and **OpenShift**.
 
 ## Features
 

@@ -118,9 +118,11 @@ func (r *ConfigReconciler) reconcileConfigMap(ctx context.Context, cfg *openvoxv
 		"webserver.conf":    r.renderWebserverConf(cfg),
 		"webserver-ca.conf": r.renderWebserverConfCA(cfg),
 		"puppetserver.conf": r.renderPuppetserverConf(cfg),
-		"auth.conf":         r.renderAuthConf(),
+		"auth.conf":         r.renderAuthConf(cfg),
 		"ca.conf":           r.renderCAConf(ca),
 		"product.conf":      "product: {\n    check-for-updates: false\n}\n",
+		"logback.xml":       r.renderLogbackXML(cfg),
+		"metrics.conf":      r.renderMetricsConf(cfg),
 		"ca-enabled.cfg":    "puppetlabs.services.ca.certificate-authority-service/certificate-authority-service\npuppetlabs.trapperkeeper.services.watcher.filesystem-watch-service/filesystem-watch-service\n",
 		"ca-disabled.cfg":   "puppetlabs.services.ca.certificate-authority-disabled-service/certificate-authority-disabled-service\npuppetlabs.trapperkeeper.services.watcher.filesystem-watch-service/filesystem-watch-service\n",
 	}
@@ -234,8 +236,12 @@ func (r *ConfigReconciler) renderPuppetDBConf(cfg *openvoxv1alpha1.Config) strin
 // renderWebserverConf returns the webserver.conf for non-CA servers.
 // CRL is read from the kubelet-synced secret mount at /etc/puppetlabs/puppet/crl/.
 func (r *ConfigReconciler) renderWebserverConf(cfg *openvoxv1alpha1.Config) string {
-	return `webserver: {
-    client-auth: want
+	clientAuth := "want"
+	if cfg.Spec.PuppetServer.ClientAuth != "" {
+		clientAuth = cfg.Spec.PuppetServer.ClientAuth
+	}
+	return fmt.Sprintf(`webserver: {
+    client-auth: %s
     ssl-host: 0.0.0.0
     ssl-port: 8140
     ssl-cert: /etc/puppetlabs/puppet/ssl/certs/puppet.pem
@@ -243,14 +249,18 @@ func (r *ConfigReconciler) renderWebserverConf(cfg *openvoxv1alpha1.Config) stri
     ssl-ca-cert: /etc/puppetlabs/puppet/ssl/certs/ca.pem
     ssl-crl-path: /etc/puppetlabs/puppet/crl/ca_crl.pem
 }
-`
+`, clientAuth)
 }
 
 // renderWebserverConfCA returns the webserver.conf for CA servers.
 // CRL is read from the PVC-backed ssl directory, managed by Puppetserver itself.
 func (r *ConfigReconciler) renderWebserverConfCA(cfg *openvoxv1alpha1.Config) string {
-	return `webserver: {
-    client-auth: want
+	clientAuth := "want"
+	if cfg.Spec.PuppetServer.ClientAuth != "" {
+		clientAuth = cfg.Spec.PuppetServer.ClientAuth
+	}
+	return fmt.Sprintf(`webserver: {
+    client-auth: %s
     ssl-host: 0.0.0.0
     ssl-port: 8140
     ssl-cert: /etc/puppetlabs/puppet/ssl/certs/puppet.pem
@@ -258,37 +268,63 @@ func (r *ConfigReconciler) renderWebserverConfCA(cfg *openvoxv1alpha1.Config) st
     ssl-ca-cert: /etc/puppetlabs/puppet/ssl/certs/ca.pem
     ssl-crl-path: /etc/puppetlabs/puppet/ssl/crl.pem
 }
-`
+`, clientAuth)
 }
 
 func (r *ConfigReconciler) renderPuppetserverConf(cfg *openvoxv1alpha1.Config) string {
-	return `jruby-puppet: {
-    ruby-load-path: [/opt/puppetlabs/puppet/lib/ruby/vendor_ruby]
-    gem-home: /opt/puppetlabs/server/data/puppetserver/jruby-gems
-    gem-path: [${jruby-puppet.gem-home}, "/opt/puppetlabs/server/data/puppetserver/vendored-jruby-gems", "/opt/puppetlabs/puppet/lib/ruby/vendor_gems"]
-    master-conf-dir: /etc/puppetlabs/puppet
-    master-code-dir: /etc/puppetlabs/code
-    master-var-dir: /opt/puppetlabs/server/data/puppetserver
-    master-run-dir: /var/run/puppetlabs/puppetserver
-    master-log-dir: /var/log/puppetlabs/puppetserver
-    max-active-instances: 1
-    max-requests-per-instance: 0
+	ps := cfg.Spec.PuppetServer
+
+	maxRequests := int32(0)
+	if ps.MaxRequestsPerInstance != 0 {
+		maxRequests = ps.MaxRequestsPerInstance
+	}
+
+	borrowTimeout := int32(1200000)
+	if ps.BorrowTimeout != 0 {
+		borrowTimeout = ps.BorrowTimeout
+	}
+
+	compileMode := "off"
+	if ps.CompileMode != "" {
+		compileMode = ps.CompileMode
+	}
+
+	var sb strings.Builder
+	sb.WriteString("jruby-puppet: {\n")
+	sb.WriteString("    ruby-load-path: [/opt/puppetlabs/puppet/lib/ruby/vendor_ruby]\n")
+	sb.WriteString("    gem-home: /opt/puppetlabs/server/data/puppetserver/jruby-gems\n")
+	sb.WriteString("    gem-path: [${jruby-puppet.gem-home}, \"/opt/puppetlabs/server/data/puppetserver/vendored-jruby-gems\", \"/opt/puppetlabs/puppet/lib/ruby/vendor_gems\"]\n")
+	sb.WriteString("    master-conf-dir: /etc/puppetlabs/puppet\n")
+	sb.WriteString("    master-code-dir: /etc/puppetlabs/code\n")
+	sb.WriteString("    master-var-dir: /opt/puppetlabs/server/data/puppetserver\n")
+	sb.WriteString("    master-run-dir: /var/run/puppetlabs/puppetserver\n")
+	sb.WriteString("    master-log-dir: /var/log/puppetlabs/puppetserver\n")
+	sb.WriteString("    max-active-instances: 1\n")
+	fmt.Fprintf(&sb, "    max-requests-per-instance: %d\n", maxRequests)
+	fmt.Fprintf(&sb, "    borrow-timeout: %d\n", borrowTimeout)
+	fmt.Fprintf(&sb, "    compile-mode: %s\n", compileMode)
+	sb.WriteString("}\n")
+
+	sb.WriteString("\nhttp-client: {\n")
+	if ps.HTTPClient != nil {
+		if ps.HTTPClient.ConnectTimeoutMs != nil {
+			fmt.Fprintf(&sb, "    connect-timeout-milliseconds: %d\n", *ps.HTTPClient.ConnectTimeoutMs)
+		}
+		if ps.HTTPClient.IdleTimeoutMs != nil {
+			fmt.Fprintf(&sb, "    idle-timeout-milliseconds: %d\n", *ps.HTTPClient.IdleTimeoutMs)
+		}
+	}
+	sb.WriteString("}\n")
+
+	sb.WriteString("\nprofiler: {\n}\n")
+	sb.WriteString("\ndropsonde: {\n    enabled: false\n}\n")
+
+	return sb.String()
 }
 
-http-client: {
-}
-
-profiler: {
-}
-
-dropsonde: {
-    enabled: false
-}
-`
-}
-
-func (r *ConfigReconciler) renderAuthConf() string {
-	return `authorization: {
+func (r *ConfigReconciler) renderAuthConf(cfg *openvoxv1alpha1.Config) string {
+	var sb strings.Builder
+	sb.WriteString(`authorization: {
     version: 1
     rules: [
         {
@@ -565,7 +601,407 @@ func (r *ConfigReconciler) renderAuthConf() string {
         }
     ]
 }
+`)
+
+	// Insert custom authorization rules before the deny-all rule
+	if len(cfg.Spec.PuppetServer.AuthorizationRules) > 0 {
+		sb.Reset()
+		sb.WriteString("authorization: {\n    version: 1\n    rules: [\n")
+
+		// Re-emit the built-in rules (everything before deny-all is static)
+		builtinRules := r.builtinAuthRules()
+		sb.WriteString(builtinRules)
+
+		// Append custom rules
+		for _, rule := range cfg.Spec.PuppetServer.AuthorizationRules {
+			sb.WriteString("        {\n")
+			sb.WriteString("            match-request: {\n")
+			fmt.Fprintf(&sb, "                path: %q\n", rule.MatchRequest.Path)
+			matchType := rule.MatchRequest.Type
+			if matchType == "" {
+				matchType = "path"
+			}
+			fmt.Fprintf(&sb, "                type: %s\n", matchType)
+			if len(rule.MatchRequest.Method) > 0 {
+				if len(rule.MatchRequest.Method) == 1 {
+					fmt.Fprintf(&sb, "                method: %s\n", rule.MatchRequest.Method[0])
+				} else {
+					fmt.Fprintf(&sb, "                method: [%s]\n", strings.Join(rule.MatchRequest.Method, ", "))
+				}
+			}
+			sb.WriteString("            }\n")
+			if rule.AllowUnauthenticated {
+				sb.WriteString("            allow-unauthenticated: true\n")
+			} else if rule.Allow != "" {
+				fmt.Fprintf(&sb, "            allow: %q\n", rule.Allow)
+			} else if rule.Deny != "" {
+				fmt.Fprintf(&sb, "            deny: %q\n", rule.Deny)
+			}
+			sortOrder := rule.SortOrder
+			if sortOrder == 0 {
+				sortOrder = 500
+			}
+			fmt.Fprintf(&sb, "            sort-order: %d\n", sortOrder)
+			fmt.Fprintf(&sb, "            name: %q\n", rule.Name)
+			sb.WriteString("        },\n")
+		}
+
+		// Deny-all rule (always last)
+		sb.WriteString("        {\n")
+		sb.WriteString("            match-request: {\n")
+		sb.WriteString("                path: \"/\"\n")
+		sb.WriteString("                type: path\n")
+		sb.WriteString("            }\n")
+		sb.WriteString("            deny: \"*\"\n")
+		sb.WriteString("            sort-order: 999\n")
+		sb.WriteString("            name: \"puppetlabs deny all\"\n")
+		sb.WriteString("        }\n")
+		sb.WriteString("    ]\n}\n")
+		return sb.String()
+	}
+
+	return sb.String()
+}
+
+// builtinAuthRules returns the built-in auth.conf rules as HOCON (without the deny-all).
+func (r *ConfigReconciler) builtinAuthRules() string {
+	return `        {
+            match-request: {
+                path: "^/puppet/v3/catalog/([^/]+)$"
+                type: regex
+                method: [get, post]
+            }
+            allow: "$1"
+            sort-order: 500
+            name: "puppetlabs v3 catalog from agents"
+        },
+        {
+            match-request: {
+                path: "^/puppet/v4/catalog/?$"
+                type: regex
+                method: post
+            }
+            deny: "*"
+            sort-order: 500
+            name: "puppetlabs v4 catalog for services"
+        },
+        {
+            match-request: {
+                path: "/puppet-ca/v1/certificate/"
+                type: path
+                method: get
+            }
+            allow-unauthenticated: true
+            sort-order: 500
+            name: "puppetlabs certificate"
+        },
+        {
+            match-request: {
+                path: "/puppet-ca/v1/certificate_revocation_list/ca"
+                type: path
+                method: get
+            }
+            allow-unauthenticated: true
+            sort-order: 500
+            name: "puppetlabs crl"
+        },
+        {
+            match-request: {
+                path: "/puppet-ca/v1/certificate_request"
+                type: path
+                method: [get, put]
+            }
+            allow-unauthenticated: true
+            sort-order: 500
+            name: "puppetlabs csr"
+        },
+        {
+            match-request: {
+                path: "/puppet-ca/v1/certificate_renewal"
+                type: path
+                method: post
+            }
+            allow: "*"
+            sort-order: 500
+            name: "puppetlabs certificate renewal"
+        },
+        {
+            match-request: {
+                path: "/puppet-ca/v1/certificate_status"
+                type: path
+                method: [get, put, delete]
+            }
+            allow: {
+               extensions: {
+                   pp_cli_auth: "true"
+               }
+            }
+            sort-order: 500
+            name: "puppetlabs cert status"
+        },
+        {
+            match-request: {
+                path: "^/puppet-ca/v1/certificate_revocation_list$"
+                type: regex
+                method: put
+            }
+            allow: {
+               extensions: {
+                   pp_cli_auth: "true"
+               }
+            }
+            sort-order: 500
+            name: "puppetlabs CRL update"
+        },
+        {
+            match-request: {
+                path: "/puppet-ca/v1/certificate_statuses"
+                type: path
+                method: get
+            }
+            allow: {
+               extensions: {
+                   pp_cli_auth: "true"
+               }
+            }
+            sort-order: 500
+            name: "puppetlabs cert statuses"
+        },
+        {
+            match-request: {
+                path: "/puppet-ca/v1/expirations"
+                type: path
+                method: get
+            }
+            allow: "*"
+            sort-order: 500
+            name: "puppetlabs CA cert and CRL expirations"
+        },
+        {
+            match-request: {
+                path: "/puppet-ca/v1/clean"
+                type: path
+                method: put
+            }
+            allow: {
+               extensions: {
+                   pp_cli_auth: "true"
+               }
+            }
+            sort-order: 500
+            name: "puppetlabs cert clean"
+        },
+        {
+            match-request: {
+                path: "/puppet-ca/v1/sign"
+                type: path
+                method: post
+            }
+            allow: {
+               extensions: {
+                   pp_cli_auth: "true"
+               }
+            }
+            sort-order: 500
+            name: "puppetlabs cert sign"
+        },
+        {
+            match-request: {
+                path: "/puppet-ca/v1/sign/all"
+                type: path
+                method: post
+            }
+            allow: {
+               extensions: {
+                   pp_cli_auth: "true"
+               }
+            }
+            sort-order: 500
+            name: "puppetlabs cert sign all"
+        },
+        {
+            match-request: {
+                path: "/status/v1/services"
+                type: path
+                method: get
+            }
+            allow-unauthenticated: true
+            sort-order: 500
+            name: "puppetlabs status service - full"
+        },
+        {
+            match-request: {
+                path: "/status/v1/simple"
+                type: path
+                method: get
+            }
+            allow-unauthenticated: true
+            sort-order: 500
+            name: "puppetlabs status service - simple"
+        },
+        {
+            match-request: {
+                path: "/puppet/v3/environments"
+                type: path
+                method: get
+            }
+            allow: "*"
+            sort-order: 500
+            name: "puppetlabs environments"
+        },
+        {
+            match-request: {
+                path: "/puppet/v3/file_bucket_file"
+                type: path
+                method: [get, head, post, put]
+            }
+            allow: "*"
+            sort-order: 500
+            name: "puppetlabs file bucket file"
+        },
+        {
+            match-request: {
+                path: "/puppet/v3/file_content"
+                type: path
+                method: [get, post]
+            }
+            allow: "*"
+            sort-order: 500
+            name: "puppetlabs file content"
+        },
+        {
+            match-request: {
+                path: "/puppet/v3/file_metadata"
+                type: path
+                method: [get, post]
+            }
+            allow: "*"
+            sort-order: 500
+            name: "puppetlabs file metadata"
+        },
+        {
+            match-request: {
+                path: "^/puppet/v3/node/([^/]+)$"
+                type: regex
+                method: get
+            }
+            allow: "$1"
+            sort-order: 500
+            name: "puppetlabs node"
+        },
+        {
+            match-request: {
+                path: "^/puppet/v3/report/([^/]+)$"
+                type: regex
+                method: put
+            }
+            allow: "$1"
+            sort-order: 500
+            name: "puppetlabs report"
+        },
+        {
+            match-request: {
+                path: "^/puppet/v3/facts/([^/]+)$"
+                type: regex
+                method: put
+            }
+            allow: "$1"
+            sort-order: 500
+            name: "puppetlabs facts"
+        },
+        {
+            match-request: {
+                path: "/puppet/v3/static_file_content"
+                type: path
+                method: get
+            }
+            allow: "*"
+            sort-order: 500
+            name: "puppetlabs static file content"
+        },
+        {
+            match-request: {
+                path: "/puppet/v3/tasks"
+                type: path
+            }
+            allow: "*"
+            sort-order: 500
+            name: "puppet tasks information"
+        },
 `
+}
+
+// renderLogbackXML generates logback.xml from LoggingSpec.
+func (r *ConfigReconciler) renderLogbackXML(cfg *openvoxv1alpha1.Config) string {
+	rootLevel := "INFO"
+	if cfg.Spec.Logging != nil && cfg.Spec.Logging.Level != "" {
+		rootLevel = cfg.Spec.Logging.Level
+	}
+
+	var sb strings.Builder
+	sb.WriteString(`<configuration scan="true">
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d %-5p [%t] [%c{2}] %m%n</pattern>
+        </encoder>
+    </appender>
+
+`)
+
+	// Per-logger overrides
+	if cfg.Spec.Logging != nil {
+		for name, level := range cfg.Spec.Logging.Loggers {
+			fmt.Fprintf(&sb, "    <logger name=%q level=%q />\n", name, level)
+		}
+		if len(cfg.Spec.Logging.Loggers) > 0 {
+			sb.WriteString("\n")
+		}
+	}
+
+	fmt.Fprintf(&sb, "    <root level=%q>\n", rootLevel)
+	sb.WriteString("        <appender-ref ref=\"STDOUT\" />\n")
+	sb.WriteString("    </root>\n")
+	sb.WriteString("</configuration>\n")
+
+	return sb.String()
+}
+
+// renderMetricsConf generates metrics.conf HOCON from MetricsSpec.
+func (r *ConfigReconciler) renderMetricsConf(cfg *openvoxv1alpha1.Config) string {
+	if cfg.Spec.Metrics == nil || !cfg.Spec.Metrics.Enabled {
+		return "metrics: {\n    enabled: false\n}\n"
+	}
+
+	m := cfg.Spec.Metrics
+	var sb strings.Builder
+	sb.WriteString("metrics: {\n    enabled: true\n")
+
+	if m.JMX != nil {
+		fmt.Fprintf(&sb, "    reporters: {\n        jmx: {\n            enabled: %t\n        }\n    }\n", m.JMX.Enabled)
+	}
+
+	if m.Graphite != nil && m.Graphite.Enabled {
+		host := m.Graphite.Host
+		port := int32(2003)
+		if m.Graphite.Port != 0 {
+			port = m.Graphite.Port
+		}
+		interval := int32(60)
+		if m.Graphite.UpdateIntervalSeconds != 0 {
+			interval = m.Graphite.UpdateIntervalSeconds
+		}
+		sb.WriteString("    reporters: {\n")
+		sb.WriteString("        graphite: {\n")
+		sb.WriteString("            enabled: true\n")
+		fmt.Fprintf(&sb, "            host: %q\n", host)
+		fmt.Fprintf(&sb, "            port: %d\n", port)
+		fmt.Fprintf(&sb, "            update-interval-seconds: %d\n", interval)
+		sb.WriteString("        }\n")
+		sb.WriteString("    }\n")
+	}
+
+	sb.WriteString("}\n")
+	return sb.String()
 }
 
 func (r *ConfigReconciler) renderCAConf(ca *openvoxv1alpha1.CertificateAuthority) string {

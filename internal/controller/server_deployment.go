@@ -136,6 +136,8 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 		{Name: "auth-conf", MountPath: "/etc/puppetlabs/puppetserver/conf.d/auth.conf", SubPath: "auth.conf", ReadOnly: true},
 		{Name: "ca-conf", MountPath: "/etc/puppetlabs/puppetserver/conf.d/ca.conf", SubPath: "ca.conf", ReadOnly: true},
 		{Name: "ca-cfg", MountPath: "/etc/puppetlabs/puppetserver/services.d/ca.cfg", SubPath: "ca.cfg", ReadOnly: true},
+		{Name: "logback-xml", MountPath: "/etc/puppetlabs/puppetserver/logback.xml", SubPath: "logback.xml", ReadOnly: true},
+		{Name: "metrics-conf", MountPath: "/etc/puppetlabs/puppetserver/conf.d/metrics.conf", SubPath: "metrics.conf", ReadOnly: true},
 	}
 
 	// SSL: emptyDir populated by init container from secret volumes.
@@ -169,6 +171,8 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 		configMapVolume("auth-conf", configMapName, "auth.conf"),
 		configMapVolume("ca-conf", configMapName, "ca.conf"),
 		configMapVolume("product-conf", configMapName, "product.conf"),
+		configMapVolume("logback-xml", configMapName, "logback.xml"),
+		configMapVolume("metrics-conf", configMapName, "metrics.conf"),
 	}
 
 	// Non-CA pods: mount CRL secret as directory (NOT SubPath) for kubelet auto-sync,

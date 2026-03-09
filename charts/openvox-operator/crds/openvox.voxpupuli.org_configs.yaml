@@ -116,6 +116,67 @@ spec:
                     description: Tag is the container image tag.
                     type: string
                 type: object
+              logging:
+                description: Logging defines logback.xml settings for Puppet Server
+                  logging.
+                properties:
+                  level:
+                    default: INFO
+                    description: Level is the root log level.
+                    enum:
+                    - TRACE
+                    - DEBUG
+                    - INFO
+                    - WARN
+                    - ERROR
+                    type: string
+                  loggers:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Loggers defines per-logger level overrides.
+                      Keys are logger names, values are log levels (TRACE, DEBUG, INFO, WARN, ERROR).
+                    type: object
+                type: object
+              metrics:
+                description: Metrics defines metrics.conf settings for Puppet Server
+                  metrics.
+                properties:
+                  enabled:
+                    default: false
+                    description: Enabled activates Puppet Server metrics.
+                    type: boolean
+                  graphite:
+                    description: Graphite configures Graphite metrics reporting.
+                    properties:
+                      enabled:
+                        default: false
+                        description: Enabled activates Graphite reporting.
+                        type: boolean
+                      host:
+                        description: Host is the Graphite server hostname.
+                        type: string
+                      port:
+                        default: 2003
+                        description: Port is the Graphite server port.
+                        format: int32
+                        type: integer
+                      updateIntervalSeconds:
+                        default: 60
+                        description: UpdateIntervalSeconds is the interval between
+                          metric reports.
+                        format: int32
+                        type: integer
+                    type: object
+                  jmx:
+                    description: JMX configures JMX metrics reporting.
+                    properties:
+                      enabled:
+                        default: false
+                        description: Enabled activates JMX metrics.
+                        type: boolean
+                    type: object
+                type: object
               puppet:
                 description: Puppet defines shared puppet.conf settings.
                 properties:
@@ -158,6 +219,107 @@ spec:
                     items:
                       type: string
                     type: array
+                type: object
+              puppetserver:
+                description: PuppetServer defines puppetserver.conf, webserver.conf
+                  and auth.conf settings.
+                properties:
+                  authorizationRules:
+                    description: AuthorizationRules defines custom authorization rules
+                      inserted before the deny-all rule.
+                    items:
+                      description: AuthorizationRule defines a custom auth.conf rule.
+                      properties:
+                        allow:
+                          description: Allow specifies which clients are allowed.
+                            Use "*" for all authenticated clients.
+                          type: string
+                        allowUnauthenticated:
+                          description: AllowUnauthenticated allows unauthenticated
+                            access when true.
+                          type: boolean
+                        deny:
+                          description: Deny specifies which clients are denied. Use
+                            "*" for all clients.
+                          type: string
+                        matchRequest:
+                          description: MatchRequest defines the request matching criteria.
+                          properties:
+                            method:
+                              description: Method is the list of HTTP methods to match.
+                              items:
+                                type: string
+                              type: array
+                            path:
+                              description: Path is the URL path or pattern to match.
+                              type: string
+                            type:
+                              default: path
+                              description: Type is the match type.
+                              enum:
+                              - path
+                              - regex
+                              type: string
+                          required:
+                          - path
+                          type: object
+                        name:
+                          description: Name is a descriptive name for the rule.
+                          type: string
+                        sortOrder:
+                          default: 500
+                          description: SortOrder controls rule evaluation order (lower
+                            = earlier).
+                          format: int32
+                          type: integer
+                      required:
+                      - matchRequest
+                      - name
+                      type: object
+                    type: array
+                  borrowTimeout:
+                    default: 1200000
+                    description: BorrowTimeout is the timeout in milliseconds for
+                      borrowing a JRuby instance from the pool.
+                    format: int32
+                    type: integer
+                  clientAuth:
+                    default: want
+                    description: ClientAuth controls SSL client authentication mode
+                      for the webserver.
+                    enum:
+                    - want
+                    - need
+                    - none
+                    type: string
+                  compileMode:
+                    default: "off"
+                    description: CompileMode controls JRuby compilation mode.
+                    enum:
+                    - jit
+                    - "off"
+                    type: string
+                  httpClient:
+                    description: HTTPClient defines HTTP client settings for outgoing
+                      connections.
+                    properties:
+                      connectTimeoutMs:
+                        description: ConnectTimeoutMs is the connection timeout in
+                          milliseconds.
+                        format: int32
+                        type: integer
+                      idleTimeoutMs:
+                        description: IdleTimeoutMs is the idle timeout in milliseconds.
+                        format: int32
+                        type: integer
+                    type: object
+                  maxRequestsPerInstance:
+                    default: 0
+                    description: |-
+                      MaxRequestsPerInstance is the max number of requests per JRuby instance before it is restarted.
+                      0 means unlimited (no restart).
+                    format: int32
+                    type: integer
                 type: object
             required:
             - image

@@ -55,6 +55,7 @@ nav:
   - Concepts:
       - Architecture: concepts/architecture.md
       - Code Deployment: concepts/code-deployment.md
+      - Traffic Flow: concepts/traffic-flow.md
       - Gateway API: concepts/gateway-api.md
   - Getting Started:
       - Installation: getting-started/installation.md

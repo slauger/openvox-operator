@@ -30,68 +30,7 @@ The operator manages OpenVox Server environments through a set of Custom Resourc
 | **Server** | OpenVox Server instance pool (CA and/or server role) | Deployment |
 | **Pool** | Service + optional Gateway API TLSRoute for Server Pods | Service, TLSRoute (optional) |
 
-For details on the CRD hierarchy and design rationale, see [Architecture](concepts/architecture.md). Puppet code is deployed via [OCI image volumes or PVCs](concepts/code-deployment.md). Pools support optional [Gateway API TLSRoute](concepts/gateway-api.md) for SNI-based routing.
-
-```mermaid
-graph TD
-    Op["OpenVox Operator"]
-    Op -->|manages| Env
-
-    Env["Environment<br/>production"]
-    Env --> CA_CRD["CertificateAuthority<br/>production-ca"]
-    CA_CRD --> Cert["Certificate: ca-cert"]
-    Cert --> CA["Server: ca<br/>ca: true, server: true"]
-
-    CA --> CA_D["Deployment"]
-
-    CA_D -->|mounts| CA_PVC["CA Data PVC"]
-    CA_D -->|mounts| Code["Code (OCI Image or PVC)"]
-```
-
-## Traffic Flow
-
-Each Pool owns a Kubernetes Service that selects Server pods. The CA server can participate in both pools - handling CA requests via its dedicated pool and also serving catalog requests through the server pool.
-
-**LoadBalancer Services** - each Pool gets its own external IP:
-
-```mermaid
-graph LR
-    Agent["Agents"] --> LB
-    Agent --> CA_SVC
-
-    subgraph Kubernetes
-        LB["Pool: puppet<br/>Service (LoadBalancer)"]
-        CA_SVC["Pool: puppet-ca<br/>Service (LoadBalancer)"]
-
-        LB --> CA["Server: ca<br/>replicas: 1"]
-        LB --> Stable["Server: stable<br/>replicas: 3"]
-        LB --> Canary["Server: canary<br/>replicas: 1"]
-
-        CA_SVC --> CA
-    end
-```
-
-**Gateway API TLSRoute** - all Pools share a single LoadBalancer, routed by SNI hostname:
-
-```mermaid
-graph LR
-    Agent["Agents"] --> GW
-
-    subgraph Kubernetes
-        GW["Gateway<br/>(shared LoadBalancer)"]
-
-        GW --> TR1["TLSRoute<br/>puppet.example.com"]
-        GW --> TR2["TLSRoute<br/>puppet-ca.example.com"]
-        TR1 --> LB["Pool: puppet<br/>Service (ClusterIP)"]
-        TR2 --> CA_SVC["Pool: puppet-ca<br/>Service (ClusterIP)"]
-
-        LB --> CA["Server: ca<br/>replicas: 1"]
-        LB --> Stable["Server: stable<br/>replicas: 3"]
-        LB --> Canary["Server: canary<br/>replicas: 1"]
-
-        CA_SVC --> CA
-    end
-```
+For details on the CRD hierarchy and design rationale, see [Architecture](concepts/architecture.md). Puppet code is deployed via [OCI image volumes or PVCs](concepts/code-deployment.md). Pools support optional [Gateway API TLSRoute](concepts/gateway-api.md) for SNI-based routing. See [Traffic Flow](concepts/traffic-flow.md) for how agents connect to servers.
 
 ## License
 

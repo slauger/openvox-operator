@@ -51,7 +51,7 @@ graph TD
     CN_D -->|mounts| Code
 ```
 
-A **Config** is the root resource - it holds shared configuration (puppet.conf, PuppetDB connection), manages code deployment, and references a **CertificateAuthority** via `authorityRef`. A **CertificateAuthority** initializes the CA infrastructure and periodically refreshes the CRL. Each **Certificate** is signed by the CA and stored as a Kubernetes Secret. A **Server** references a Certificate and creates a Deployment - it can run as CA, catalog server, or both. **Pools** create Services that select Server pods by label, with optional Gateway API TLSRoute for SNI-based routing.
+A **Config** is the root resource - it holds shared configuration (puppet.conf, PuppetDB connection), manages code deployment, and references a **CertificateAuthority** via `authorityRef`. A **CertificateAuthority** initializes the CA infrastructure and periodically refreshes the CRL. Each **Certificate** is signed by the CA and stored as a Kubernetes Secret. A **Server** references a Certificate and creates a Deployment - it can run as CA, catalog server, or both. Servers declare pool membership via `poolRefs`. **Pools** are pure networking resources that create Services selecting Server pods by pool label, with optional Gateway API TLSRoute for SNI-based routing.
 
 Puppet code is mounted into Server pods via **OCI image volumes** (immutable, automatic rollout on image change, K8s 1.31+) or a **PVC** (mutable, externally managed). See [Code Deployment](docs/concepts/code-deployment.md) for details.
 
@@ -111,8 +111,8 @@ All resources use the API group `openvox.voxpupuli.org/v1alpha1`.
 | **`SigningPolicy`** | Declarative CSR signing policy (any, pattern, DNS SANs, CSR attributes) | *(rendered into Config's autosign Secret)* |
 | **`NodeClassifier`** | External Node Classifier (ENC) endpoint (Foreman, PE, custom HTTP) | *(rendered into Config's ENC Secret)* |
 | **`Certificate`** | Lifecycle of a single certificate (request, sign) | TLS Secret |
-| **`Server`** | OpenVox Server instance pool (CA and/or server role) | Deployment |
-| **`Pool`** | Service + optional Gateway API TLSRoute for Server Pods | Service, TLSRoute (optional) |
+| **`Server`** | OpenVox Server instance pool (CA and/or server role), declares pool membership via `poolRefs` | Deployment |
+| **`Pool`** | Networking resource: Service + optional Gateway API TLSRoute for Servers that reference this Pool | Service, TLSRoute (optional) |
 
 ### Planned (not yet implemented)
 

@@ -188,7 +188,8 @@ spec:
                 - message: method must be GET or POST
                   rule: self.method == 'GET' || self.method == 'POST'
                 - message: body is only allowed with POST method
-                  rule: self.method == 'POST' || !has(self.body) || self.body == ''
+                  rule: self.method == 'POST' || !has(self.body) || size(self.body)
+                    == 0
               response:
                 description: Response defines how to interpret the classifier response.
                 properties:

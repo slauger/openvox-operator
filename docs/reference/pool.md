@@ -1,6 +1,6 @@
 # Pool
 
-A Pool creates a Kubernetes Service that selects Server pods by label. Use Pools to expose Servers to agents - typically one Pool for the CA and one for catalog servers.
+A Pool is a pure networking resource that creates a Kubernetes Service. [Servers](server.md) join a Pool by listing its name in their `poolRefs`. Use Pools to expose Servers to agents - typically one Pool for the CA and one for catalog servers.
 
 ## Example
 
@@ -10,9 +10,6 @@ kind: Pool
 metadata:
   name: puppet
 spec:
-  configRef: production
-  selector:
-    openvox.voxpupuli.org/role: server
   service:
     type: LoadBalancer
     port: 8140
@@ -22,8 +19,6 @@ spec:
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `configRef` | string | **required** | Reference to the Config |
-| `selector` | map[string]string | - | Label selector for Server pods. The config label is added automatically. If empty, selects all Servers in the Config. |
 | `service` | [PoolServiceSpec](#poolservicespec) | - | Kubernetes Service configuration |
 | `route` | [PoolRouteSpec](#poolroutespec) | - | Gateway API TLSRoute configuration (see [Gateway API](../concepts/gateway-api.md)) |
 
@@ -45,7 +40,7 @@ spec:
 | `enabled` | bool | `false` | Activates TLSRoute creation for this Pool |
 | `hostname` | string | - | SNI hostname (required when enabled) |
 | `gatewayRef` | [GatewayReference](#gatewayreference) | - | Gateway to attach the TLSRoute to (required when enabled) |
-| `injectDNSAltName` | bool | `false` | Add hostname to Certificate dnsAltNames of matching Servers |
+| `injectDNSAltName` | bool | `false` | Add hostname to Certificate dnsAltNames of Servers that reference this Pool |
 
 ### GatewayReference
 
@@ -72,32 +67,39 @@ spec:
 
 ### Separate CA and Server Pools
 
+Servers declare pool membership via `poolRefs`. A CA server with both roles joins both pools:
+
 ```yaml
-# CA pool - only CA servers
+# Pools - pure networking, no selectors
 apiVersion: openvox.voxpupuli.org/v1alpha1
 kind: Pool
 metadata:
   name: puppet-ca
 spec:
-  configRef: production
-  selector:
-    openvox.voxpupuli.org/ca: "true"
   service:
     type: LoadBalancer
     port: 8140
 ---
-# Server pool - all servers (including CA if it has server: true)
 apiVersion: openvox.voxpupuli.org/v1alpha1
 kind: Pool
 metadata:
   name: puppet
 spec:
-  configRef: production
-  selector:
-    openvox.voxpupuli.org/role: server
   service:
     type: LoadBalancer
     port: 8140
+---
+# CA server joins both pools
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: Server
+metadata:
+  name: ca
+spec:
+  configRef: production
+  certificateRef: production-cert
+  poolRefs: [puppet-ca, puppet]
+  ca: true
+  server: true
 ```
 
 ### SNI-based Routing with Gateway API
@@ -110,9 +112,6 @@ kind: Pool
 metadata:
   name: puppet
 spec:
-  configRef: production
-  selector:
-    openvox.voxpupuli.org/role: server
   service:
     type: ClusterIP
     port: 8140

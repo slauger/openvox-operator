@@ -29,8 +29,8 @@ The operator manages OpenVox Server infrastructure through a set of Custom Resou
 | **SigningPolicy** | Declarative CSR signing policy (any, pattern, CSR attributes) | *(rendered into Config's autosign Secret)* |
 | **NodeClassifier** | External Node Classifier (ENC) endpoint (Foreman, PE, custom HTTP) | *(rendered into Config's ENC Secret)* |
 | **Certificate** | Lifecycle of a single certificate (request, sign) | TLS Secret |
-| **Server** | OpenVox Server instance pool (CA and/or server role) | Deployment |
-| **Pool** | Service + optional Gateway API TLSRoute for Server Pods | Service, TLSRoute (optional) |
+| **Server** | OpenVox Server instance pool (CA and/or server role), declares pool membership via `poolRefs` | Deployment |
+| **Pool** | Networking resource: Service + optional Gateway API TLSRoute for Servers that reference this Pool | Service, TLSRoute (optional) |
 
 For details on the CRD hierarchy and design rationale, see [Architecture](concepts/architecture.md). Puppet code is deployed via [OCI image volumes or PVCs](concepts/code-deployment.md). External Node Classifiers (Foreman, PE, custom HTTP) are configured via the [NodeClassifier CRD](concepts/external-node-classification.md). Pools support optional [Gateway API TLSRoute](concepts/gateway-api.md) for SNI-based routing. See [Traffic Flow](concepts/traffic-flow.md) for how agents connect to servers.
 

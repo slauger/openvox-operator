@@ -58,7 +58,7 @@ type NodeClassifierSpec struct {
 
 // NodeClassifierRequest defines the HTTP request to the classifier.
 // +kubebuilder:validation:XValidation:rule="self.method == 'GET' || self.method == 'POST'",message="method must be GET or POST"
-// +kubebuilder:validation:XValidation:rule="self.method == 'POST' || !has(self.body) || self.body == ''",message="body is only allowed with POST method"
+// +kubebuilder:validation:XValidation:rule="self.method == 'POST' || !has(self.body) || size(self.body) == 0",message="body is only allowed with POST method"
 type NodeClassifierRequest struct {
 	// Method is the HTTP method (GET or POST).
 	// +kubebuilder:default="GET"

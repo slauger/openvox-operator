@@ -15,6 +15,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -43,16 +44,6 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	pool := &openvoxv1alpha1.Pool{}
 	if err := r.Get(ctx, req.NamespacedName, pool); err != nil {
 		if errors.IsNotFound(err) {
-			return ctrl.Result{}, nil
-		}
-		return ctrl.Result{}, err
-	}
-
-	// Validate configRef
-	cfg := &openvoxv1alpha1.Config{}
-	if err := r.Get(ctx, types.NamespacedName{Name: pool.Spec.ConfigRef, Namespace: pool.Namespace}, cfg); err != nil {
-		if errors.IsNotFound(err) {
-			logger.Error(err, "referenced Config not found", "configRef", pool.Spec.ConfigRef)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
@@ -120,7 +111,8 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 func (r *PoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&openvoxv1alpha1.Pool{}).
-		Owns(&corev1.Service{})
+		Owns(&corev1.Service{}).
+		Watches(&openvoxv1alpha1.Server{}, enqueuePoolsForServer(mgr.GetClient()))
 
 	if r.GatewayAPIAvailable {
 		builder = builder.Owns(&gwapiv1.TLSRoute{})
@@ -129,17 +121,34 @@ func (r *PoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return builder.Complete(r)
 }
 
+// enqueuePoolsForServer returns a handler that enqueues all Pools in the
+// namespace when a Server changes. This ensures Pool endpoints stay in sync
+// when Servers add or remove poolRefs.
+func enqueuePoolsForServer(c client.Client) handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []ctrl.Request {
+		pools := &openvoxv1alpha1.PoolList{}
+		if err := c.List(ctx, pools, client.InNamespace(obj.GetNamespace())); err != nil {
+			return nil
+		}
+		var requests []ctrl.Request
+		for _, pool := range pools.Items {
+			requests = append(requests, ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      pool.Name,
+					Namespace: pool.Namespace,
+				},
+			})
+		}
+		return requests
+	})
+}
+
 // poolServiceSelector builds the label selector for a Pool's Service.
-// It merges the user-defined Selector with the auto-injected config label.
-// If no Selector is defined, only the config label is used (selects all Pods in the Config).
+// It selects pods that declare this pool in their poolRefs.
 func poolServiceSelector(pool *openvoxv1alpha1.Pool) map[string]string {
-	sel := map[string]string{
-		LabelConfig: pool.Spec.ConfigRef,
+	return map[string]string{
+		poolLabel(pool.Name): "true",
 	}
-	for k, v := range pool.Spec.Selector {
-		sel[k] = v
-	}
-	return sel
 }
 
 func (r *PoolReconciler) reconcileService(ctx context.Context, pool *openvoxv1alpha1.Pool) error {
@@ -161,8 +170,11 @@ func (r *PoolReconciler) reconcileService(ctx context.Context, pool *openvoxv1al
 			svcType = pool.Spec.Service.Type
 		}
 
-		labels := configLabels(pool.Spec.ConfigRef)
-		labels[poolLabel(pool.Name)] = "true"
+		labels := map[string]string{
+			"app.kubernetes.io/name":       "openvox",
+			"app.kubernetes.io/managed-by": "openvox-operator",
+			poolLabel(pool.Name):           "true",
+		}
 
 		// Merge additional labels
 		for k, v := range pool.Spec.Service.Labels {
@@ -213,8 +225,11 @@ func (r *PoolReconciler) reconcileService(ctx context.Context, pool *openvoxv1al
 	}
 
 	// Update labels
-	labels := configLabels(pool.Spec.ConfigRef)
-	labels[poolLabel(pool.Name)] = "true"
+	labels := map[string]string{
+		"app.kubernetes.io/name":       "openvox",
+		"app.kubernetes.io/managed-by": "openvox-operator",
+		poolLabel(pool.Name):           "true",
+	}
 	for k, v := range pool.Spec.Service.Labels {
 		labels[k] = v
 	}
@@ -318,12 +333,8 @@ func (r *PoolReconciler) injectDNSAltNames(ctx context.Context, pool *openvoxv1a
 	logger := log.FromContext(ctx)
 
 	servers := &openvoxv1alpha1.ServerList{}
-	if err := r.List(ctx, servers, client.InNamespace(pool.Namespace),
-		client.MatchingFields{"spec.configRef": pool.Spec.ConfigRef}); err != nil {
-		// Fall back to listing all servers and filtering manually
-		if err := r.List(ctx, servers, client.InNamespace(pool.Namespace)); err != nil {
-			return fmt.Errorf("listing Servers: %w", err)
-		}
+	if err := r.List(ctx, servers, client.InNamespace(pool.Namespace)); err != nil {
+		return fmt.Errorf("listing Servers: %w", err)
 	}
 
 	hostname := pool.Spec.Route.Hostname
@@ -331,15 +342,8 @@ func (r *PoolReconciler) injectDNSAltNames(ctx context.Context, pool *openvoxv1a
 	for i := range servers.Items {
 		server := &servers.Items[i]
 
-		if server.Spec.ConfigRef != pool.Spec.ConfigRef {
+		if !slices.Contains(server.Spec.PoolRefs, pool.Name) {
 			continue
-		}
-
-		// Check if this server matches the pool's selector
-		if serverName, ok := pool.Spec.Selector[LabelServer]; ok {
-			if server.Name != serverName {
-				continue
-			}
 		}
 
 		if server.Spec.CertificateRef == "" {

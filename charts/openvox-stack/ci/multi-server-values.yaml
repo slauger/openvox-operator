@@ -2,6 +2,7 @@ servers:
   - name: ca
     ca: true
     server: true
+    poolRefs: [ca, server]
     certificate:
       certname: puppet
     replicas: 1
@@ -14,6 +15,7 @@ servers:
   - name: server
     ca: false
     server: true
+    poolRefs: [server]
     certificate:
       certname: server
     replicas: 2
@@ -26,12 +28,10 @@ servers:
 
 pools:
   - name: ca
-    serverRef: ca
     service:
       type: ClusterIP
       port: 8140
   - name: server
-    serverRef: server
     service:
       type: ClusterIP
       port: 8140

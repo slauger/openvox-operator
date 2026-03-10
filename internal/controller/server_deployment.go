@@ -42,6 +42,9 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 	if server.Spec.CA {
 		labels[LabelCA] = "true"
 	}
+	for _, poolRef := range server.Spec.PoolRefs {
+		labels[poolLabel(poolRef)] = "true"
+	}
 
 	strategy := appsv1.DeploymentStrategy{Type: appsv1.RollingUpdateDeploymentStrategyType}
 	if server.Spec.CA {

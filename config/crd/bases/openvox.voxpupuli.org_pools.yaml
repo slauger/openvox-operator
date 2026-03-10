@@ -15,9 +15,6 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.configRef
-      name: Config
-      type: string
     - jsonPath: .spec.service.type
       name: Type
       type: string
@@ -32,7 +29,7 @@ spec:
       openAPIV3Schema:
         description: |-
           Pool is the Schema for the pools API.
-          It owns a Kubernetes Service that selects Server Pods matching the Pool's Selector.
+          It owns a Kubernetes Service that selects Server Pods whose poolRefs include this Pool.
         properties:
           apiVersion:
             description: |-
@@ -54,9 +51,6 @@ spec:
           spec:
             description: PoolSpec defines the desired state of Pool.
             properties:
-              configRef:
-                description: ConfigRef references the Config this Pool belongs to.
-                type: string
               route:
                 description: Route configures external access via Gateway API TLSRoute.
                 properties:
@@ -94,14 +88,6 @@ spec:
                   rule: '!self.enabled || size(self.hostname) > 0'
                 - message: gatewayRef.name is required when route is enabled
                   rule: '!self.enabled || size(self.gatewayRef.name) > 0'
-              selector:
-                additionalProperties:
-                  type: string
-                description: |-
-                  Selector is a set of labels used to select Server Pods for this Pool's Service.
-                  The config label is always added automatically.
-                  If empty or nil, the Pool selects all Server Pods in the Config.
-                type: object
               service:
                 description: Service defines the Kubernetes Service configuration.
                 properties:
@@ -139,8 +125,6 @@ spec:
                       NodePort).
                     type: string
                 type: object
-            required:
-            - configRef
             type: object
           status:
             description: PoolStatus defines the observed state of Pool.

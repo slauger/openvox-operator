@@ -20,8 +20,7 @@ graph TD
     CA -->|authorityRef| Cert
     Cert -->|certificateRef| Srv
     Cfg -->|configRef| Srv
-    Srv -->|selector| Pool
-    Cfg -->|configRef| Pool
+    Srv -->|poolRefs| Pool
 ```
 
 Each resource references its parent. The operator reconciles them in order: a Config references a CertificateAuthority via `authorityRef` and optionally a NodeClassifier via `nodeClassifierRef`, a CertificateAuthority must be `Ready` before a Certificate can be signed, and a Certificate must be `Signed` before a Server creates its Deployment. SigningPolicies and NodeClassifiers can be created at any time and take effect within ~60 seconds.
@@ -36,7 +35,7 @@ Each resource references its parent. The operator reconciles them in order: a Co
 | [NodeClassifier](nodeclassifier.md) | `nc` | External Node Classifier (ENC) endpoint |
 | [Certificate](certificate.md) | `cert` | Lifecycle of a single certificate (request, sign) |
 | [Server](server.md) | - | OpenVox Server Deployment (CA and/or server role) |
-| [Pool](pool.md) | - | Kubernetes Service that selects Server Pods |
+| [Pool](pool.md) | - | Networking resource: Service for Servers that reference this Pool |
 
 ## Shared Types
 

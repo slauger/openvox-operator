@@ -1,6 +1,6 @@
 # Server
 
-A Server creates a Deployment of OpenVox Server pods. It references a Certificate for SSL and a Config for shared configuration. A Server can run as CA, as a catalog server, or both.
+A Server creates a Deployment of OpenVox Server pods. It references a Certificate for SSL and a Config for shared configuration. A Server can run as CA, as a catalog server, or both. Servers declare which [Pools](pool.md) they join via `poolRefs`.
 
 ## Example
 
@@ -12,6 +12,7 @@ metadata:
 spec:
   configRef: production
   certificateRef: production-cert
+  poolRefs: [production-ca, production-server]
   ca: true
   server: true
   replicas: 1
@@ -25,6 +26,7 @@ spec:
 |---|---|---|---|
 | `configRef` | string | **required** | Reference to the Config |
 | `certificateRef` | string | **required** | Reference to the Certificate whose SSL Secret is mounted |
+| `poolRefs` | []string | - | List of [Pool](pool.md) names this Server joins |
 | `image` | [ImageSpec](index.md#imagespec) | - | Override the Config's default image |
 | `ca` | bool | `false` | Enable CA role (mounts CA PVC) |
 | `server` | bool | `true` | Enable server role (catalog compilation, file serving) |

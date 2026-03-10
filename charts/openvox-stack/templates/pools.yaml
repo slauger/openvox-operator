@@ -5,9 +5,6 @@ kind: Pool
 metadata:
   name: {{ include "openvox-stack.poolName" (dict "root" $ "entry" $entry) }}
 spec:
-  configRef: {{ include "openvox-stack.configName" $ }}
-  selector:
-    openvox.voxpupuli.org/server: {{ include "openvox-stack.serverName" (dict "root" $ "entry" (dict "name" $entry.serverRef)) }}
   service:
     type: {{ $entry.service.type | default "ClusterIP" }}
     port: {{ $entry.service.port | default 8140 }}

@@ -48,6 +48,7 @@ metadata:
 spec:
   configRef: lab
   certificateRef: lab-cert
+  poolRefs: [puppet]
   ca: true
   server: true
   replicas: 1
@@ -57,9 +58,6 @@ kind: Pool
 metadata:
   name: puppet
 spec:
-  configRef: lab
-  selector:
-    openvox.voxpupuli.org/ca: "true"
   service:
     port: 8140
 ```

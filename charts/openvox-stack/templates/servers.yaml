@@ -13,6 +13,12 @@ spec:
   {{- if hasKey $entry "server" }}
   server: {{ $entry.server }}
   {{- end }}
+  {{- if $entry.poolRefs }}
+  poolRefs:
+    {{- range $ref := $entry.poolRefs }}
+    - {{ include "openvox-stack.poolName" (dict "root" $ "entry" (dict "name" $ref)) }}
+    {{- end }}
+  {{- end }}
   replicas: {{ $entry.replicas | default 1 }}
   {{- with $entry.resources }}
   resources:

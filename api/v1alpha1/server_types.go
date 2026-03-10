@@ -40,6 +40,12 @@ type ServerSpec struct {
 	// CertificateRef references the Certificate whose SSL Secret is mounted into the Server pods.
 	CertificateRef string `json:"certificateRef"`
 
+	// PoolRefs lists the Pools this Server joins.
+	// The Server controller adds a pool label for each entry, making the pod
+	// selectable by the corresponding Pool's Service.
+	// +optional
+	PoolRefs []string `json:"poolRefs,omitempty"`
+
 	// Image overrides the Config's default image.
 	// +optional
 	Image ImageSpec `json:"image,omitempty"`

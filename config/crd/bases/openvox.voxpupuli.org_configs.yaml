@@ -84,11 +84,11 @@ spec:
                 type: object
                 x-kubernetes-validations:
                 - message: image and claimName are mutually exclusive
-                  rule: '!(has(self.image) && self.image != '''' && has(self.claimName)
-                    && self.claimName != '''')'
+                  rule: '!(has(self.image) && self.image != ” && has(self.claimName)
+                    && self.claimName != ”)'
                 - message: either image or claimName must be set
-                  rule: (has(self.image) && self.image != '') || (has(self.claimName)
-                    && self.claimName != '')
+                  rule: (has(self.image) && self.image != ”) || (has(self.claimName)
+                    && self.claimName != ”)
               image:
                 description: Image defines the default container image for all Servers
                   in this Config.

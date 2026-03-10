@@ -7,13 +7,12 @@ import (
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Config",type=string,JSONPath=`.spec.configRef`
 // +kubebuilder:printcolumn:name="Type",type=string,JSONPath=`.spec.service.type`
 // +kubebuilder:printcolumn:name="Endpoints",type=integer,JSONPath=`.status.endpoints`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // Pool is the Schema for the pools API.
-// It owns a Kubernetes Service that selects Server Pods matching the Pool's Selector.
+// It owns a Kubernetes Service that selects Server Pods whose poolRefs include this Pool.
 type Pool struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -33,15 +32,6 @@ type PoolList struct {
 
 // PoolSpec defines the desired state of Pool.
 type PoolSpec struct {
-	// ConfigRef references the Config this Pool belongs to.
-	ConfigRef string `json:"configRef"`
-
-	// Selector is a set of labels used to select Server Pods for this Pool's Service.
-	// The config label is always added automatically.
-	// If empty or nil, the Pool selects all Server Pods in the Config.
-	// +optional
-	Selector map[string]string `json:"selector,omitempty"`
-
 	// Service defines the Kubernetes Service configuration.
 	// +optional
 	Service PoolServiceSpec `json:"service,omitempty"`

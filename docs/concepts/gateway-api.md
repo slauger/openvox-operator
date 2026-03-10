@@ -50,9 +50,6 @@ kind: Pool
 metadata:
   name: puppet
 spec:
-  configRef: production
-  selector:
-    openvox.voxpupuli.org/role: server
   service:
     type: ClusterIP
     port: 8140

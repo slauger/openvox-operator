@@ -52,6 +52,7 @@ servers:
   - name: ca
     ca: true
     server: true
+    poolRefs: [ca, server]
     certificate:
       certname: puppet
       dnsAltNames: []
@@ -69,7 +70,6 @@ gateway:
 
 pools:
   - name: ca
-    serverRef: ca
     service:
       type: ClusterIP
       port: 8140
@@ -78,7 +78,6 @@ pools:
     #   hostname: ""
     #   injectDNSAltName: false
   - name: server
-    serverRef: ca
     service:
       type: ClusterIP
       port: 8140

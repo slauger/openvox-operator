@@ -46,6 +46,7 @@ metadata:
 spec:
   configRef: lab
   certificateRef: lab-cert
+  poolRefs: [puppet]
   ca: true
   server: true
   replicas: 1
@@ -55,9 +56,6 @@ kind: Pool
 metadata:
   name: puppet
 spec:
-  configRef: lab
-  selector:
-    openvox.voxpupuli.org/ca: "true"
   service:
     port: 8140
 ```
@@ -137,9 +135,6 @@ kind: Pool
 metadata:
   name: production-ca
 spec:
-  configRef: production
-  selector:
-    openvox.voxpupuli.org/ca: "true"
   service:
     port: 8140
 ---
@@ -148,9 +143,6 @@ kind: Pool
 metadata:
   name: puppet
 spec:
-  configRef: production
-  selector:
-    openvox.voxpupuli.org/role: server
   service:
     type: LoadBalancer
     port: 8140
@@ -162,6 +154,7 @@ metadata:
 spec:
   configRef: production
   certificateRef: ca-cert
+  poolRefs: [production-ca, puppet]
   ca: true
   server: true
   replicas: 1
@@ -180,6 +173,7 @@ metadata:
 spec:
   configRef: production
   certificateRef: stable-cert
+  poolRefs: [puppet]
   replicas: 3
   maxActiveInstances: 2
   code:
@@ -199,6 +193,7 @@ metadata:
 spec:
   configRef: production
   certificateRef: canary-cert
+  poolRefs: [puppet]
   image:
     tag: "8.13.0"
   replicas: 1

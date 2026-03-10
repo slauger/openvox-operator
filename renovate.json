@@ -3,11 +3,15 @@
   "extends": [
     "config:recommended"
   ],
-  "labels": ["dependencies"],
+  "labels": [
+    "dependencies"
+  ],
   "customManagers": [
     {
       "customType": "regex",
-      "fileMatch": ["(^|/)Containerfile$"],
+      "managerFilePatterns": [
+        "/(^|/)Containerfile$/"
+      ],
       "matchStrings": [
         "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\nARG \\w+=(?<currentValue>\\S+)"
       ],
@@ -16,28 +20,44 @@
   ],
   "packageRules": [
     {
-      "matchManagers": ["gomod"],
+      "matchManagers": [
+        "gomod"
+      ],
       "groupName": "Go dependencies",
       "postUpgradeTasks": {
         "commands": [
           "go mod tidy",
           "make generate manifests"
         ],
-        "fileFilters": ["go.mod", "go.sum", "api/**", "config/crd/**", "charts/openvox-operator/crds/**"],
+        "fileFilters": [
+          "go.mod",
+          "go.sum",
+          "api/**",
+          "config/crd/**",
+          "charts/openvox-operator/crds/**"
+        ],
         "executionMode": "branch"
       }
     },
     {
-      "matchManagers": ["github-actions"],
+      "matchManagers": [
+        "github-actions"
+      ],
       "groupName": "GitHub Actions"
     },
     {
-      "matchManagers": ["dockerfile"],
+      "matchManagers": [
+        "dockerfile"
+      ],
       "groupName": "Container base images"
     },
     {
-      "matchManagers": ["custom.regex"],
-      "matchDatasources": ["github-releases"],
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchDatasources": [
+        "github-releases"
+      ],
       "groupName": "OpenVox versions"
     }
   ]

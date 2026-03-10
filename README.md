@@ -41,6 +41,10 @@ graph TD
     Cert_Stable --> Stable["⚙️ Server: stable<br/>v8.12.1"]
     Cert_Canary --> Canary["⚙️ Server: canary<br/>v8.13.0"]
 
+    Cfg -->|configRef| CA
+    Cfg -->|configRef| Stable
+    Cfg -->|configRef| Canary
+
     CA --> CA_D["Deployment"]
     Stable --> ST_D["Deployment"]
     Canary --> CN_D["Deployment"]

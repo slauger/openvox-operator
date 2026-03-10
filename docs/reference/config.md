@@ -29,6 +29,7 @@ spec:
 |---|---|---|---|
 | `image` | [ImageSpec](index.md#imagespec) | **required** | Default container image for all Servers |
 | `authorityRef` | string | - | Reference to the CertificateAuthority used by this Config |
+| `nodeClassifierRef` | string | - | Reference to a [NodeClassifier](nodeclassifier.md) for ENC support |
 | `puppet` | [PuppetSpec](#puppetspec) | - | Shared puppet.conf settings |
 | `puppetdb` | [PuppetDBSpec](#puppetdbspec) | - | PuppetDB connection settings |
 
@@ -70,4 +71,5 @@ spec:
 | Resource | Name | Description |
 |---|---|---|
 | ConfigMap | `{name}` | puppet.conf, puppetserver.conf, auth.conf, webserver.conf, etc. |
+| Secret | `{name}-enc` | ENC config for openvox-enc binary (only when `nodeClassifierRef` is set) |
 | ServiceAccount | `{name}-server` | Shared ServiceAccount for all Server pods (`automountServiceAccountToken: false`) |

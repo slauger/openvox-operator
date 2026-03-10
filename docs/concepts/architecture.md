@@ -13,10 +13,12 @@ graph TD
     Cfg["Config"]
     CA["CertificateAuthority"]
     SP["SigningPolicy"]
+    NC["NodeClassifier"]
     Cert["Certificate"]
     Srv["Server"]
     Pool["Pool"]
     Cfg -->|authorityRef| CA
+    Cfg -->|nodeClassifierRef| NC
     CA -->|certificateAuthorityRef| SP
     CA -->|authorityRef| Cert
     Cert -->|certificateRef| Srv
@@ -28,6 +30,7 @@ graph TD
 - A **Config** is the root resource. It generates ConfigMaps for puppet.conf/puppetdb.conf/webserver.conf and holds shared configuration.
 - A **CertificateAuthority** is a standalone resource managing the CA infrastructure: PVC, setup Job, and CA Secret. A Config references it via `authorityRef`.
 - A **SigningPolicy** references a CertificateAuthority and defines declarative CSR signing rules (any, pattern match, or CSR attribute match). The Config controller renders all SigningPolicies into an autosign policy file.
+- A **NodeClassifier** is a standalone resource defining an External Node Classifier endpoint. A Config references it via `nodeClassifierRef`. The Config controller renders the classifier configuration into an ENC Secret, and puppet.conf gets `node_terminus = exec`. See [External Node Classification](external-node-classification.md).
 - A **Certificate** references a CertificateAuthority and manages the lifecycle of a single certificate: signing Job and TLS Secret.
 - A **Server** references a Config and a Certificate. It creates a Deployment (with Recreate strategy for CA, RollingUpdate for servers). The Server waits for the Certificate to reach the `Signed` phase before creating its Deployment.
 - A **Pool** references a Config and creates a Kubernetes Service. Server pods are selected by label.

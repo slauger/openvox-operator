@@ -31,6 +31,23 @@ signingPolicy:
   name: ""             # default: {fullname}-autosign
   any: true
 
+nodeClassifier:
+  enabled: false
+  name: ""             # default: {fullname}-enc
+  url: ""
+  request:
+    method: GET
+    path: /node/{certname}
+    body: ""
+  response:
+    format: yaml
+  timeoutSeconds: 10
+  auth:
+    mtls: false
+  cache:
+    enabled: false
+    directory: /var/cache/openvox-enc
+
 servers:
   - name: ca
     ca: true

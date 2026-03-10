@@ -6,6 +6,7 @@ A Kubernetes Operator that maps [OpenVox Server](https://github.com/OpenVoxProje
 
 - 🔐 **Automated CA Lifecycle** - CA initialization, certificate signing, distribution, and periodic CRL refresh - fully managed
 - 📜 **Declarative Signing Policies** - CSR approval via patterns, CSR attributes, or open signing - no autosign scripts
+- 🏷️ **External Node Classification** - Declarative ENC support for Foreman, Puppet Enterprise, or custom HTTP classifiers
 - 📦 **One Image, Two Roles** - Same rootless image runs as CA or server, configured by the operator
 - ⚡ **Scalable Servers** - Scale catalog compilation horizontally with multiple server pools and HPA
 - 🔄 **Multi-Version Deployments** - Run different server versions side by side for canary deployments and rolling upgrades
@@ -26,11 +27,12 @@ The operator manages OpenVox Server infrastructure through a set of Custom Resou
 | **Config** | Shared config (puppet.conf, auth.conf, etc.), PuppetDB connection | ConfigMaps, Secrets, ServiceAccount |
 | **CertificateAuthority** | CA infrastructure: keys, signing, split Secrets (cert, key, CRL) | PVC, Job, ServiceAccount, Role, RoleBinding, 3 Secrets |
 | **SigningPolicy** | Declarative CSR signing policy (any, pattern, CSR attributes) | *(rendered into Config's autosign Secret)* |
+| **NodeClassifier** | External Node Classifier (ENC) endpoint (Foreman, PE, custom HTTP) | *(rendered into Config's ENC Secret)* |
 | **Certificate** | Lifecycle of a single certificate (request, sign) | TLS Secret |
 | **Server** | OpenVox Server instance pool (CA and/or server role) | Deployment |
 | **Pool** | Service + optional Gateway API TLSRoute for Server Pods | Service, TLSRoute (optional) |
 
-For details on the CRD hierarchy and design rationale, see [Architecture](concepts/architecture.md). Puppet code is deployed via [OCI image volumes or PVCs](concepts/code-deployment.md). Pools support optional [Gateway API TLSRoute](concepts/gateway-api.md) for SNI-based routing. See [Traffic Flow](concepts/traffic-flow.md) for how agents connect to servers.
+For details on the CRD hierarchy and design rationale, see [Architecture](concepts/architecture.md). Puppet code is deployed via [OCI image volumes or PVCs](concepts/code-deployment.md). External Node Classifiers (Foreman, PE, custom HTTP) are configured via the [NodeClassifier CRD](concepts/external-node-classification.md). Pools support optional [Gateway API TLSRoute](concepts/gateway-api.md) for SNI-based routing. See [Traffic Flow](concepts/traffic-flow.md) for how agents connect to servers.
 
 ## License
 

@@ -33,6 +33,8 @@ type ConfigReconciler struct {
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=configs/finalizers,verbs=update
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=signingpolicies,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=signingpolicies/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=nodeclassifiers,verbs=get;list;watch
+// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=nodeclassifiers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=configmaps;serviceaccounts;secrets,verbs=get;list;watch;create;update;patch;delete
 
 func (r *ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -72,7 +74,12 @@ func (r *ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, fmt.Errorf("reconciling autosign Secrets: %w", err)
 	}
 
-	// Step 3: Ensure server ServiceAccount exists
+	// Step 3: Reconcile ENC Secret (if nodeClassifierRef is set)
+	if err := r.reconcileENCSecret(ctx, cfg); err != nil {
+		return ctrl.Result{}, fmt.Errorf("reconciling ENC Secret: %w", err)
+	}
+
+	// Step 4: Ensure server ServiceAccount exists
 	if err := r.reconcileServerServiceAccount(ctx, cfg); err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconciling server ServiceAccount: %w", err)
 	}
@@ -95,6 +102,9 @@ func (r *ConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Secret{}).
 		Watches(&openvoxv1alpha1.SigningPolicy{}, handler.EnqueueRequestsFromMapFunc(
 			r.enqueueConfigsForSigningPolicy(mgr.GetClient()),
+		)).
+		Watches(&openvoxv1alpha1.NodeClassifier{}, handler.EnqueueRequestsFromMapFunc(
+			r.enqueueConfigsForNodeClassifier(mgr.GetClient()),
 		)).
 		Complete(r)
 }
@@ -214,6 +224,12 @@ func (r *ConfigReconciler) renderPuppetConf(ctx context.Context, cfg *openvoxv1a
 		// This keeps puppet.conf static — policy changes only update the Secret,
 		// which kubelet syncs without a pod restart.
 		fmt.Fprintf(&sb, "autosign = %s\n", autosignBinaryPath)
+	}
+
+	// ENC settings
+	if cfg.Spec.NodeClassifierRef != "" {
+		sb.WriteString("node_terminus = exec\n")
+		fmt.Fprintf(&sb, "external_nodes = %s\n", encBinaryPath)
 	}
 
 	for k, v := range cfg.Spec.Puppet.ExtraConfig {
@@ -1221,6 +1237,190 @@ func (r *ConfigReconciler) enqueueConfigsForSigningPolicy(c client.Reader) handl
 		var requests []reconcile.Request
 		for _, cfg := range cfgList.Items {
 			if cfg.Spec.AuthorityRef == ca.Name {
+				requests = append(requests, reconcile.Request{
+					NamespacedName: types.NamespacedName{Name: cfg.Name, Namespace: cfg.Namespace},
+				})
+			}
+		}
+		return requests
+	}
+}
+
+// --- ENC (External Node Classifier) ---
+
+const encBinaryPath = "/usr/local/bin/openvox-enc"
+
+// reconcileENCSecret renders the ENC config into a Secret when nodeClassifierRef is set.
+func (r *ConfigReconciler) reconcileENCSecret(ctx context.Context, cfg *openvoxv1alpha1.Config) error {
+	if cfg.Spec.NodeClassifierRef == "" {
+		return nil
+	}
+	logger := log.FromContext(ctx)
+
+	nc := &openvoxv1alpha1.NodeClassifier{}
+	if err := r.Get(ctx, types.NamespacedName{Name: cfg.Spec.NodeClassifierRef, Namespace: cfg.Namespace}, nc); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	encYAML, renderErr := r.renderENCConfig(ctx, cfg, nc)
+	if renderErr != nil {
+		r.updateNodeClassifierStatus(ctx, nc, renderErr)
+		return fmt.Errorf("rendering ENC config: %w", renderErr)
+	}
+
+	r.updateNodeClassifierStatus(ctx, nc, nil)
+
+	secretName := fmt.Sprintf("%s-enc", cfg.Name)
+	data := map[string][]byte{
+		"enc.yaml": []byte(encYAML),
+	}
+
+	existing := &corev1.Secret{}
+	err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cfg.Namespace}, existing)
+	if errors.IsNotFound(err) {
+		logger.Info("creating ENC Secret", "name", secretName)
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: cfg.Namespace,
+				Labels:    configLabels(cfg.Name),
+			},
+			Data: data,
+		}
+		if err := controllerutil.SetControllerReference(cfg, secret, r.Scheme); err != nil {
+			return err
+		}
+		return r.Create(ctx, secret)
+	} else if err != nil {
+		return err
+	}
+
+	existing.Data = data
+	return r.Update(ctx, existing)
+}
+
+// renderENCConfig renders the enc.yaml that openvox-enc reads.
+func (r *ConfigReconciler) renderENCConfig(ctx context.Context, cfg *openvoxv1alpha1.Config, nc *openvoxv1alpha1.NodeClassifier) (string, error) {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "url: %s\n", nc.Spec.URL)
+	fmt.Fprintf(&sb, "method: %s\n", nc.Spec.Request.Method)
+	fmt.Fprintf(&sb, "path: %s\n", nc.Spec.Request.Path)
+
+	if nc.Spec.Request.Body != "" {
+		fmt.Fprintf(&sb, "body: %s\n", nc.Spec.Request.Body)
+	}
+
+	fmt.Fprintf(&sb, "responseFormat: %s\n", nc.Spec.Response.Format)
+
+	timeout := int32(10)
+	if nc.Spec.TimeoutSeconds != 0 {
+		timeout = nc.Spec.TimeoutSeconds
+	}
+	fmt.Fprintf(&sb, "timeoutSeconds: %d\n", timeout)
+
+	// Auth
+	if nc.Spec.Auth != nil {
+		sb.WriteString("auth:\n")
+		switch {
+		case nc.Spec.Auth.MTLS:
+			sb.WriteString("  type: mtls\n")
+		case nc.Spec.Auth.Token != nil:
+			sb.WriteString("  type: token\n")
+			fmt.Fprintf(&sb, "  header: %s\n", nc.Spec.Auth.Token.Header)
+			token, err := r.resolveSecretKey(ctx, cfg.Namespace,
+				nc.Spec.Auth.Token.SecretKeyRef.Name, nc.Spec.Auth.Token.SecretKeyRef.Key)
+			if err != nil {
+				return "", fmt.Errorf("resolving token secret: %w", err)
+			}
+			fmt.Fprintf(&sb, "  token: %s\n", token)
+		case nc.Spec.Auth.Bearer != nil:
+			sb.WriteString("  type: bearer\n")
+			token, err := r.resolveSecretKey(ctx, cfg.Namespace,
+				nc.Spec.Auth.Bearer.SecretKeyRef.Name, nc.Spec.Auth.Bearer.SecretKeyRef.Key)
+			if err != nil {
+				return "", fmt.Errorf("resolving bearer secret: %w", err)
+			}
+			fmt.Fprintf(&sb, "  token: %s\n", token)
+		case nc.Spec.Auth.Basic != nil:
+			sb.WriteString("  type: basic\n")
+			username, err := r.resolveSecretKey(ctx, cfg.Namespace,
+				nc.Spec.Auth.Basic.SecretRef.Name, nc.Spec.Auth.Basic.SecretRef.UsernameKey)
+			if err != nil {
+				return "", fmt.Errorf("resolving basic auth username: %w", err)
+			}
+			password, err := r.resolveSecretKey(ctx, cfg.Namespace,
+				nc.Spec.Auth.Basic.SecretRef.Name, nc.Spec.Auth.Basic.SecretRef.PasswordKey)
+			if err != nil {
+				return "", fmt.Errorf("resolving basic auth password: %w", err)
+			}
+			fmt.Fprintf(&sb, "  username: %s\n", username)
+			fmt.Fprintf(&sb, "  password: %s\n", password)
+		}
+	}
+
+	// Cache
+	if nc.Spec.Cache != nil && nc.Spec.Cache.Enabled {
+		sb.WriteString("cache:\n")
+		sb.WriteString("  enabled: true\n")
+		dir := "/var/cache/openvox-enc"
+		if nc.Spec.Cache.Directory != "" {
+			dir = nc.Spec.Cache.Directory
+		}
+		fmt.Fprintf(&sb, "  directory: %s\n", dir)
+	}
+
+	// SSL paths (for mTLS or server verification)
+	sb.WriteString("ssl:\n")
+	sb.WriteString("  certFile: /etc/puppetlabs/puppet/ssl/certs/puppet.pem\n")
+	sb.WriteString("  keyFile: /etc/puppetlabs/puppet/ssl/private_keys/puppet.pem\n")
+	sb.WriteString("  caFile: /etc/puppetlabs/puppet/ssl/certs/ca.pem\n")
+
+	return sb.String(), nil
+}
+
+// updateNodeClassifierStatus sets the phase and condition on a NodeClassifier.
+func (r *ConfigReconciler) updateNodeClassifierStatus(ctx context.Context, nc *openvoxv1alpha1.NodeClassifier, err error) {
+	if err != nil {
+		nc.Status.Phase = openvoxv1alpha1.NodeClassifierPhaseError
+		meta.SetStatusCondition(&nc.Status.Conditions, metav1.Condition{
+			Type:               openvoxv1alpha1.ConditionNodeClassifierReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             "Error",
+			Message:            err.Error(),
+			LastTransitionTime: metav1.Now(),
+		})
+	} else {
+		nc.Status.Phase = openvoxv1alpha1.NodeClassifierPhaseActive
+		meta.SetStatusCondition(&nc.Status.Conditions, metav1.Condition{
+			Type:               openvoxv1alpha1.ConditionNodeClassifierReady,
+			Status:             metav1.ConditionTrue,
+			Reason:             "ConfigRendered",
+			Message:            "Node classifier configuration is active",
+			LastTransitionTime: metav1.Now(),
+		})
+	}
+	_ = r.Status().Update(ctx, nc)
+}
+
+// enqueueConfigsForNodeClassifier maps NodeClassifier changes to Config reconciles.
+func (r *ConfigReconciler) enqueueConfigsForNodeClassifier(c client.Reader) handler.MapFunc {
+	return func(ctx context.Context, obj client.Object) []reconcile.Request {
+		nc, ok := obj.(*openvoxv1alpha1.NodeClassifier)
+		if !ok {
+			return nil
+		}
+
+		cfgList := &openvoxv1alpha1.ConfigList{}
+		if err := c.List(ctx, cfgList, client.InNamespace(nc.Namespace)); err != nil {
+			return nil
+		}
+
+		var requests []reconcile.Request
+		for _, cfg := range cfgList.Items {
+			if cfg.Spec.NodeClassifierRef == nc.Name {
 				requests = append(requests, reconcile.Request{
 					NamespacedName: types.NamespacedName{Name: cfg.Name, Namespace: cfg.Namespace},
 				})

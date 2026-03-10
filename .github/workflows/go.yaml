@@ -4,6 +4,19 @@ on:
   workflow_call:
 
 jobs:
+  encoding:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Reject Unicode smart quotes
+        run: |
+          if LC_ALL=C grep -rn $'\xe2\x80\x9c\|\xe2\x80\x9d\|\xe2\x80\x98\|\xe2\x80\x99' --include='*.go' --include='*.yaml' --include='*.yml' --include='*.tpl' .; then
+            echo "::error::Found Unicode smart quotes (U+201C/U+201D/U+2018/U+2019). Replace with ASCII quotes."
+            exit 1
+          fi
+
   lint:
     runs-on: ubuntu-latest
     steps:

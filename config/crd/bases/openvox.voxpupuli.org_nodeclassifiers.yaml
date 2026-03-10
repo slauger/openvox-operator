@@ -1,0 +1,289 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.5
+  name: nodeclassifiers.openvox.voxpupuli.org
+spec:
+  group: openvox.voxpupuli.org
+  names:
+    kind: NodeClassifier
+    listKind: NodeClassifierList
+    plural: nodeclassifiers
+    shortNames:
+    - nc
+    singular: nodeclassifier
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.url
+      name: URL
+      type: string
+    - jsonPath: .spec.request.method
+      name: Method
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          NodeClassifier is the Schema for the nodeclassifiers API.
+          It defines an External Node Classifier (ENC) endpoint for Puppet Server.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: NodeClassifierSpec defines the desired state of NodeClassifier.
+            properties:
+              auth:
+                description: Auth defines the authentication method. If omitted, no
+                  authentication is used.
+                properties:
+                  basic:
+                    description: Basic uses HTTP Basic Authentication.
+                    properties:
+                      secretRef:
+                        description: SecretRef references the Secret containing username
+                          and password.
+                        properties:
+                          name:
+                            description: Name is the name of the Secret.
+                            type: string
+                          passwordKey:
+                            default: password
+                            description: PasswordKey is the key within the Secret
+                              containing the password.
+                            type: string
+                          usernameKey:
+                            default: username
+                            description: UsernameKey is the key within the Secret
+                              containing the username.
+                            type: string
+                        required:
+                        - name
+                        - passwordKey
+                        - usernameKey
+                        type: object
+                    required:
+                    - secretRef
+                    type: object
+                  bearer:
+                    description: Bearer sends a Bearer token via the Authorization
+                      header.
+                    properties:
+                      secretKeyRef:
+                        description: SecretKeyRef selects a key from a Secret.
+                        properties:
+                          key:
+                            description: Key is the key within the Secret.
+                            type: string
+                          name:
+                            description: Name is the name of the Secret.
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                    required:
+                    - secretKeyRef
+                    type: object
+                  mtls:
+                    description: MTLS uses the Puppet SSL certificates for mutual
+                      TLS authentication.
+                    type: boolean
+                  token:
+                    description: Token sends a token via a custom HTTP header (e.g.
+                      X-Authentication for PE).
+                    properties:
+                      header:
+                        description: Header is the HTTP header name (e.g. X-Authentication).
+                        type: string
+                      secretKeyRef:
+                        description: SecretKeyRef references the Secret key containing
+                          the token value.
+                        properties:
+                          key:
+                            description: Key is the key within the Secret.
+                            type: string
+                          name:
+                            description: Name is the name of the Secret.
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                    required:
+                    - header
+                    - secretKeyRef
+                    type: object
+                type: object
+                x-kubernetes-validations:
+                - message: at most one auth method may be set
+                  rule: '(self.mtls ? 1 : 0) + (has(self.token) ? 1 : 0) + (has(self.bearer)
+                    ? 1 : 0) + (has(self.basic) ? 1 : 0) <= 1'
+              cache:
+                description: Cache defines optional disk caching for classifier responses.
+                properties:
+                  directory:
+                    default: /var/cache/openvox-enc
+                    description: Directory is the cache directory path inside the
+                      container.
+                    type: string
+                  enabled:
+                    default: false
+                    description: Enabled activates disk caching of classifier responses.
+                    type: boolean
+                required:
+                - enabled
+                type: object
+              request:
+                description: Request defines the HTTP request configuration.
+                properties:
+                  body:
+                    description: |-
+                      Body defines what to send as POST body.
+                      facts: send Puppet facts as JSON (PE-compatible).
+                      certname: send minimal JSON with certname only.
+                      Empty or omitted: no body.
+                    enum:
+                    - facts
+                    - certname
+                    - ""
+                    type: string
+                  method:
+                    default: GET
+                    description: Method is the HTTP method (GET or POST).
+                    type: string
+                  path:
+                    default: /node/{certname}
+                    description: Path is the URL path template. Use {certname} as
+                      placeholder.
+                    type: string
+                required:
+                - method
+                - path
+                type: object
+                x-kubernetes-validations:
+                - message: method must be GET or POST
+                  rule: self.method == 'GET' || self.method == 'POST'
+                - message: body is only allowed with POST method
+                  rule: self.method == 'POST' || !has(self.body) || self.body == ''
+              response:
+                description: Response defines how to interpret the classifier response.
+                properties:
+                  format:
+                    default: yaml
+                    description: Format is the expected response format.
+                    enum:
+                    - yaml
+                    - json
+                    type: string
+                required:
+                - format
+                type: object
+              timeoutSeconds:
+                default: 10
+                description: TimeoutSeconds is the HTTP request timeout.
+                format: int32
+                type: integer
+              url:
+                description: URL is the classifier service base URL.
+                type: string
+            required:
+            - request
+            - response
+            - url
+            type: object
+          status:
+            description: NodeClassifierStatus defines the observed state of NodeClassifier.
+            properties:
+              conditions:
+                description: Conditions represent the latest available observations.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              phase:
+                description: Phase is the current lifecycle phase.
+                enum:
+                - Active
+                - Error
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

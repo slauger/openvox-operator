@@ -4,6 +4,9 @@ metadata:
   name: {{ include "openvox-stack.configName" . }}
 spec:
   authorityRef: {{ include "openvox-stack.caName" . }}
+  {{- if .Values.nodeClassifier.enabled }}
+  nodeClassifierRef: {{ include "openvox-stack.nodeClassifierName" . }}
+  {{- end }}
   image:
     repository: {{ .Values.config.image.repository }}
     tag: {{ .Values.config.image.tag | quote }}

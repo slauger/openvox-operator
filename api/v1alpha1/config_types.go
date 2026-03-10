@@ -60,6 +60,10 @@ type ConfigSpec struct {
 	// +optional
 	Metrics *MetricsSpec `json:"metrics,omitempty"`
 
+	// NodeClassifierRef references the NodeClassifier used by this Config.
+	// +optional
+	NodeClassifierRef string `json:"nodeClassifierRef,omitempty"`
+
 	// Code defines the Puppet code source for all Servers in this Config.
 	// Only applied to Servers with server=true.
 	// +optional
@@ -215,8 +219,8 @@ type GraphiteSpec struct {
 
 // CodeSpec defines the source of Puppet code to mount into Server pods.
 // Either ClaimName (PVC) or Image (OCI image volume) may be set, not both.
-// +kubebuilder:validation:XValidation:rule="!(has(self.image) && self.image != ” && has(self.claimName) && self.claimName != ”)",message="image and claimName are mutually exclusive"
-// +kubebuilder:validation:XValidation:rule="(has(self.image) && self.image != ”) || (has(self.claimName) && self.claimName != ”)",message="either image or claimName must be set"
+// +kubebuilder:validation:XValidation:rule="!(has(self.image) && self.image != '' && has(self.claimName) && self.claimName != '')",message="image and claimName are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="(has(self.image) && self.image != '') || (has(self.claimName) && self.claimName != '')",message="either image or claimName must be set"
 type CodeSpec struct {
 	// ClaimName references an existing PVC containing Puppet code.
 	// Mutually exclusive with Image.

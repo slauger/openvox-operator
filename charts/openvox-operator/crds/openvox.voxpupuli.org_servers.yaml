@@ -117,11 +117,11 @@ spec:
                 type: object
                 x-kubernetes-validations:
                 - message: image and claimName are mutually exclusive
-                  rule: '!(has(self.image) && self.image != ” && has(self.claimName)
-                    && self.claimName != ”)'
+                  rule: '!(has(self.image) && self.image != '''' && has(self.claimName)
+                    && self.claimName != '''')'
                 - message: either image or claimName must be set
-                  rule: (has(self.image) && self.image != ”) || (has(self.claimName)
-                    && self.claimName != ”)
+                  rule: (has(self.image) && self.image != '') || (has(self.claimName)
+                    && self.claimName != '')
               configRef:
                 description: ConfigRef references the Config this Server belongs to.
                 type: string

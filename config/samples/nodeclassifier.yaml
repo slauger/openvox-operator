@@ -1,0 +1,91 @@
+# Foreman ENC (GET, mTLS)
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: NodeClassifier
+metadata:
+  name: foreman
+spec:
+  url: https://foreman.example.com
+  request:
+    method: GET
+    path: /node/{certname}
+  response:
+    format: yaml
+  auth:
+    mtls: true
+  cache:
+    enabled: true
+---
+# Foreman ENC (GET, Basic Auth)
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: NodeClassifier
+metadata:
+  name: foreman-basic
+spec:
+  url: https://foreman.example.com
+  request:
+    method: GET
+    path: /api/v2/hosts/{certname}/enc
+  response:
+    format: yaml
+  auth:
+    basic:
+      secretRef:
+        name: foreman-credentials
+        usernameKey: username
+        passwordKey: password
+  cache:
+    enabled: true
+---
+# Puppet Enterprise Classifier (POST, Token Auth, Facts)
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: NodeClassifier
+metadata:
+  name: pe-classifier
+spec:
+  url: https://pe-console.example.com:4433
+  request:
+    method: POST
+    path: /classifier-api/v1/classified/nodes/{certname}
+    body: facts
+  response:
+    format: json
+  timeoutSeconds: 10
+  auth:
+    token:
+      header: X-Authentication
+      secretKeyRef:
+        name: pe-rbac-token
+        key: token
+  cache:
+    enabled: true
+---
+# Generic HTTP ENC (GET, Bearer Token)
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: NodeClassifier
+metadata:
+  name: custom-enc
+spec:
+  url: https://enc-service.internal:8443
+  request:
+    method: GET
+    path: /v1/classify/{certname}
+  response:
+    format: yaml
+  auth:
+    bearer:
+      secretKeyRef:
+        name: enc-api-token
+        key: token
+---
+# Cluster-internal ENC (no auth)
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: NodeClassifier
+metadata:
+  name: internal-enc
+spec:
+  url: http://enc-service.enc-system.svc:8080
+  request:
+    method: GET
+    path: /enc/{certname}
+  response:
+    format: yaml

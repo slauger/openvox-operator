@@ -36,6 +36,17 @@ SigningPolicy name.
 {{- end }}
 
 {{/*
+NodeClassifier name.
+*/}}
+{{- define "openvox-stack.nodeClassifierName" -}}
+{{- if .Values.nodeClassifier.name -}}
+{{- .Values.nodeClassifier.name }}
+{{- else -}}
+{{- include "openvox-stack.fullname" . }}-enc
+{{- end }}
+{{- end }}
+
+{{/*
 Server name for a server entry — prefixed with fullname.
 Usage: include "openvox-stack.serverName" (dict "root" $ "entry" $entry)
 */}}

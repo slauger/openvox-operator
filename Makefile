@@ -61,39 +61,43 @@ local-build: ## Build all images for local development (Docker Desktop K8s).
 	@echo "Built openvox-server:$(LOCAL_TAG)"
 
 .PHONY: local-deploy
-local-deploy: local-build install ## Build images, install CRDs, and deploy operator via Helm.
-	helm upgrade --install openvox-operator charts/openvox-operator \
-		--namespace $(NAMESPACE) --create-namespace \
-		--set image.repository=openvox-operator \
-		--set image.tag=$(LOCAL_TAG) \
-		--set image.pullPolicy=Never \
-		--set podAnnotations.imageId=$$($(CONTAINER_TOOL) image inspect openvox-operator:$(LOCAL_TAG) --format '{{.Id}}')
+local-deploy: local-build local-install ## Build images and deploy operator via Helm.
 	@echo ""
 	@echo "Operator deployed with openvox-operator:$(LOCAL_TAG)"
 
 STACK_NAMESPACE ?= openvox
 STACK_VALUES ?= charts/openvox-stack/ci/single-node-values.yaml
 
-.PHONY: local-stack
-local-stack: ## Deploy openvox-stack via Helm with local images.
-	helm upgrade --install openvox-stack charts/openvox-stack \
-		--namespace $(STACK_NAMESPACE) --create-namespace \
-		--values $(STACK_VALUES) \
-		--set config.image.repository=openvox-server \
-		--set config.image.tag=$(LOCAL_TAG) \
-		--set config.image.pullPolicy=Never
-	@echo ""
-	@echo "Stack deployed with openvox-server:$(LOCAL_TAG) in $(STACK_NAMESPACE) using $(STACK_VALUES)"
-
 ##@ Deployment
 
 .PHONY: install
-install: manifests ## Install CRDs into the cluster.
-	kubectl apply -f config/crd/bases/
+install: manifests ## Install operator via Helm with default images.
+	helm upgrade --install openvox-operator charts/openvox-operator \
+		--namespace $(NAMESPACE) --create-namespace $(HELM_SET)
+
+.PHONY: local-install
+local-install: HELM_SET := --set image.repository=openvox-operator --set image.tag=$(LOCAL_TAG) --set image.pullPolicy=Never
+local-install: install ## Install operator via Helm with local images (no build).
+
+.PHONY: stack
+stack: ## Deploy openvox-stack via Helm with default images.
+	helm upgrade --install openvox-stack charts/openvox-stack \
+		--namespace $(STACK_NAMESPACE) --create-namespace \
+		--values $(STACK_VALUES) $(STACK_HELM_SET)
+
+.PHONY: local-stack
+local-stack: STACK_HELM_SET := --set config.image.repository=openvox-server --set config.image.tag=$(LOCAL_TAG) --set config.image.pullPolicy=Never
+local-stack: stack ## Deploy openvox-stack via Helm with local images.
+
+.PHONY: unstack
+unstack: ## Remove openvox-stack from the cluster.
+	helm uninstall openvox-stack --namespace $(STACK_NAMESPACE)
 
 .PHONY: uninstall
-uninstall: ## Uninstall CRDs from the cluster.
-	kubectl delete -f config/crd/bases/
+uninstall: ## Remove stack, operator, and CRDs from the cluster.
+	-helm uninstall openvox-stack --namespace $(STACK_NAMESPACE) 2>/dev/null
+	-helm uninstall openvox-operator --namespace $(NAMESPACE) 2>/dev/null
+	-kubectl delete -f config/crd/bases/ --ignore-not-found
 
 .PHONY: deploy
 deploy: manifests ## Deploy operator to the cluster.

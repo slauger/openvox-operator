@@ -1,0 +1,56 @@
+{{- if .Values.nodeClassifier.enabled }}
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: NodeClassifier
+metadata:
+  name: {{ include "openvox-stack.nodeClassifierName" . }}
+spec:
+  url: {{ .Values.nodeClassifier.url }}
+  request:
+    method: {{ .Values.nodeClassifier.request.method }}
+    path: {{ .Values.nodeClassifier.request.path }}
+    {{- with .Values.nodeClassifier.request.body }}
+    body: {{ . }}
+    {{- end }}
+  response:
+    format: {{ .Values.nodeClassifier.response.format }}
+  {{- with .Values.nodeClassifier.timeoutSeconds }}
+  timeoutSeconds: {{ . }}
+  {{- end }}
+  {{- with .Values.nodeClassifier.auth }}
+  auth:
+    {{- if .mtls }}
+    mtls: true
+    {{- end }}
+    {{- with .token }}
+    token:
+      header: {{ .header }}
+      secretKeyRef:
+        name: {{ .secretKeyRef.name }}
+        key: {{ .secretKeyRef.key }}
+    {{- end }}
+    {{- with .bearer }}
+    bearer:
+      secretKeyRef:
+        name: {{ .secretKeyRef.name }}
+        key: {{ .secretKeyRef.key }}
+    {{- end }}
+    {{- with .basic }}
+    basic:
+      secretRef:
+        name: {{ .secretRef.name }}
+        {{- with .secretRef.usernameKey }}
+        usernameKey: {{ . }}
+        {{- end }}
+        {{- with .secretRef.passwordKey }}
+        passwordKey: {{ . }}
+        {{- end }}
+    {{- end }}
+  {{- end }}
+  {{- if .Values.nodeClassifier.cache.enabled }}
+  cache:
+    enabled: true
+    {{- with .Values.nodeClassifier.cache.directory }}
+    directory: {{ . }}
+    {{- end }}
+  {{- end }}
+{{- end }}

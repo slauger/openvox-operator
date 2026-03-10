@@ -81,6 +81,14 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 		}
 	}
 
+	// Add ENC secret hash annotation for server pods to trigger rollout on ENC config changes
+	if server.Spec.Server && cfg.Spec.NodeClassifierRef != "" {
+		encSecretName := fmt.Sprintf("%s-enc", server.Spec.ConfigRef)
+		if encHash, err := r.secretHash(ctx, encSecretName, server.Namespace); err == nil {
+			annotations["openvox.voxpupuli.org/enc-secret-hash"] = encHash
+		}
+	}
+
 	deploy := &appsv1.Deployment{}
 	err = r.Get(ctx, types.NamespacedName{Name: deployName, Namespace: server.Namespace}, deploy)
 	if errors.IsNotFound(err) {
@@ -283,6 +291,37 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 				})
 			}
 		}
+	}
+
+	// ENC: mount config Secret and cache emptyDir for server:true pods with nodeClassifierRef
+	if server.Spec.Server && cfg.Spec.NodeClassifierRef != "" {
+		encSecretName := fmt.Sprintf("%s-enc", server.Spec.ConfigRef)
+		volumeMounts = append(volumeMounts,
+			corev1.VolumeMount{
+				Name:      "enc-config",
+				MountPath: "/etc/puppetlabs/puppet/enc.yaml",
+				SubPath:   "enc.yaml",
+				ReadOnly:  true,
+			},
+			corev1.VolumeMount{
+				Name:      "enc-cache",
+				MountPath: "/var/cache/openvox-enc",
+			},
+		)
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: "enc-config",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: encSecretName,
+					},
+				},
+			},
+			corev1.Volume{
+				Name:         "enc-cache",
+				VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+			},
+		)
 	}
 
 	container := corev1.Container{

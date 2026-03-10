@@ -171,6 +171,18 @@ COPY cmd/autosign/ cmd/autosign/
 RUN CGO_ENABLED=0 go build -o /openvox-autosign ./cmd/autosign/
 
 ################################################################################
+# Stage: enc — compile the openvox-enc Go binary
+################################################################################
+FROM docker.io/library/golang:1.26 AS enc
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY api/ api/
+COPY cmd/enc/ cmd/enc/
+RUN CGO_ENABLED=0 go build -o /openvox-enc ./cmd/enc/
+
+################################################################################
 # Stage: final — rootless runtime image (no Ruby)
 ################################################################################
 FROM base AS final
@@ -210,8 +222,9 @@ COPY images/openvox-server/entrypoint.sh /entrypoint.sh
 COPY images/openvox-server/healthcheck.sh /healthcheck.sh
 COPY images/openvox-server/cli-ca.sh /opt/puppetlabs/server/apps/puppetserver/cli/apps/ca
 COPY --from=autosign /openvox-autosign /usr/local/bin/openvox-autosign
+COPY --from=enc /openvox-enc /usr/local/bin/openvox-enc
 
-RUN chmod +x /entrypoint.sh /healthcheck.sh /opt/puppetlabs/server/apps/puppetserver/cli/apps/ca /usr/local/bin/openvox-autosign
+RUN chmod +x /entrypoint.sh /healthcheck.sh /opt/puppetlabs/server/apps/puppetserver/cli/apps/ca /usr/local/bin/openvox-autosign /usr/local/bin/openvox-enc
 
 # Set HOME explicitly: random UIDs (OpenShift) default HOME to "/"
 ENV HOME=/opt/puppetlabs/server/data/puppetserver

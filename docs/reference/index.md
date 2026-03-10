@@ -9,11 +9,13 @@ graph TD
     Cfg["Config"]
     CA["CertificateAuthority"]
     SP["SigningPolicy"]
+    NC["NodeClassifier"]
     Cert["Certificate"]
     Srv["Server"]
     Pool["Pool"]
 
     Cfg -->|authorityRef| CA
+    Cfg -->|nodeClassifierRef| NC
     CA -->|certificateAuthorityRef| SP
     CA -->|authorityRef| Cert
     Cert -->|certificateRef| Srv
@@ -22,7 +24,7 @@ graph TD
     Cfg -->|configRef| Pool
 ```
 
-Each resource references its parent. The operator reconciles them in order: a Config references a CertificateAuthority via `authorityRef`, a CertificateAuthority must be `Ready` before a Certificate can be signed, and a Certificate must be `Signed` before a Server creates its Deployment. SigningPolicies can be created at any time and take effect within ~60 seconds.
+Each resource references its parent. The operator reconciles them in order: a Config references a CertificateAuthority via `authorityRef` and optionally a NodeClassifier via `nodeClassifierRef`, a CertificateAuthority must be `Ready` before a Certificate can be signed, and a Certificate must be `Signed` before a Server creates its Deployment. SigningPolicies and NodeClassifiers can be created at any time and take effect within ~60 seconds.
 
 ## Resources
 
@@ -31,6 +33,7 @@ Each resource references its parent. The operator reconciles them in order: a Co
 | [Config](config.md) | `cfg` | Shared config (puppet.conf, auth.conf), PuppetDB connection |
 | [CertificateAuthority](certificateauthority.md) | `ca` | CA infrastructure: PVC, keys, 3 CA Secrets (cert, key, CRL) |
 | [SigningPolicy](signingpolicy.md) | `sp` | Declarative CSR signing policy for a CA |
+| [NodeClassifier](nodeclassifier.md) | `nc` | External Node Classifier (ENC) endpoint |
 | [Certificate](certificate.md) | `cert` | Lifecycle of a single certificate (request, sign) |
 | [Server](server.md) | - | OpenVox Server Deployment (CA and/or server role) |
 | [Pool](pool.md) | - | Kubernetes Service that selects Server Pods |

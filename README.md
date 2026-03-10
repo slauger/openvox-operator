@@ -33,13 +33,20 @@ graph TD
 
     Cfg["📋 Config<br/>production"]
     Cfg -->|authorityRef| CA_CRD["🔐 CertificateAuthority<br/>production-ca"]
-    CA_CRD --> Cert_CA["📜 Certificate: ca-cert"]
-    CA_CRD --> Cert_Stable["📜 Certificate: stable-cert"]
-    CA_CRD --> Cert_Canary["📜 Certificate: canary-cert"]
+    Cfg -->|nodeClassifierRef| NC["🏷️ NodeClassifier<br/>foreman-enc"]
+    SP["📜 SigningPolicy<br/>autosign"] -->|certificateAuthorityRef| CA_CRD
 
-    Cert_CA --> CA["⚙️ Server: ca<br/>ca: true, server: true"]
-    Cert_Stable --> Stable["⚙️ Server: stable<br/>v8.12.1"]
-    Cert_Canary --> Canary["⚙️ Server: canary<br/>v8.13.0"]
+    Cert_CA["📜 Certificate: ca-cert"] -->|authorityRef| CA_CRD
+    Cert_Stable["📜 Certificate: stable-cert"] -->|authorityRef| CA_CRD
+    Cert_Canary["📜 Certificate: canary-cert"] -->|authorityRef| CA_CRD
+
+    CA["⚙️ Server: ca<br/>ca: true, server: true"] -->|configRef| Cfg
+    Stable["⚙️ Server: stable<br/>v8.12.1"] -->|configRef| Cfg
+    Canary["⚙️ Server: canary<br/>v8.13.0"] -->|configRef| Cfg
+
+    CA -->|certificateRef| Cert_CA
+    Stable -->|certificateRef| Cert_Stable
+    Canary -->|certificateRef| Cert_Canary
 
     CA --> CA_D["Deployment"]
     Stable --> ST_D["Deployment"]
@@ -49,6 +56,13 @@ graph TD
     CA_D -->|mounts| Code["📦 Code<br/>(OCI Image or PVC)"]
     ST_D -->|mounts| Code
     CN_D -->|mounts| Code
+
+    Pool_CA["🌐 Pool: puppet-ca"] -->|configRef| Cfg
+    Pool_Srv["🌐 Pool: puppet"] -->|configRef| Cfg
+    Pool_CA -->|selects| CA
+    Pool_Srv -->|selects| CA
+    Pool_Srv -->|selects| Stable
+    Pool_Srv -->|selects| Canary
 ```
 
 A **Config** is the root resource - it holds shared configuration (puppet.conf, PuppetDB connection), manages code deployment, and references a **CertificateAuthority** via `authorityRef`. A **CertificateAuthority** initializes the CA infrastructure and periodically refreshes the CRL. Each **Certificate** is signed by the CA and stored as a Kubernetes Secret. A **Server** references a Certificate and creates a Deployment - it can run as CA, catalog server, or both. Servers declare pool membership via `poolRefs`. **Pools** are pure networking resources that create Services selecting Server pods by pool label, with optional Gateway API TLSRoute for SNI-based routing.

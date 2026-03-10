@@ -979,7 +979,7 @@ func (r *ConfigReconciler) renderMetricsConf(cfg *openvoxv1alpha1.Config) string
 		var reporters []string
 
 		if m.JMX != nil && m.JMX.Enabled {
-			reporters = append(reporters, fmt.Sprintf("                jmx: {\n                    enabled: true\n                }"))
+			reporters = append(reporters, "                jmx: {\n                    enabled: true\n                }")
 		}
 
 		if m.Graphite != nil && m.Graphite.Enabled {

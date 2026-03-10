@@ -116,6 +116,31 @@ helm-lint: ## Lint the Helm chart.
 helm-template: ## Render Helm chart templates locally.
 	helm template openvox-operator charts/openvox-operator
 
+##@ CI
+
+GOLANGCI_LINT ?= $(shell which golangci-lint 2>/dev/null || echo $(GOBIN)/golangci-lint)
+GOVULNCHECK ?= $(shell which govulncheck 2>/dev/null || echo $(GOBIN)/govulncheck)
+
+.PHONY: lint
+lint: ## Run golangci-lint.
+	$(GOLANGCI_LINT) run ./...
+
+.PHONY: vulncheck
+vulncheck: ## Run govulncheck.
+	$(GOVULNCHECK) ./...
+
+.PHONY: check-manifests
+check-manifests: manifests generate ## Check for CRD and deepcopy drift.
+	@if ! git diff --quiet; then \
+		echo "error: generated files are out of date. Run 'make manifests generate' and commit the result."; \
+		git diff --stat; \
+		exit 1; \
+	fi
+
+.PHONY: ci
+ci: lint vet test check-manifests vulncheck helm-lint ## Run all CI checks locally.
+	@echo "All CI checks passed."
+
 ##@ Tools
 
 .PHONY: controller-gen

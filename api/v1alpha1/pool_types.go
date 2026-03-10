@@ -52,8 +52,8 @@ type PoolSpec struct {
 }
 
 // PoolRouteSpec configures a TLSRoute for SNI-based routing via Gateway API.
-// +kubebuilder:validation:XValidation:rule="!self.enabled || self.hostname != ''",message="hostname is required when route is enabled"
-// +kubebuilder:validation:XValidation:rule="!self.enabled || self.gatewayRef.name != ''",message="gatewayRef.name is required when route is enabled"
+// +kubebuilder:validation:XValidation:rule="!self.enabled || size(self.hostname) > 0",message="hostname is required when route is enabled"
+// +kubebuilder:validation:XValidation:rule="!self.enabled || size(self.gatewayRef.name) > 0",message="gatewayRef.name is required when route is enabled"
 type PoolRouteSpec struct {
 	// Enabled activates TLSRoute creation for this Pool.
 	// +kubebuilder:default=false

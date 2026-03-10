@@ -1,0 +1,63 @@
+The OpenVox stack has been deployed.
+
+  Release:   {{ .Release.Name }}
+  Namespace: {{ .Release.Namespace }}
+  Config:    {{ include "openvox-stack.configName" . }}
+  CA:        {{ include "openvox-stack.caName" . }}
+  Image:     {{ .Values.config.image.repository }}:{{ .Values.config.image.tag }}
+
+Resources created:
+
+  Config:               {{ include "openvox-stack.configName" . }}
+  CertificateAuthority: {{ include "openvox-stack.caName" . }}
+{{- if .Values.signingPolicy.enabled }}
+  SigningPolicy:        {{ include "openvox-stack.signingPolicyName" . }}
+{{- end }}
+{{- if .Values.nodeClassifier.enabled }}
+  NodeClassifier:       {{ include "openvox-stack.nodeClassifierName" . }}
+{{- end }}
+
+  Servers:
+{{- range .Values.servers }}
+    - {{ .name }} (ca={{ .ca | default false }}, server={{ .server | default true }}, replicas={{ .replicas | default 1 }})
+{{- end }}
+
+  Pools:
+{{- range .Values.pools }}
+    - {{ .name }} ({{ .service.type }}:{{ .service.port }})
+{{- end }}
+
+Verify the deployment:
+
+  1. Check CertificateAuthority status (wait for Ready):
+
+     kubectl get certificateauthority -n {{ .Release.Namespace }}
+
+  2. Check Certificate signing status:
+
+     kubectl get certificate -n {{ .Release.Namespace }}
+
+  3. Check Server status:
+
+     kubectl get server -n {{ .Release.Namespace }}
+
+  4. Check Pool endpoints:
+
+     kubectl get pool -n {{ .Release.Namespace }}
+
+  5. Access the Puppet CA service:
+{{- range .Values.pools }}
+{{- if eq .name "ca" }}
+{{- if eq .service.type "LoadBalancer" }}
+
+     kubectl get svc -n {{ $.Release.Namespace }} {{ $.Release.Name }}-ca
+
+{{- else }}
+
+     kubectl port-forward svc/{{ $.Release.Name }}-ca {{ .service.port }}:{{ .service.port }} -n {{ $.Release.Namespace }}
+
+{{- end }}
+{{- end }}
+{{- end }}
+
+Documentation: https://slauger.github.io/openvox-operator

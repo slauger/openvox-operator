@@ -1,0 +1,33 @@
+The OpenVox Operator has been installed.
+
+  Release:   {{ .Release.Name }}
+  Namespace: {{ .Release.Namespace }}
+  Image:     {{ .Values.image.repository }}:{{ .Values.image.tag }}
+
+The operator is now watching for OpenVox CRDs in all namespaces.
+
+Next steps:
+
+  1. Deploy an OpenVox stack using the openvox-stack chart:
+
+     helm install openvox charts/openvox-stack \
+       --namespace openvox --create-namespace \
+       --values your-values.yaml
+
+  2. Or create resources manually:
+
+     kubectl apply -f config/samples/config.yaml
+     kubectl apply -f config/samples/certificateauthority.yaml
+     kubectl apply -f config/samples/certificate.yaml
+     kubectl apply -f config/samples/server.yaml
+     kubectl apply -f config/samples/pool.yaml
+
+  3. Verify the operator is running:
+
+     kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "openvox-operator.name" . }}
+
+  4. Check the operator logs:
+
+     kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "openvox-operator.name" . }} -f
+
+Documentation: https://slauger.github.io/openvox-operator

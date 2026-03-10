@@ -92,8 +92,10 @@ install: manifests ## Install CRDs into the cluster.
 	kubectl apply -f config/crd/bases/
 
 .PHONY: uninstall
-uninstall: ## Uninstall CRDs from the cluster.
-	kubectl delete -f config/crd/bases/
+uninstall: ## Remove stack, operator, and CRDs from the cluster.
+	-helm uninstall openvox-stack --namespace $(STACK_NAMESPACE) 2>/dev/null
+	-helm uninstall openvox-operator --namespace $(NAMESPACE) 2>/dev/null
+	-kubectl delete -f config/crd/bases/ --ignore-not-found
 
 .PHONY: deploy
 deploy: manifests ## Deploy operator to the cluster.

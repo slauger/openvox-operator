@@ -113,7 +113,7 @@ parameters:
   role: webserver
 environment: production
 `
-		w.Write([]byte(response))
+		_, _ = w.Write([]byte(response))
 	}))
 	defer server.Close()
 
@@ -142,7 +142,7 @@ environment: production
 func TestClassify_GET_JSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(ENCResult{
+		_ = json.NewEncoder(w).Encode(ENCResult{
 			Classes:     map[string]interface{}{"nginx": nil},
 			Parameters:  map[string]interface{}{"role": "proxy"},
 			Environment: "staging",
@@ -182,7 +182,7 @@ func TestClassify_POST(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/yaml")
-		w.Write([]byte("classes: {}\n"))
+		_, _ = w.Write([]byte("classes: {}\n"))
 	}))
 	defer server.Close()
 
@@ -204,7 +204,7 @@ func TestClassify_POST(t *testing.T) {
 func TestClassify_404(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("not found"))
+		_, _ = w.Write([]byte("not found"))
 	}))
 	defer server.Close()
 
@@ -228,7 +228,7 @@ func TestClassify_404(t *testing.T) {
 func TestClassify_ServerError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("internal error"))
+		_, _ = w.Write([]byte("internal error"))
 	}))
 	defer server.Close()
 
@@ -255,7 +255,7 @@ func TestClassify_BearerAuth(t *testing.T) {
 		if auth != "Bearer test-token" {
 			t.Errorf("Authorization = %q, want %q", auth, "Bearer test-token")
 		}
-		w.Write([]byte("classes: {}\n"))
+		_, _ = w.Write([]byte("classes: {}\n"))
 	}))
 	defer server.Close()
 
@@ -283,7 +283,7 @@ func TestClassify_TokenAuth(t *testing.T) {
 		if token != "secret-123" {
 			t.Errorf("X-Custom-Token = %q", token)
 		}
-		w.Write([]byte("classes: {}\n"))
+		_, _ = w.Write([]byte("classes: {}\n"))
 	}))
 	defer server.Close()
 
@@ -312,7 +312,7 @@ func TestClassify_BasicAuth(t *testing.T) {
 		if !ok || user != "admin" || pass != "secret" {
 			t.Errorf("BasicAuth: ok=%v user=%q pass=%q", ok, user, pass)
 		}
-		w.Write([]byte("classes: {}\n"))
+		_, _ = w.Write([]byte("classes: {}\n"))
 	}))
 	defer server.Close()
 

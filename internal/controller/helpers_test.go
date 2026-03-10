@@ -3,8 +3,6 @@ package controller
 import (
 	"testing"
 
-	corev1 "k8s.io/api/core/v1"
-
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
 
@@ -14,16 +12,16 @@ func TestConfigMapVolume(t *testing.T) {
 	if vol.Name != "my-vol" {
 		t.Errorf("expected volume name %q, got %q", "my-vol", vol.Name)
 	}
-	if vol.VolumeSource.ConfigMap == nil {
+	if vol.ConfigMap == nil {
 		t.Fatal("expected ConfigMap volume source, got nil")
 	}
-	if vol.VolumeSource.ConfigMap.Name != "my-cm" {
-		t.Errorf("expected ConfigMap name %q, got %q", "my-cm", vol.VolumeSource.ConfigMap.Name)
+	if vol.ConfigMap.Name != "my-cm" {
+		t.Errorf("expected ConfigMap name %q, got %q", "my-cm", vol.ConfigMap.Name)
 	}
-	if len(vol.VolumeSource.ConfigMap.Items) != 1 {
-		t.Fatalf("expected 1 item, got %d", len(vol.VolumeSource.ConfigMap.Items))
+	if len(vol.ConfigMap.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(vol.ConfigMap.Items))
 	}
-	item := vol.VolumeSource.ConfigMap.Items[0]
+	item := vol.ConfigMap.Items[0]
 	if item.Key != "puppet.conf" || item.Path != "puppet.conf" {
 		t.Errorf("expected key=path=%q, got key=%q path=%q", "puppet.conf", item.Key, item.Path)
 	}
@@ -35,7 +33,7 @@ func TestConfigMapVolumeWithKey(t *testing.T) {
 	if vol.Name != "my-vol" {
 		t.Errorf("expected volume name %q, got %q", "my-vol", vol.Name)
 	}
-	item := vol.VolumeSource.ConfigMap.Items[0]
+	item := vol.ConfigMap.Items[0]
 	if item.Key != "data-key" {
 		t.Errorf("expected key %q, got %q", "data-key", item.Key)
 	}
@@ -183,13 +181,11 @@ func TestBoolPtr(t *testing.T) {
 // Verify configMapVolume returns correct type
 func TestConfigMapVolumeType(t *testing.T) {
 	vol := configMapVolume("test", "cm", "key")
-	if vol.VolumeSource.ConfigMap == nil {
+	if vol.ConfigMap == nil {
 		t.Fatal("expected ConfigMap volume source")
 	}
 	// Verify no other volume sources are set
-	vs := vol.VolumeSource
-	if vs.Secret != nil || vs.EmptyDir != nil || vs.PersistentVolumeClaim != nil {
+	if vol.Secret != nil || vol.EmptyDir != nil || vol.PersistentVolumeClaim != nil {
 		t.Error("unexpected additional volume sources set")
 	}
-	_ = corev1.Volume{} // ensure import is used
 }

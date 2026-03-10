@@ -1,6 +1,6 @@
 # CertificateAuthority
 
-A CertificateAuthority manages the CA infrastructure for a Config: a PVC for CA data, a setup Job that runs `puppetserver ca setup`, and Secrets for CA certificates, keys, and CRLs.
+A CertificateAuthority manages the CA infrastructure: a PVC for CA data, a setup Job that runs `puppetserver ca setup`, and Secrets for CA certificates, keys, and CRLs. A Config references the CertificateAuthority via its `authorityRef` field.
 
 ## Example
 
@@ -10,7 +10,6 @@ kind: CertificateAuthority
 metadata:
   name: production-ca
 spec:
-  configRef: production
   crlRefreshInterval: 5m
   storage:
     size: 1Gi
@@ -22,7 +21,6 @@ Autosigning is configured via [SigningPolicy](signingpolicy.md) resources that r
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `configRef` | string | **required** | Reference to the Config |
 | `ttl` | string | `5y` | CA certificate TTL as duration string (e.g. `5y`, `365d`, `8760h`) |
 | `allowSubjectAltNames` | bool | `true` | Allow SANs in CSRs |
 | `crlRefreshInterval` | string | `5m` | How often the operator refreshes the CRL Secret from the CA (Go duration: `5m`, `1h`, `30s`) |

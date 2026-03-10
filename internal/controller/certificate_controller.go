@@ -164,7 +164,7 @@ func (r *CertificateReconciler) reconcileCertSigning(ctx context.Context, cert *
 
 // createOrUpdateTLSSecret creates or updates a Secret containing cert.pem and key.pem.
 func (r *CertificateReconciler) createOrUpdateTLSSecret(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, name string, certPEM, keyPEM []byte) error {
-	labels := configLabels(ca.Spec.ConfigRef)
+	labels := caLabels(ca.Name)
 	labels["openvox.voxpupuli.org/certificate"] = cert.Name
 
 	secret := &corev1.Secret{}

@@ -28,9 +28,9 @@ func enqueueCertificatesForSecret(c client.Client) handler.EventHandler {
 			}
 		}
 
-		// CA Secret change → reconcile all Certificates referencing CAs in this environment
-		cfgName := labels[LabelConfig]
-		if cfgName == "" {
+		// CA Secret change → reconcile all Certificates referencing this CA
+		caName := labels[LabelCertificateAuthority]
+		if caName == "" {
 			return nil
 		}
 
@@ -41,11 +41,7 @@ func enqueueCertificatesForSecret(c client.Client) handler.EventHandler {
 
 		var requests []ctrl.Request
 		for _, cert := range certList.Items {
-			ca := &openvoxv1alpha1.CertificateAuthority{}
-			if err := c.Get(ctx, types.NamespacedName{Name: cert.Spec.AuthorityRef, Namespace: cert.Namespace}, ca); err != nil {
-				continue
-			}
-			if ca.Spec.ConfigRef == cfgName {
+			if cert.Spec.AuthorityRef == caName {
 				requests = append(requests, ctrl.Request{
 					NamespacedName: types.NamespacedName{
 						Name:      cert.Name,

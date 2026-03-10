@@ -3,7 +3,6 @@ kind: CertificateAuthority
 metadata:
   name: {{ include "openvox-stack.caName" . }}
 spec:
-  configRef: {{ include "openvox-stack.configName" . }}
   ttl: {{ .Values.ca.ttl }}
   storage:
     size: {{ .Values.ca.storage.size }}

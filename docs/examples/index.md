@@ -10,6 +10,7 @@ kind: Config
 metadata:
   name: lab
 spec:
+  authorityRef: lab-ca
   image:
     repository: ghcr.io/slauger/openvox-server
     tag: "8.12.1"
@@ -18,8 +19,6 @@ apiVersion: openvox.voxpupuli.org/v1alpha1
 kind: CertificateAuthority
 metadata:
   name: lab-ca
-spec:
-  configRef: lab
 ---
 apiVersion: openvox.voxpupuli.org/v1alpha1
 kind: SigningPolicy
@@ -73,6 +72,7 @@ kind: Config
 metadata:
   name: production
 spec:
+  authorityRef: production-ca
   image:
     repository: ghcr.io/slauger/openvox-server
     tag: "8.12.1"
@@ -90,7 +90,6 @@ kind: CertificateAuthority
 metadata:
   name: production-ca
 spec:
-  configRef: production
   storage:
     size: 1Gi
 ---

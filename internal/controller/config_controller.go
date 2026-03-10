@@ -152,16 +152,14 @@ func (r *ConfigReconciler) reconcileConfigMap(ctx context.Context, cfg *openvoxv
 }
 
 func (r *ConfigReconciler) findCertificateAuthority(ctx context.Context, cfg *openvoxv1alpha1.Config) *openvoxv1alpha1.CertificateAuthority {
-	caList := &openvoxv1alpha1.CertificateAuthorityList{}
-	if err := r.List(ctx, caList, client.InNamespace(cfg.Namespace)); err != nil {
+	if cfg.Spec.AuthorityRef == "" {
 		return nil
 	}
-	for i := range caList.Items {
-		if caList.Items[i].Spec.ConfigRef == cfg.Name {
-			return &caList.Items[i]
-		}
+	ca := &openvoxv1alpha1.CertificateAuthority{}
+	if err := r.Get(ctx, types.NamespacedName{Name: cfg.Spec.AuthorityRef, Namespace: cfg.Namespace}, ca); err != nil {
+		return nil
 	}
-	return nil
+	return ca
 }
 
 func (r *ConfigReconciler) renderPuppetConf(ctx context.Context, cfg *openvoxv1alpha1.Config) (string, error) {
@@ -968,34 +966,44 @@ func (r *ConfigReconciler) renderLogbackXML(cfg *openvoxv1alpha1.Config) string 
 
 // renderMetricsConf generates metrics.conf HOCON from MetricsSpec.
 func (r *ConfigReconciler) renderMetricsConf(cfg *openvoxv1alpha1.Config) string {
-	if cfg.Spec.Metrics == nil || !cfg.Spec.Metrics.Enabled {
-		return "metrics: {\n    enabled: false\n}\n"
-	}
-
-	m := cfg.Spec.Metrics
 	var sb strings.Builder
-	sb.WriteString("metrics: {\n    enabled: true\n")
+	sb.WriteString("metrics: {\n")
+	sb.WriteString("    server-id: localhost\n")
 
-	if m.JMX != nil {
-		fmt.Fprintf(&sb, "    reporters: {\n        jmx: {\n            enabled: %t\n        }\n    }\n", m.JMX.Enabled)
-	}
+	if cfg.Spec.Metrics != nil && cfg.Spec.Metrics.Enabled {
+		m := cfg.Spec.Metrics
+		sb.WriteString("    registries: {\n")
+		sb.WriteString("        puppetserver: {\n")
 
-	if m.Graphite != nil && m.Graphite.Enabled {
-		host := m.Graphite.Host
-		port := int32(2003)
-		if m.Graphite.Port != 0 {
-			port = m.Graphite.Port
+		// Collect reporters
+		var reporters []string
+
+		if m.JMX != nil && m.JMX.Enabled {
+			reporters = append(reporters, "                jmx: {\n                    enabled: true\n                }")
 		}
-		interval := int32(60)
-		if m.Graphite.UpdateIntervalSeconds != 0 {
-			interval = m.Graphite.UpdateIntervalSeconds
+
+		if m.Graphite != nil && m.Graphite.Enabled {
+			host := m.Graphite.Host
+			port := int32(2003)
+			if m.Graphite.Port != 0 {
+				port = m.Graphite.Port
+			}
+			interval := int32(60)
+			if m.Graphite.UpdateIntervalSeconds != 0 {
+				interval = m.Graphite.UpdateIntervalSeconds
+			}
+			reporters = append(reporters, fmt.Sprintf("                graphite: {\n                    enabled: true\n                    host: %q\n                    port: %d\n                    update-interval-seconds: %d\n                }", host, port, interval))
 		}
-		sb.WriteString("    reporters: {\n")
-		sb.WriteString("        graphite: {\n")
-		sb.WriteString("            enabled: true\n")
-		fmt.Fprintf(&sb, "            host: %q\n", host)
-		fmt.Fprintf(&sb, "            port: %d\n", port)
-		fmt.Fprintf(&sb, "            update-interval-seconds: %d\n", interval)
+
+		if len(reporters) > 0 {
+			sb.WriteString("            reporters: {\n")
+			for _, r := range reporters {
+				sb.WriteString(r)
+				sb.WriteString("\n")
+			}
+			sb.WriteString("            }\n")
+		}
+
 		sb.WriteString("        }\n")
 		sb.WriteString("    }\n")
 	}
@@ -1031,20 +1039,20 @@ func (r *ConfigReconciler) findSigningPolicies(ctx context.Context, ca *openvoxv
 	return result
 }
 
-// reconcileAutosignSecrets reconciles autosign policy Secrets for all CAs in this Config.
+// reconcileAutosignSecrets reconciles the autosign policy Secret for the CA referenced by this Config.
 func (r *ConfigReconciler) reconcileAutosignSecrets(ctx context.Context, cfg *openvoxv1alpha1.Config) error {
-	caList := &openvoxv1alpha1.CertificateAuthorityList{}
-	if err := r.List(ctx, caList, client.InNamespace(cfg.Namespace)); err != nil {
+	if cfg.Spec.AuthorityRef == "" {
+		return nil
+	}
+	ca := &openvoxv1alpha1.CertificateAuthority{}
+	if err := r.Get(ctx, types.NamespacedName{Name: cfg.Spec.AuthorityRef, Namespace: cfg.Namespace}, ca); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
 		return err
 	}
-	for i := range caList.Items {
-		ca := &caList.Items[i]
-		if ca.Spec.ConfigRef != cfg.Name {
-			continue
-		}
-		if err := r.reconcileAutosignSecret(ctx, cfg, ca); err != nil {
-			return fmt.Errorf("reconciling autosign Secret for CA %s: %w", ca.Name, err)
-		}
+	if err := r.reconcileAutosignSecret(ctx, cfg, ca); err != nil {
+		return fmt.Errorf("reconciling autosign Secret for CA %s: %w", ca.Name, err)
 	}
 	return nil
 }
@@ -1204,10 +1212,21 @@ func (r *ConfigReconciler) enqueueConfigsForSigningPolicy(c client.Reader) handl
 			return nil
 		}
 
-		// Enqueue the Config referenced by the CA
-		return []reconcile.Request{
-			{NamespacedName: types.NamespacedName{Name: ca.Spec.ConfigRef, Namespace: ca.Namespace}},
+		// Enqueue all Configs whose authorityRef points to this CA
+		cfgList := &openvoxv1alpha1.ConfigList{}
+		if err := c.List(ctx, cfgList, client.InNamespace(ca.Namespace)); err != nil {
+			return nil
 		}
+
+		var requests []reconcile.Request
+		for _, cfg := range cfgList.Items {
+			if cfg.Spec.AuthorityRef == ca.Name {
+				requests = append(requests, reconcile.Request{
+					NamespacedName: types.NamespacedName{Name: cfg.Name, Namespace: cfg.Namespace},
+				})
+			}
+		}
+		return requests
 	}
 }
 

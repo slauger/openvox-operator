@@ -1,6 +1,6 @@
 # Config
 
-A Config holds shared configuration for all Servers: the default container image, puppet.conf settings, and PuppetDB connection. It is the root resource in the CRD hierarchy. CA settings (`ca_ttl`, `autosign`) are automatically pulled from the CertificateAuthority referencing this Config.
+A Config holds shared configuration for all Servers: the default container image, puppet.conf settings, and PuppetDB connection. It is the root resource in the CRD hierarchy. The `authorityRef` field references a CertificateAuthority; CA settings (`ca_ttl`, `autosign`) are automatically pulled from it.
 
 ## Example
 
@@ -10,6 +10,7 @@ kind: Config
 metadata:
   name: production
 spec:
+  authorityRef: production-ca
   image:
     repository: ghcr.io/slauger/openvox-server
     tag: "8.12.1"
@@ -27,6 +28,7 @@ spec:
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `image` | [ImageSpec](index.md#imagespec) | **required** | Default container image for all Servers |
+| `authorityRef` | string | - | Reference to the CertificateAuthority used by this Config |
 | `puppet` | [PuppetSpec](#puppetspec) | - | Shared puppet.conf settings |
 | `puppetdb` | [PuppetDBSpec](#puppetdbspec) | - | PuppetDB connection settings |
 

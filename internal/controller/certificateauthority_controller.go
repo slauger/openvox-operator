@@ -64,14 +64,11 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 	}
 
-	// Resolve Config
-	cfg := &openvoxv1alpha1.Config{}
-	if err := r.Get(ctx, types.NamespacedName{Name: ca.Spec.ConfigRef, Namespace: ca.Namespace}, cfg); err != nil {
-		if errors.IsNotFound(err) {
-			logger.Info("waiting for Config to be created", "configRef", ca.Spec.ConfigRef)
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-		}
-		return ctrl.Result{}, err
+	// Resolve Config referencing this CA
+	cfg := r.findConfigForCA(ctx, ca)
+	if cfg == nil {
+		logger.Info("waiting for a Config with authorityRef pointing to this CA", "ca", ca.Name)
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	// Step 1: Ensure CA data PVC exists
@@ -124,6 +121,20 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 	return crlResult, nil
 }
 
+// findConfigForCA returns the first Config in the same namespace whose authorityRef matches this CA.
+func (r *CertificateAuthorityReconciler) findConfigForCA(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority) *openvoxv1alpha1.Config {
+	cfgList := &openvoxv1alpha1.ConfigList{}
+	if err := r.List(ctx, cfgList, client.InNamespace(ca.Namespace)); err != nil {
+		return nil
+	}
+	for i := range cfgList.Items {
+		if cfgList.Items[i].Spec.AuthorityRef == ca.Name {
+			return &cfgList.Items[i]
+		}
+	}
+	return nil
+}
+
 func (r *CertificateAuthorityReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&openvoxv1alpha1.CertificateAuthority{}).
@@ -138,6 +149,17 @@ func (r *CertificateAuthorityReconciler) SetupWithManager(mgr ctrl.Manager) erro
 				}
 				return []ctrl.Request{
 					{NamespacedName: types.NamespacedName{Name: cert.Spec.AuthorityRef, Namespace: cert.Namespace}},
+				}
+			},
+		)).
+		Watches(&openvoxv1alpha1.Config{}, handler.EnqueueRequestsFromMapFunc(
+			func(ctx context.Context, obj client.Object) []ctrl.Request {
+				cfg, ok := obj.(*openvoxv1alpha1.Config)
+				if !ok || cfg.Spec.AuthorityRef == "" {
+					return nil
+				}
+				return []ctrl.Request{
+					{NamespacedName: types.NamespacedName{Name: cfg.Spec.AuthorityRef, Namespace: cfg.Namespace}},
 				}
 			},
 		)).
@@ -216,7 +238,7 @@ func (r *CertificateAuthorityReconciler) fetchCRL(ctx context.Context, caService
 
 // updateCRLSecret creates or updates the CRL secret with fresh CRL data.
 func (r *CertificateAuthorityReconciler) updateCRLSecret(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, name string, crlPEM []byte) error {
-	labels := configLabels(ca.Spec.ConfigRef)
+	labels := caLabels(ca.Name)
 
 	secret := &corev1.Secret{}
 	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: ca.Namespace}, secret)
@@ -260,7 +282,7 @@ func (r *CertificateAuthorityReconciler) reconcileCAPVC(ctx context.Context, ca 
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      pvcName,
 				Namespace: ca.Namespace,
-				Labels:    configLabels(ca.Spec.ConfigRef),
+				Labels:    caLabels(ca.Name),
 			},
 			Spec: corev1.PersistentVolumeClaimSpec{
 				AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
@@ -305,15 +327,27 @@ func (r *CertificateAuthorityReconciler) findCertificatesForCA(ctx context.Conte
 // findCAServerCert finds the Certificate belonging to the Server with ca:true.
 // This is the cert that should be signed during CA setup.
 func (r *CertificateAuthorityReconciler) findCAServerCert(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, certs []openvoxv1alpha1.Certificate) *openvoxv1alpha1.Certificate {
+	// Build set of Config names referencing this CA
+	cfgList := &openvoxv1alpha1.ConfigList{}
+	if err := r.List(ctx, cfgList, client.InNamespace(ca.Namespace)); err != nil {
+		return nil
+	}
+	configNames := map[string]bool{}
+	for _, cfg := range cfgList.Items {
+		if cfg.Spec.AuthorityRef == ca.Name {
+			configNames[cfg.Name] = true
+		}
+	}
+
 	serverList := &openvoxv1alpha1.ServerList{}
 	if err := r.List(ctx, serverList, client.InNamespace(ca.Namespace)); err != nil {
 		return nil
 	}
 
-	// Find servers with ca:true in the same environment and collect their certificateRef names
+	// Find servers with ca:true in a Config referencing this CA
 	caServerCertRefs := map[string]bool{}
 	for _, server := range serverList.Items {
-		if server.Spec.ConfigRef == ca.Spec.ConfigRef && server.Spec.CA {
+		if configNames[server.Spec.ConfigRef] && server.Spec.CA {
 			caServerCertRefs[server.Spec.CertificateRef] = true
 		}
 	}
@@ -336,8 +370,7 @@ func (r *CertificateAuthorityReconciler) findCAServerCert(ctx context.Context, c
 func (r *CertificateAuthorityReconciler) reconcileCASetupRBAC(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, certs []openvoxv1alpha1.Certificate) error {
 	baseName := fmt.Sprintf("%s-ca-setup", ca.Name)
 	caSecretName := fmt.Sprintf("%s-ca", ca.Name)
-	labels := configLabels(ca.Spec.ConfigRef)
-	labels["openvox.voxpupuli.org/certificateauthority"] = ca.Name
+	labels := caLabels(ca.Name)
 
 	caKeySecretName := fmt.Sprintf("%s-ca-key", ca.Name)
 	caCRLSecretName := fmt.Sprintf("%s-ca-crl", ca.Name)
@@ -489,8 +522,7 @@ func (r *CertificateAuthorityReconciler) buildCASetupJob(ctx context.Context, ca
 	backoffLimit := int32(3)
 	saName := fmt.Sprintf("%s-ca-setup", ca.Name)
 	caSecretName := fmt.Sprintf("%s-ca", ca.Name)
-	labels := configLabels(ca.Spec.ConfigRef)
-	labels["openvox.voxpupuli.org/certificateauthority"] = ca.Name
+	labels := caLabels(ca.Name)
 
 	// Find the CA server's Certificate for the initial setup cert.
 	// The CA setup job signs one cert during `puppetserver ca setup`.
@@ -519,7 +551,8 @@ func (r *CertificateAuthorityReconciler) buildCASetupJob(ctx context.Context, ca
 		{Name: "CA_SECRET_NAME", Value: caSecretName},
 		{Name: "CA_KEY_SECRET_NAME", Value: caKeySecretName},
 		{Name: "CA_CRL_SECRET_NAME", Value: caCRLSecretName},
-		{Name: "CONFIG_NAME", Value: ca.Spec.ConfigRef},
+		{Name: "CA_NAME", Value: ca.Name},
+		{Name: "CONFIG_NAME", Value: cfg.Name},
 		{Name: "SSL_SECRET_NAME", Value: tlsSecretName},
 		{Name: "CERT_RESOURCE_NAME", Value: certResourceName},
 	}
@@ -571,7 +604,7 @@ func (r *CertificateAuthorityReconciler) buildCASetupJob(ctx context.Context, ca
 							VolumeSource: corev1.VolumeSource{
 								ConfigMap: &corev1.ConfigMapVolumeSource{
 									LocalObjectReference: corev1.LocalObjectReference{
-										Name: fmt.Sprintf("%s-config", ca.Spec.ConfigRef),
+										Name: fmt.Sprintf("%s-config", cfg.Name),
 									},
 									Items: []corev1.KeyToPath{{Key: "puppet.conf", Path: "puppet.conf"}},
 								},
@@ -638,7 +671,7 @@ create_or_update_secret "${CA_SECRET_NAME}" "{
     \"labels\": {
       \"app.kubernetes.io/managed-by\": \"openvox-operator\",
       \"app.kubernetes.io/name\": \"openvox\",
-      \"openvox.voxpupuli.org/config\": \"${CONFIG_NAME}\"
+      \"openvox.voxpupuli.org/certificateauthority\": \"${CA_NAME}\"
     }
   },
   \"data\": {
@@ -657,7 +690,7 @@ create_or_update_secret "${CA_KEY_SECRET_NAME}" "{
     \"labels\": {
       \"app.kubernetes.io/managed-by\": \"openvox-operator\",
       \"app.kubernetes.io/name\": \"openvox\",
-      \"openvox.voxpupuli.org/config\": \"${CONFIG_NAME}\"
+      \"openvox.voxpupuli.org/certificateauthority\": \"${CA_NAME}\"
     }
   },
   \"data\": {
@@ -677,7 +710,7 @@ create_or_update_secret "${CA_CRL_SECRET_NAME}" "{
     \"labels\": {
       \"app.kubernetes.io/managed-by\": \"openvox-operator\",
       \"app.kubernetes.io/name\": \"openvox\",
-      \"openvox.voxpupuli.org/config\": \"${CONFIG_NAME}\"
+      \"openvox.voxpupuli.org/certificateauthority\": \"${CA_NAME}\"
     }
   },
   \"data\": {
@@ -703,7 +736,7 @@ if [ -n "${SSL_SECRET_NAME}" ] && [ -f "/etc/puppetlabs/puppet/ssl/certs/${CERTN
       \"labels\": {
         \"app.kubernetes.io/managed-by\": \"openvox-operator\",
         \"app.kubernetes.io/name\": \"openvox\",
-        \"openvox.voxpupuli.org/config\": \"${CONFIG_NAME}\",
+        \"openvox.voxpupuli.org/certificateauthority\": \"${CA_NAME}\",
         \"openvox.voxpupuli.org/certificate\": \"${CERT_RESOURCE_NAME}\"
       }
     },

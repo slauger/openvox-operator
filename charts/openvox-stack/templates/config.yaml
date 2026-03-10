@@ -3,6 +3,7 @@ kind: Config
 metadata:
   name: {{ include "openvox-stack.configName" . }}
 spec:
+  authorityRef: {{ include "openvox-stack.caName" . }}
   image:
     repository: {{ .Values.config.image.repository }}
     tag: {{ .Values.config.image.tag | quote }}

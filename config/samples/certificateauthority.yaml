@@ -3,7 +3,6 @@ kind: CertificateAuthority
 metadata:
   name: production-ca
 spec:
-  configRef: production
   ttl: 5y
   storage:
     size: 1Gi

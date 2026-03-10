@@ -12,6 +12,7 @@ kind: Config
 metadata:
   name: lab
 spec:
+  authorityRef: lab-ca
   image:
     repository: ghcr.io/slauger/openvox-server
     tag: "8.12.1"
@@ -20,8 +21,6 @@ apiVersion: openvox.voxpupuli.org/v1alpha1
 kind: CertificateAuthority
 metadata:
   name: lab-ca
-spec:
-  configRef: lab
 ---
 apiVersion: openvox.voxpupuli.org/v1alpha1
 kind: SigningPolicy
@@ -86,11 +85,11 @@ kubectl get config,certificateauthority,signingpolicy,certificate,server,pool
 ```
 
 ```
-NAME                                        PHASE     AGE
-config.openvox.voxpupuli.org/lab            Running   2m
+NAME                                        CA       PHASE     AGE
+config.openvox.voxpupuli.org/lab            lab-ca   Running   2m
 
-NAME                                                CONFIG   PHASE   AGE
-certificateauthority.openvox.voxpupuli.org/lab-ca   lab      Ready   2m
+NAME                                                PHASE   AGE
+certificateauthority.openvox.voxpupuli.org/lab-ca   Ready   2m
 
 NAME                                                     CA       PHASE    AGE
 signingpolicy.openvox.voxpupuli.org/lab-autosign         lab-ca   Active   2m

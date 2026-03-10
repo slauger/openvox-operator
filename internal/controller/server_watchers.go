@@ -21,28 +21,48 @@ func enqueueServersForSecret(c client.Client) handler.EventHandler {
 			return nil
 		}
 
+		// Config-owned secrets: match directly by LabelConfig
 		cfgName := labels[LabelConfig]
-		if cfgName == "" {
-			return nil
+		if cfgName != "" {
+			return enqueueServersForConfig(c, ctx, obj.GetNamespace(), cfgName)
 		}
 
-		serverList := &openvoxv1alpha1.ServerList{}
-		if err := c.List(ctx, serverList, client.InNamespace(obj.GetNamespace())); err != nil {
-			return nil
-		}
-
-		var requests []ctrl.Request
-		for _, server := range serverList.Items {
-			if server.Spec.ConfigRef == cfgName {
-				requests = append(requests, ctrl.Request{
-					NamespacedName: types.NamespacedName{
-						Name:      server.Name,
-						Namespace: server.Namespace,
-					},
-				})
+		// CA-owned secrets: find Configs referencing this CA, then their Servers
+		caName := labels[LabelCertificateAuthority]
+		if caName != "" {
+			cfgList := &openvoxv1alpha1.ConfigList{}
+			if err := c.List(ctx, cfgList, client.InNamespace(obj.GetNamespace())); err != nil {
+				return nil
 			}
+			var requests []ctrl.Request
+			for _, cfg := range cfgList.Items {
+				if cfg.Spec.AuthorityRef == caName {
+					requests = append(requests, enqueueServersForConfig(c, ctx, obj.GetNamespace(), cfg.Name)...)
+				}
+			}
+			return requests
 		}
 
-		return requests
+		return nil
 	})
+}
+
+func enqueueServersForConfig(c client.Client, ctx context.Context, namespace, cfgName string) []ctrl.Request {
+	serverList := &openvoxv1alpha1.ServerList{}
+	if err := c.List(ctx, serverList, client.InNamespace(namespace)); err != nil {
+		return nil
+	}
+
+	var requests []ctrl.Request
+	for _, server := range serverList.Items {
+		if server.Spec.ConfigRef == cfgName {
+			requests = append(requests, ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      server.Name,
+					Namespace: server.Namespace,
+				},
+			})
+		}
+	}
+	return requests
 }

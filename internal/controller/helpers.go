@@ -55,20 +55,35 @@ func hashStringMap(data map[string]string) string {
 }
 
 // findCAServiceName discovers the CA service endpoint by:
-// 1. Finding a running Server with ca:true in the same environment
-// 2. Finding Pools whose selector matches that CA server
-// 3. Returning the first matching Pool name as service name
+// 1. Building the set of Config names that reference this CA
+// 2. Finding a running Server with ca:true in one of those Configs
+// 3. Finding Pools whose selector matches that CA server
+// 4. Returning the first matching Pool name as service name
 func findCAServiceName(ctx context.Context, reader client.Reader, ca *openvoxv1alpha1.CertificateAuthority, namespace string) string {
+	// Build set of Config names referencing this CA
+	cfgList := &openvoxv1alpha1.ConfigList{}
+	if err := reader.List(ctx, cfgList, client.InNamespace(namespace)); err != nil {
+		return ""
+	}
+	configNames := map[string]bool{}
+	for _, cfg := range cfgList.Items {
+		if cfg.Spec.AuthorityRef == ca.Name {
+			configNames[cfg.Name] = true
+		}
+	}
+
 	serverList := &openvoxv1alpha1.ServerList{}
 	if err := reader.List(ctx, serverList, client.InNamespace(namespace)); err != nil {
 		return ""
 	}
 
 	var caServerName string
+	var caServerConfigRef string
 	for _, server := range serverList.Items {
-		if server.Spec.ConfigRef == ca.Spec.ConfigRef && server.Spec.CA {
+		if configNames[server.Spec.ConfigRef] && server.Spec.CA {
 			if server.Status.Phase == openvoxv1alpha1.ServerPhaseRunning {
 				caServerName = server.Name
+				caServerConfigRef = server.Spec.ConfigRef
 				break
 			}
 		}
@@ -84,7 +99,7 @@ func findCAServiceName(ctx context.Context, reader client.Reader, ca *openvoxv1a
 	}
 
 	for _, pool := range poolList.Items {
-		if pool.Spec.ConfigRef != ca.Spec.ConfigRef {
+		if pool.Spec.ConfigRef != caServerConfigRef {
 			continue
 		}
 		if pool.Spec.Selector[LabelServer] == caServerName || pool.Spec.Selector[LabelCA] == "true" {

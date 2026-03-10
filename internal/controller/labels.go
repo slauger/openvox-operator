@@ -2,11 +2,12 @@ package controller
 
 const (
 	// Label keys used across all resources.
-	LabelConfig     = "openvox.voxpupuli.org/config"
-	LabelPoolPrefix = "openvox.voxpupuli.org/pool-"
-	LabelServer     = "openvox.voxpupuli.org/server"
-	LabelRole       = "openvox.voxpupuli.org/role"
-	LabelCA         = "openvox.voxpupuli.org/ca"
+	LabelConfig               = "openvox.voxpupuli.org/config"
+	LabelCertificateAuthority = "openvox.voxpupuli.org/certificateauthority"
+	LabelPoolPrefix           = "openvox.voxpupuli.org/pool-"
+	LabelServer               = "openvox.voxpupuli.org/server"
+	LabelRole                 = "openvox.voxpupuli.org/role"
+	LabelCA                   = "openvox.voxpupuli.org/ca"
 
 	// Role values.
 	RoleCA     = "ca"
@@ -19,6 +20,15 @@ func configLabels(cfgName string) map[string]string {
 		"app.kubernetes.io/name":       "openvox",
 		"app.kubernetes.io/managed-by": "openvox-operator",
 		LabelConfig:                    cfgName,
+	}
+}
+
+// caLabels returns labels for resources owned by a CertificateAuthority.
+func caLabels(caName string) map[string]string {
+	return map[string]string{
+		"app.kubernetes.io/name":       "openvox",
+		"app.kubernetes.io/managed-by": "openvox-operator",
+		LabelCertificateAuthority:      caName,
 	}
 }
 

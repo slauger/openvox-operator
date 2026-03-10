@@ -8,6 +8,7 @@ import (
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=cfg
+// +kubebuilder:printcolumn:name="CA",type=string,JSONPath=`.spec.authorityRef`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
@@ -34,6 +35,10 @@ type ConfigList struct {
 type ConfigSpec struct {
 	// Image defines the default container image for all Servers in this Config.
 	Image ImageSpec `json:"image"`
+
+	// AuthorityRef references the CertificateAuthority used by this Config.
+	// +optional
+	AuthorityRef string `json:"authorityRef,omitempty"`
 
 	// PuppetDB defines the PuppetDB connection settings.
 	// +optional
@@ -210,8 +215,8 @@ type GraphiteSpec struct {
 
 // CodeSpec defines the source of Puppet code to mount into Server pods.
 // Either ClaimName (PVC) or Image (OCI image volume) may be set, not both.
-// +kubebuilder:validation:XValidation:rule="!(self.image != '' && self.claimName != '')",message="image and claimName are mutually exclusive"
-// +kubebuilder:validation:XValidation:rule="self.image != '' || self.claimName != ''",message="either image or claimName must be set"
+// +kubebuilder:validation:XValidation:rule="!(has(self.image) && self.image != ” && has(self.claimName) && self.claimName != ”)",message="image and claimName are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="(has(self.image) && self.image != ”) || (has(self.claimName) && self.claimName != ”)",message="either image or claimName must be set"
 type CodeSpec struct {
 	// ClaimName references an existing PVC containing Puppet code.
 	// Mutually exclusive with Image.

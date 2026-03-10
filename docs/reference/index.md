@@ -13,7 +13,7 @@ graph TD
     Srv["Server"]
     Pool["Pool"]
 
-    Cfg -->|configRef| CA
+    Cfg -->|authorityRef| CA
     CA -->|certificateAuthorityRef| SP
     CA -->|authorityRef| Cert
     Cert -->|certificateRef| Srv
@@ -22,7 +22,7 @@ graph TD
     Cfg -->|configRef| Pool
 ```
 
-Each resource references its parent. The operator reconciles them in order: a Config must exist before a CertificateAuthority can reference it, a CertificateAuthority must be `Ready` before a Certificate can be signed, and a Certificate must be `Signed` before a Server creates its Deployment. SigningPolicies can be created at any time and take effect within ~60 seconds.
+Each resource references its parent. The operator reconciles them in order: a Config references a CertificateAuthority via `authorityRef`, a CertificateAuthority must be `Ready` before a Certificate can be signed, and a Certificate must be `Signed` before a Server creates its Deployment. SigningPolicies can be created at any time and take effect within ~60 seconds.
 
 ## Resources
 

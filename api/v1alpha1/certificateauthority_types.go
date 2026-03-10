@@ -7,7 +7,6 @@ import (
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=ca
-// +kubebuilder:printcolumn:name="Config",type=string,JSONPath=`.spec.configRef`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
@@ -32,9 +31,6 @@ type CertificateAuthorityList struct {
 
 // CertificateAuthoritySpec defines the desired state of CertificateAuthority.
 type CertificateAuthoritySpec struct {
-	// ConfigRef references the Config this CA belongs to.
-	ConfigRef string `json:"configRef"`
-
 	// TTL is the CA certificate TTL as a duration string.
 	// Supported units: s (seconds), m (minutes), h (hours), d (days), y (years).
 	// Examples: "5y", "365d", "8760h", "157680000s"

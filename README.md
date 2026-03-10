@@ -31,7 +31,7 @@ graph TD
     Op -->|manages| Cfg
 
     Cfg["📋 Config<br/>production"]
-    Cfg --> CA_CRD["🔐 CertificateAuthority<br/>production-ca"]
+    Cfg -->|authorityRef| CA_CRD["🔐 CertificateAuthority<br/>production-ca"]
     CA_CRD --> Cert_CA["📜 Certificate: ca-cert"]
     CA_CRD --> Cert_Stable["📜 Certificate: stable-cert"]
     CA_CRD --> Cert_Canary["📜 Certificate: canary-cert"]
@@ -50,7 +50,7 @@ graph TD
     CN_D -->|mounts| Code
 ```
 
-A **Config** is the root resource - it holds shared configuration (puppet.conf, PuppetDB connection) and manages code deployment. A **CertificateAuthority** initializes the CA infrastructure and periodically refreshes the CRL. Each **Certificate** is signed by the CA and stored as a Kubernetes Secret. A **Server** references a Certificate and creates a Deployment - it can run as CA, catalog server, or both. **Pools** create Services that select Server pods by label, with optional Gateway API TLSRoute for SNI-based routing.
+A **Config** is the root resource - it holds shared configuration (puppet.conf, PuppetDB connection), manages code deployment, and references a **CertificateAuthority** via `authorityRef`. A **CertificateAuthority** initializes the CA infrastructure and periodically refreshes the CRL. Each **Certificate** is signed by the CA and stored as a Kubernetes Secret. A **Server** references a Certificate and creates a Deployment - it can run as CA, catalog server, or both. **Pools** create Services that select Server pods by label, with optional Gateway API TLSRoute for SNI-based routing.
 
 Puppet code is mounted into Server pods via **OCI image volumes** (immutable, automatic rollout on image change, K8s 1.31+) or a **PVC** (mutable, externally managed). See [Code Deployment](docs/concepts/code-deployment.md) for details.
 

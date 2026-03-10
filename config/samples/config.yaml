@@ -5,6 +5,7 @@ metadata:
   name: production
   namespace: openvox
 spec:
+  authorityRef: production-ca
   image:
     repository: ghcr.io/slauger/openvox-server
     tag: "8.12.1"

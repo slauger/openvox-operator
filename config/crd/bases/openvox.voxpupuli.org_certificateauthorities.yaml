@@ -17,9 +17,6 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.configRef
-      name: Config
-      type: string
     - jsonPath: .status.phase
       name: Phase
       type: string
@@ -58,9 +55,6 @@ spec:
                 description: AllowSubjectAltNames controls whether SANs are allowed
                   in CSRs.
                 type: boolean
-              configRef:
-                description: ConfigRef references the Config this CA belongs to.
-                type: string
               crlRefreshInterval:
                 default: 5m
                 description: |-
@@ -102,8 +96,6 @@ spec:
                   Examples: "5y", "365d", "8760h", "157680000s"
                   Plain numbers are interpreted as seconds for backwards compatibility.
                 type: string
-            required:
-            - configRef
             type: object
           status:
             description: CertificateAuthorityStatus defines the observed state of

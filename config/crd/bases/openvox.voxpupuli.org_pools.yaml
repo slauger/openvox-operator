@@ -91,9 +91,9 @@ spec:
                 type: object
                 x-kubernetes-validations:
                 - message: hostname is required when route is enabled
-                  rule: '!self.enabled || self.hostname != '''''
+                  rule: '!self.enabled || size(self.hostname) > 0'
                 - message: gatewayRef.name is required when route is enabled
-                  rule: '!self.enabled || self.gatewayRef.name != '''''
+                  rule: '!self.enabled || size(self.gatewayRef.name) > 0'
               selector:
                 additionalProperties:
                   type: string

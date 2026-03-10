@@ -16,7 +16,7 @@ graph TD
     Cert["Certificate"]
     Srv["Server"]
     Pool["Pool"]
-    Cfg -->|configRef| CA
+    Cfg -->|authorityRef| CA
     CA -->|certificateAuthorityRef| SP
     CA -->|authorityRef| Cert
     Cert -->|certificateRef| Srv
@@ -26,7 +26,7 @@ graph TD
 ```
 
 - A **Config** is the root resource. It generates ConfigMaps for puppet.conf/puppetdb.conf/webserver.conf and holds shared configuration.
-- A **CertificateAuthority** references a Config and manages the CA infrastructure: PVC, setup Job, and CA Secret.
+- A **CertificateAuthority** is a standalone resource managing the CA infrastructure: PVC, setup Job, and CA Secret. A Config references it via `authorityRef`.
 - A **SigningPolicy** references a CertificateAuthority and defines declarative CSR signing rules (any, pattern match, or CSR attribute match). The Config controller renders all SigningPolicies into an autosign policy file.
 - A **Certificate** references a CertificateAuthority and manages the lifecycle of a single certificate: signing Job and TLS Secret.
 - A **Server** references a Config and a Certificate. It creates a Deployment (with Recreate strategy for CA, RollingUpdate for servers). The Server waits for the Certificate to reach the `Signed` phase before creating its Deployment.

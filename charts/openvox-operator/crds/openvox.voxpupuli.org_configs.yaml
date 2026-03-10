@@ -17,6 +17,9 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .spec.authorityRef
+      name: CA
+      type: string
     - jsonPath: .status.phase
       name: Phase
       type: string
@@ -50,6 +53,10 @@ spec:
           spec:
             description: ConfigSpec defines the desired state of Config.
             properties:
+              authorityRef:
+                description: AuthorityRef references the CertificateAuthority used
+                  by this Config.
+                type: string
               code:
                 description: |-
                   Code defines the Puppet code source for all Servers in this Config.
@@ -77,9 +84,11 @@ spec:
                 type: object
                 x-kubernetes-validations:
                 - message: image and claimName are mutually exclusive
-                  rule: '!(self.image != '''' && self.claimName != '''')'
+                  rule: '!(has(self.image) && self.image != ” && has(self.claimName)
+                    && self.claimName != ”)'
                 - message: either image or claimName must be set
-                  rule: self.image != '' || self.claimName != ''
+                  rule: (has(self.image) && self.image != ”) || (has(self.claimName)
+                    && self.claimName != ”)
               image:
                 description: Image defines the default container image for all Servers
                   in this Config.

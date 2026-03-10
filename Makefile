@@ -89,6 +89,10 @@ stack: ## Deploy openvox-stack via Helm with default images.
 local-stack: STACK_HELM_SET := --set config.image.repository=openvox-server --set config.image.tag=$(LOCAL_TAG) --set config.image.pullPolicy=Never
 local-stack: stack ## Deploy openvox-stack via Helm with local images.
 
+.PHONY: unstack
+unstack: ## Remove openvox-stack from the cluster.
+	helm uninstall openvox-stack --namespace $(STACK_NAMESPACE)
+
 .PHONY: uninstall
 uninstall: ## Remove stack, operator, and CRDs from the cluster.
 	-helm uninstall openvox-stack --namespace $(STACK_NAMESPACE) 2>/dev/null

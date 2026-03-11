@@ -4,5 +4,10 @@ metadata:
   name: production-ca
 spec:
   ttl: 5y
+  allowSubjectAltNames: true
+  allowAuthorizationExtensions: true
+  enableInfraCRL: true
+  allowAutoRenewal: true
+  autoRenewalCertTTL: 90d
   storage:
     size: 1Gi

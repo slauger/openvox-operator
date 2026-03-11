@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.16.5
+    controller-gen.kubebuilder.io/version: v0.20.1
   name: certificateauthorities.openvox.voxpupuli.org
 spec:
   group: openvox.voxpupuli.org
@@ -50,11 +50,28 @@ spec:
           spec:
             description: CertificateAuthoritySpec defines the desired state of CertificateAuthority.
             properties:
+              allowAuthorizationExtensions:
+                default: true
+                description: |-
+                  AllowAuthorizationExtensions controls whether authorization extensions
+                  (pp_role, pp_environment, etc.) are allowed in CSRs.
+                type: boolean
+              allowAutoRenewal:
+                default: true
+                description: AllowAutoRenewal allows agents to automatically renew
+                  certificates before expiry.
+                type: boolean
               allowSubjectAltNames:
                 default: true
                 description: AllowSubjectAltNames controls whether SANs are allowed
                   in CSRs.
                 type: boolean
+              autoRenewalCertTTL:
+                default: 90d
+                description: |-
+                  AutoRenewalCertTTL is the TTL threshold for automatic certificate renewal.
+                  Uses duration format: "90d", "30d", "2160h".
+                type: string
               crlRefreshInterval:
                 default: 5m
                 description: |-
@@ -62,6 +79,11 @@ spec:
                   and updates the CRL Secret. Only applies to non-CA servers.
                   Uses Go duration format: "5m", "1h", "30s".
                 type: string
+              enableInfraCRL:
+                default: true
+                description: EnableInfraCRL enables infrastructure CRL for compile
+                  server revocation.
+                type: boolean
               intermediateCA:
                 description: IntermediateCA configures an intermediate CA setup.
                 properties:

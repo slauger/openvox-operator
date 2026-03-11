@@ -1030,10 +1030,30 @@ func (r *ConfigReconciler) renderMetricsConf(cfg *openvoxv1alpha1.Config) string
 
 func (r *ConfigReconciler) renderCAConf(ca *openvoxv1alpha1.CertificateAuthority) string {
 	allowSANs := true
+	allowAuthzExt := true
+	enableInfraCRL := true
+	allowAutoRenewal := true
+	autoRenewalCertTTL := "90d"
+
 	if ca != nil {
 		allowSANs = ca.Spec.AllowSubjectAltNames
+		allowAuthzExt = ca.Spec.AllowAuthorizationExtensions
+		enableInfraCRL = ca.Spec.EnableInfraCRL
+		allowAutoRenewal = ca.Spec.AllowAutoRenewal
+		if ca.Spec.AutoRenewalCertTTL != "" {
+			autoRenewalCertTTL = ca.Spec.AutoRenewalCertTTL
+		}
 	}
-	return fmt.Sprintf("certificate-authority: {\n    allow-subject-alt-names: %t\n}\n", allowSANs)
+
+	var sb strings.Builder
+	sb.WriteString("certificate-authority: {\n")
+	fmt.Fprintf(&sb, "    allow-subject-alt-names: %t\n", allowSANs)
+	fmt.Fprintf(&sb, "    allow-authorization-extensions: %t\n", allowAuthzExt)
+	fmt.Fprintf(&sb, "    enable-infra-crl: %t\n", enableInfraCRL)
+	fmt.Fprintf(&sb, "    allow-auto-renewal: %t\n", allowAutoRenewal)
+	fmt.Fprintf(&sb, "    auto-renewal-cert-ttl: %s\n", autoRenewalCertTTL)
+	sb.WriteString("}\n")
+	return sb.String()
 }
 
 // --- Autosign Policy ---

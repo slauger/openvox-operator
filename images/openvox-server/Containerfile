@@ -18,7 +18,7 @@ ARG OPENVOX_VERSION=8.25.0
 ################################################################################
 # Stage: base — JRE + minimal runtime deps (no Ruby)
 ################################################################################
-FROM registry.access.redhat.com/ubi9/ubi:9.7-1771346757 AS base
+FROM registry.access.redhat.com/ubi9/ubi:9.7-1773204657 AS base
 
 ARG JDK_VERSION=17
 

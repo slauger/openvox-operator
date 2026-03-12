@@ -18,6 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,8 +32,16 @@ import (
 // CertificateAuthorityReconciler reconciles a CertificateAuthority object.
 type CertificateAuthorityReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
+
+// Event reasons for CertificateAuthority.
+const (
+	EventReasonCAInitialized  = "CAInitialized"
+	EventReasonCRLRefreshed   = "CRLRefreshed"
+	EventReasonCRLRefreshFailed = "CRLRefreshFailed"
+)
 
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificateauthorities,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificateauthorities/status,verbs=get;update;patch
@@ -97,6 +106,7 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	// CA is ready
+	wasReady := ca.Status.Phase == openvoxv1alpha1.CertificateAuthorityPhaseReady
 	caSecretName := fmt.Sprintf("%s-ca", ca.Name)
 	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseReady
 	ca.Status.CASecretName = caSecretName
@@ -112,10 +122,15 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, err
 	}
 
+	if !wasReady {
+		r.Recorder.Event(ca, corev1.EventTypeNormal, EventReasonCAInitialized, "CA is initialized and ready")
+	}
+
 	// Periodic CRL refresh: fetch CRL from CA service and update the CRL secret
 	crlResult, err := r.reconcileCRLRefresh(ctx, ca)
 	if err != nil {
 		logger.Error(err, "CRL refresh failed, will retry")
+		r.Recorder.Eventf(ca, corev1.EventTypeWarning, EventReasonCRLRefreshFailed, "CRL refresh failed: %v", err)
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 	return crlResult, nil
@@ -199,6 +214,7 @@ func (r *CertificateAuthorityReconciler) reconcileCRLRefresh(ctx context.Context
 	}
 
 	logger.Info("CRL secret refreshed", "secret", crlSecretName, "nextRefresh", interval)
+	r.Recorder.Eventf(ca, corev1.EventTypeNormal, EventReasonCRLRefreshed, "CRL refreshed successfully, next refresh in %s", interval)
 	return ctrl.Result{RequeueAfter: interval}, nil
 }
 

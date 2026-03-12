@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // +kubebuilder:object:root=true
@@ -88,6 +89,35 @@ type ServerSpec struct {
 	// Code overrides the Config's code volume for this Server.
 	// +optional
 	Code *CodeSpec `json:"code,omitempty"`
+
+	// TopologySpreadConstraints controls how pods are spread across topology domains.
+	// +optional
+	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+
+	// Affinity defines pod affinity/anti-affinity rules.
+	// +optional
+	Affinity *corev1.Affinity `json:"affinity,omitempty"`
+
+	// PDB defines PodDisruptionBudget settings.
+	// +optional
+	PDB *PDBSpec `json:"pdb,omitempty"`
+}
+
+// PDBSpec defines PodDisruptionBudget settings.
+type PDBSpec struct {
+	// Enabled activates the PodDisruptionBudget.
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled"`
+
+	// MinAvailable is the minimum number of pods that must be available.
+	// Mutually exclusive with MaxUnavailable.
+	// +optional
+	MinAvailable *intstr.IntOrString `json:"minAvailable,omitempty"`
+
+	// MaxUnavailable is the maximum number of pods that can be unavailable.
+	// Mutually exclusive with MinAvailable.
+	// +optional
+	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
 }
 
 // AutoscalingSpec defines HPA settings.

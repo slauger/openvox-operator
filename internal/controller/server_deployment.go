@@ -415,9 +415,11 @@ chmod 640 /ssl/private_keys/puppet.pem`
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			},
 		},
-		InitContainers: []corev1.Container{initContainer},
-		Containers:     []corev1.Container{container},
-		Volumes:        volumes,
+		TopologySpreadConstraints: server.Spec.TopologySpreadConstraints,
+		Affinity:                  server.Spec.Affinity,
+		InitContainers:            []corev1.Container{initContainer},
+		Containers:                []corev1.Container{container},
+		Volumes:                   volumes,
 	}
 
 	// Add imagePullSecrets for code image if configured

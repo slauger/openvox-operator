@@ -11,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -22,8 +23,14 @@ import (
 // CertificateReconciler reconciles a Certificate object.
 type CertificateReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
+
+// Event reasons for Certificate.
+const (
+	EventReasonCertificateSigned = "CertificateSigned"
+)
 
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificates/status,verbs=get;update;patch
@@ -91,6 +98,7 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if err := r.Status().Update(ctx, cert); err != nil {
 			return ctrl.Result{}, err
 		}
+		r.Recorder.Eventf(cert, corev1.EventTypeNormal, EventReasonCertificateSigned, "Certificate signed and available in Secret %s", tlsSecretName)
 		return ctrl.Result{}, nil
 	}
 

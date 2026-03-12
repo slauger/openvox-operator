@@ -149,7 +149,7 @@ ci: lint vet test check-manifests vulncheck helm-lint ## Run all CI checks local
 
 .PHONY: controller-gen
 controller-gen: ## Install controller-gen.
-	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.16.5
+	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.20.1
 
 .PHONY: help
 help: ## Display this help.

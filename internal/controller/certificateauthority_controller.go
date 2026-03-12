@@ -574,6 +574,9 @@ func (r *CertificateAuthorityReconciler) buildCASetupJob(ctx context.Context, ca
 						RunAsUser:    int64Ptr(1001),
 						RunAsGroup:   int64Ptr(0),
 						RunAsNonRoot: boolPtr(true),
+						SeccompProfile: &corev1.SeccompProfile{
+							Type: corev1.SeccompProfileTypeRuntimeDefault,
+						},
 					},
 					Containers: []corev1.Container{
 						{
@@ -586,6 +589,12 @@ func (r *CertificateAuthorityReconciler) buildCASetupJob(ctx context.Context, ca
 								{Name: "ca-data", MountPath: "/etc/puppetlabs/puppetserver/ca"},
 								{Name: "ssl", MountPath: "/etc/puppetlabs/puppet/ssl"},
 								{Name: "puppet-conf", MountPath: "/etc/puppetlabs/puppet/puppet.conf", SubPath: "puppet.conf", ReadOnly: true},
+							},
+							SecurityContext: &corev1.SecurityContext{
+								AllowPrivilegeEscalation: boolPtr(false),
+								Capabilities: &corev1.Capabilities{
+									Drop: []corev1.Capability{"ALL"},
+								},
 							},
 						},
 					},

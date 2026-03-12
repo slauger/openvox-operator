@@ -392,12 +392,28 @@ chmod 640 /ssl/private_keys/puppet.pem`
 		},
 	}
 
+	readOnlyRootFilesystem := false
+	containerSecurityContext := &corev1.SecurityContext{
+		AllowPrivilegeEscalation: boolPtr(false),
+		ReadOnlyRootFilesystem:   &readOnlyRootFilesystem,
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{"ALL"},
+		},
+	}
+	container.SecurityContext = containerSecurityContext
+	initContainer.SecurityContext = containerSecurityContext
+
+	automountServiceAccountToken := false
 	podSpec := corev1.PodSpec{
-		ServiceAccountName: fmt.Sprintf("%s-server", server.Spec.ConfigRef),
+		ServiceAccountName:           fmt.Sprintf("%s-server", server.Spec.ConfigRef),
+		AutomountServiceAccountToken: &automountServiceAccountToken,
 		SecurityContext: &corev1.PodSecurityContext{
 			RunAsUser:    int64Ptr(1001),
 			RunAsGroup:   int64Ptr(0),
 			RunAsNonRoot: boolPtr(true),
+			SeccompProfile: &corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			},
 		},
 		InitContainers: []corev1.Container{initContainer},
 		Containers:     []corev1.Container{container},

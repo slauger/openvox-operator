@@ -92,6 +92,14 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 		}
 	}
 
+	// Add report-webhook secret hash annotation for server pods to trigger rollout on report config changes
+	if server.Spec.Server {
+		reportSecretName := fmt.Sprintf("%s-report-webhook", server.Spec.ConfigRef)
+		if reportHash, err := r.secretHash(ctx, reportSecretName, server.Namespace); err == nil {
+			annotations["openvox.voxpupuli.org/report-webhook-secret-hash"] = reportHash
+		}
+	}
+
 	deploy := &appsv1.Deployment{}
 	err = r.Get(ctx, types.NamespacedName{Name: deployName, Namespace: server.Namespace}, deploy)
 	if errors.IsNotFound(err) {
@@ -323,6 +331,32 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 			corev1.Volume{
 				Name:         "enc-cache",
 				VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+			},
+		)
+	}
+
+	// ReportProcessor: mount config Secret for server:true pods when report-webhook Secret exists
+	// The Secret is created by ReportProcessorReconciler when any ReportProcessor references this Config.
+	// We mount it if it exists; the Secret presence indicates webhook reports are configured.
+	if server.Spec.Server {
+		reportSecretName := fmt.Sprintf("%s-report-webhook", server.Spec.ConfigRef)
+		volumeMounts = append(volumeMounts,
+			corev1.VolumeMount{
+				Name:      "report-webhook-config",
+				MountPath: "/etc/puppetlabs/puppet/report-webhook.yaml",
+				SubPath:   "report-webhook.yaml",
+				ReadOnly:  true,
+			},
+		)
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: "report-webhook-config",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: reportSecretName,
+						Optional:   boolPtr(true),
+					},
+				},
 			},
 		)
 	}

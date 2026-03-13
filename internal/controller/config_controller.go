@@ -35,6 +35,8 @@ type ConfigReconciler struct {
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=signingpolicies/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=nodeclassifiers,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=nodeclassifiers/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=reportprocessors,verbs=get;list;watch
+// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=reportprocessors/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=configmaps;serviceaccounts;secrets,verbs=get;list;watch;create;update;patch;delete
 
 func (r *ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -105,6 +107,9 @@ func (r *ConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		)).
 		Watches(&openvoxv1alpha1.NodeClassifier{}, handler.EnqueueRequestsFromMapFunc(
 			r.enqueueConfigsForNodeClassifier(mgr.GetClient()),
+		)).
+		Watches(&openvoxv1alpha1.ReportProcessor{}, handler.EnqueueRequestsFromMapFunc(
+			r.enqueueConfigsForReportProcessor(mgr.GetClient()),
 		)).
 		Complete(r)
 }
@@ -203,8 +208,17 @@ func (r *ConfigReconciler) renderPuppetConf(ctx context.Context, cfg *openvoxv1a
 		}
 	}
 
-	if cfg.Spec.Puppet.Reports != "" {
-		fmt.Fprintf(&sb, "reports = %s\n", cfg.Spec.Puppet.Reports)
+	// Reports: include webhook if any ReportProcessor exists for this Config
+	reports := cfg.Spec.Puppet.Reports
+	if r.hasReportProcessors(ctx, cfg) {
+		if reports == "" {
+			reports = "webhook"
+		} else if !strings.Contains(reports, "webhook") {
+			reports = reports + ",webhook"
+		}
+	}
+	if reports != "" {
+		fmt.Fprintf(&sb, "reports = %s\n", reports)
 	}
 
 	// CA settings from CertificateAuthority (if one exists for this Config)
@@ -1447,6 +1461,40 @@ func (r *ConfigReconciler) enqueueConfigsForNodeClassifier(c client.Reader) hand
 			}
 		}
 		return requests
+	}
+}
+
+// --- ReportProcessor ---
+
+// hasReportProcessors returns true if any ReportProcessor references this Config.
+func (r *ConfigReconciler) hasReportProcessors(ctx context.Context, cfg *openvoxv1alpha1.Config) bool {
+	rpList := &openvoxv1alpha1.ReportProcessorList{}
+	if err := r.List(ctx, rpList, client.InNamespace(cfg.Namespace)); err != nil {
+		return false
+	}
+	for _, rp := range rpList.Items {
+		if rp.Spec.ConfigRef == cfg.Name {
+			return true
+		}
+	}
+	return false
+}
+
+// enqueueConfigsForReportProcessor maps ReportProcessor changes to Config reconciles.
+func (r *ConfigReconciler) enqueueConfigsForReportProcessor(c client.Reader) handler.MapFunc {
+	return func(ctx context.Context, obj client.Object) []reconcile.Request {
+		rp, ok := obj.(*openvoxv1alpha1.ReportProcessor)
+		if !ok {
+			return nil
+		}
+
+		// Enqueue the Config that this ReportProcessor references
+		if rp.Spec.ConfigRef != "" {
+			return []reconcile.Request{{
+				NamespacedName: types.NamespacedName{Name: rp.Spec.ConfigRef, Namespace: rp.Namespace},
+			}}
+		}
+		return nil
 	}
 }
 

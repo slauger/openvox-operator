@@ -139,8 +139,9 @@ spec:
                 type: object
                 x-kubernetes-validations:
                 - message: at most one auth method may be set
-                  rule: '(self.mtls ? 1 : 0) + (has(self.token) ? 1 : 0) + (has(self.bearer)
-                    ? 1 : 0) + (has(self.basic) ? 1 : 0) <= 1'
+                  rule: '(has(self.mtls) && self.mtls ? 1 : 0) + (has(self.token)
+                    ? 1 : 0) + (has(self.bearer) ? 1 : 0) + (has(self.basic) ? 1 :
+                    0) <= 1'
               configRef:
                 description: ConfigRef references the Config this ReportProcessor
                   belongs to.

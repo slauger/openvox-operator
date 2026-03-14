@@ -2,7 +2,7 @@
 
 A ReportProcessor defines a report forwarding endpoint for Puppet Server. It specifies where and how to send Puppet reports after each agent run.
 
-ReportProcessor references a Config via `configRef`. Multiple ReportProcessors can reference the same Config — all endpoints receive every report.
+ReportProcessor references a Config via `configRef`. Multiple ReportProcessors can reference the same Config -- all endpoints receive every report.
 
 ## Examples
 
@@ -182,7 +182,7 @@ When `processor` is empty, the report is forwarded as-is in Puppet's `to_data_ha
 
 ### PuppetDB
 
-When `processor: puppetdb`, the binary transforms the report to [PuppetDB Wire Format v8](https://www.puppet.com/docs/puppetdb/latest/api/wire_format/report_format_v8.html) and POSTs it to `<url>/pdb/cmd/v1`. The `/pdb/cmd/v1` path is appended automatically — configure `url` as the PuppetDB base URL only.
+When `processor: puppetdb`, the binary transforms the report to [PuppetDB Wire Format v8](https://www.puppet.com/docs/puppetdb/latest/api/wire_format/report_format_v8.html) and POSTs it to `<url>/pdb/cmd/v1`. The `/pdb/cmd/v1` path is appended automatically -- configure `url` as the PuppetDB base URL only.
 
 ## How It Works
 

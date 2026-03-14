@@ -523,7 +523,7 @@ func (r *CertificateAuthorityReconciler) reconcileCASetupJob(ctx context.Context
 		return ctrl.Result{}, nil
 	}
 
-	// CA not ready — run setup job
+	// CA not ready -- run setup job
 	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseInitializing
 	if statusErr := r.Status().Update(ctx, ca); statusErr != nil {
 		logger.Error(statusErr, "failed to update CertificateAuthority status", "name", ca.Name)
@@ -649,7 +649,7 @@ func buildCAOnlySetupScript() string {
 	return `#!/bin/bash
 set -euo pipefail
 
-# CA setup (idempotent — skips if already initialized on the PVC)
+# CA setup (idempotent -- skips if already initialized on the PVC)
 if [ -f /etc/puppetlabs/puppetserver/ca/ca_crt.pem ]; then
   echo "CA already initialized, skipping setup."
 else
@@ -706,7 +706,7 @@ create_or_update_secret "${CA_SECRET_NAME}" "{
   }
 }"
 
-# CA private key secret (never mounted — only accessed by controller via K8s API)
+# CA private key secret (never mounted -- only accessed by controller via K8s API)
 CA_KEY=$(base64 -w0 /etc/puppetlabs/puppetserver/ca/ca_key.pem)
 create_or_update_secret "${CA_KEY_SECRET_NAME}" "{
   \"apiVersion\": \"v1\",

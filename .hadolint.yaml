@@ -1,3 +1,3 @@
 ignored:
-  - DL3041  # dnf version pinning — versions come from UBI9 repos
-  - DL3003  # WORKDIR vs cd — tarball extraction requires cd
+  - DL3041  # dnf version pinning -- versions come from UBI9 repos
+  - DL3003  # WORKDIR vs cd -- tarball extraction requires cd

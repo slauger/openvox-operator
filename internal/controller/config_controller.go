@@ -241,7 +241,7 @@ func (r *ConfigReconciler) renderPuppetConf(ctx context.Context, cfg *openvoxv1a
 
 		// Always point to the autosign binary. The binary reads the policy config
 		// Secret (mounted by the server controller) and decides sign/deny.
-		// This keeps puppet.conf static — policy changes only update the Secret,
+		// This keeps puppet.conf static -- policy changes only update the Secret,
 		// which kubelet syncs without a pod restart.
 		fmt.Fprintf(&sb, "autosign = %s\n", autosignBinaryPath)
 	}
@@ -1114,7 +1114,7 @@ func (r *ConfigReconciler) reconcileAutosignSecrets(ctx context.Context, cfg *op
 }
 
 // reconcileAutosignSecret renders the autosign policy config YAML into a Secret.
-// The Secret is always created — the binary handles all cases (no policies = deny all,
+// The Secret is always created -- the binary handles all cases (no policies = deny all,
 // any:true = approve all). This keeps puppet.conf static and avoids pod restarts.
 func (r *ConfigReconciler) reconcileAutosignSecret(ctx context.Context, cfg *openvoxv1alpha1.Config, ca *openvoxv1alpha1.CertificateAuthority) error {
 	logger := log.FromContext(ctx)

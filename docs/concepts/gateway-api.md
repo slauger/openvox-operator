@@ -4,7 +4,7 @@
 
 The openvox-operator supports [Gateway API](https://gateway-api.sigs.k8s.io/) TLSRoute resources for SNI-based routing. This allows multiple Puppet environments to share a single LoadBalancer via Server Name Indication (SNI) instead of requiring a dedicated LoadBalancer Service per environment.
 
-Since Puppet uses mTLS between agents and servers, TLS passthrough is required — the Gateway does not terminate TLS.
+Since Puppet uses mTLS between agents and servers, TLS passthrough is required -- the Gateway does not terminate TLS.
 
 ## Architecture
 
@@ -122,7 +122,7 @@ pools:
       injectDNSAltName: true
 ```
 
-The `gateway.name` and `gateway.sectionName` are shared across all pools — individual pools only need to set their hostname.
+The `gateway.name` and `gateway.sectionName` are shared across all pools -- individual pools only need to set their hostname.
 
 ## Graceful Degradation
 

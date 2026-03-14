@@ -35,7 +35,7 @@ The Ruby shim is a Puppet report processor that bridges Puppet Server's internal
 - Pipes the JSON to `/opt/puppetlabs/server/bin/openvox-report` via stdin
 - Has a 120-second timeout to prevent Puppet Server thread blocking
 
-The shim is intentionally thin — it contains no endpoint-specific logic.
+The shim is intentionally thin -- it contains no endpoint-specific logic.
 
 ### Stage 2: Go Binary (openvox-report)
 
@@ -123,6 +123,6 @@ spec:
     mtls: true
 ```
 
-No changes to the Config resource are needed — the operator detects ReportProcessors via `configRef` and injects the report processor configuration automatically.
+No changes to the Config resource are needed -- the operator detects ReportProcessors via `configRef` and injects the report processor configuration automatically.
 
 For the full CRD reference, see [ReportProcessor](../reference/reportprocessor.md).

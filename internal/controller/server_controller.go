@@ -80,7 +80,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	// Resolve Certificate — wait until phase is Signed
+	// Resolve Certificate -- wait until phase is Signed
 	cert := &openvoxv1alpha1.Certificate{}
 	if err := r.Get(ctx, types.NamespacedName{Name: server.Spec.CertificateRef, Namespace: server.Namespace}, cert); err != nil {
 		if errors.IsNotFound(err) {

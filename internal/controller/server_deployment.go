@@ -407,7 +407,7 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 	}
 
 	// Init container populates the writable ssl emptyDir from secret volumes.
-	// CRL is NOT copied here — non-CA pods get it from a kubelet-synced secret mount,
+	// CRL is NOT copied here -- non-CA pods get it from a kubelet-synced secret mount,
 	// CA pods get it from the PVC at startup.
 	sslInitScript := `mkdir -p /ssl/certs /ssl/private_keys /ssl/public_keys /ssl/certificate_requests /ssl/private
 cp /ssl-cert/cert.pem /ssl/certs/puppet.pem

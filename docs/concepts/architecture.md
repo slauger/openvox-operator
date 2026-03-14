@@ -46,9 +46,9 @@ The Certificate Authority is managed by the CertificateAuthority controller:
 
 1. The CertificateAuthority controller creates a **PVC** for CA data and a **Job** that runs `puppetserver ca setup`
 2. The Job stores CA keys on the PVC and creates three Kubernetes **Secrets**:
-   - `{name}-ca` — public CA certificate (`ca_crt.pem`)
-   - `{name}-ca-key` — CA private key (`ca_key.pem`, never mounted in pods)
-   - `{name}-ca-crl` — CRL data (`ca_crl.pem`, `infra_crl.pem`)
+   - `{name}-ca` -- public CA certificate (`ca_crt.pem`)
+   - `{name}-ca-key` -- CA private key (`ca_key.pem`, never mounted in pods)
+   - `{name}-ca-crl` -- CRL data (`ca_crl.pem`, `infra_crl.pem`)
 3. The CertificateAuthority transitions to the `Ready` phase
 4. The controller periodically fetches the CRL from the CA HTTP API and updates the CRL Secret (configurable via `crlRefreshInterval`, default `5m`)
 
@@ -59,7 +59,7 @@ Certificates are managed by the Certificate controller:
 1. The Certificate controller waits for the referenced CertificateAuthority to be `Ready`
 2. It determines the signing strategy:
    - **CA setup export**: The first Certificate (created with the CA) gets its cert+key exported directly by the CA setup Job
-   - **HTTP signing**: Additional Certificates are signed by the operator in-process — it generates an RSA key pair, submits a CSR to the Puppet CA HTTP API, and polls for the signed certificate
+   - **HTTP signing**: Additional Certificates are signed by the operator in-process -- it generates an RSA key pair, submits a CSR to the Puppet CA HTTP API, and polls for the signed certificate
 3. The controller creates a TLS **Secret** with cert.pem and key.pem
 4. The Certificate transitions to the `Signed` phase
 

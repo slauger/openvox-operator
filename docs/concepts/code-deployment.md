@@ -115,7 +115,7 @@ Because the code image reference is part of the pod spec, Kubernetes tracks roll
 kubectl rollout status deployment -l openvox.voxpupuli.org/server -n production
 ```
 
-Each pod shows the exact code image it is running. There is no ambiguity about whether r10k has finished syncing or whether a server is still serving stale code — the image tag **is** the version.
+Each pod shows the exact code image it is running. There is no ambiguity about whether r10k has finished syncing or whether a server is still serving stale code -- the image tag **is** the version.
 
 ### Developer Isolation
 
@@ -133,7 +133,7 @@ helm upgrade --install dev-bob charts/openvox-stack \
   --set config.code.image=ghcr.io/example/puppet-code:feature-bob
 ```
 
-Each stack has its own CA, certificates, and server pods. Developers can iterate independently — deploying new code, running agents, and testing without affecting anyone else. Tearing down is equally simple:
+Each stack has its own CA, certificates, and server pods. Developers can iterate independently -- deploying new code, running agents, and testing without affecting anyone else. Tearing down is equally simple:
 
 ```bash
 helm uninstall dev-alice --namespace dev-alice
@@ -161,7 +161,7 @@ spec:
 ## PVC
 
 !!! warning "Not recommended"
-    The PVC method requires you to manage code deployment yourself. The operator only mounts the volume — it does not create, populate, or update the PVC contents. There are no plans to add r10k integration or any other code sync mechanism to the operator, as this would add significant complexity to the codebase. We recommend using [OCI image volumes](#oci-image-volumes-recommended) instead.
+    The PVC method requires you to manage code deployment yourself. The operator only mounts the volume -- it does not create, populate, or update the PVC contents. There are no plans to add r10k integration or any other code sync mechanism to the operator, as this would add significant complexity to the codebase. We recommend using [OCI image volumes](#oci-image-volumes-recommended) instead.
 
 Reference an existing PVC containing Puppet code. You are responsible for populating and updating the PVC externally (e.g. via a CI/CD pipeline, a CronJob running r10k, or a sidecar container).
 

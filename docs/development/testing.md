@@ -37,9 +37,9 @@ E2E tests use [Chainsaw](https://kyverno.github.io/chainsaw/) to deploy the oper
 
 ### Container Images
 
-E2E tests require 5 container images: `openvox-operator`, `openvox-server`, `openvox-code`, `openvox-agent`, and `openvox-mock`. All images are pulled from ghcr.io at runtime — there is no local image building or loading into the cluster.
+E2E tests require 5 container images: `openvox-operator`, `openvox-server`, `openvox-code`, `openvox-agent`, and `openvox-mock`. All images are pulled from ghcr.io at runtime -- there is no local image building or loading into the cluster.
 
-The E2E agent tests deploy Puppet code via OCI volume mounts (`image` volumes), which require the Kubernetes `ImageVolume` feature gate. This feature is default-enabled since Kubernetes 1.35, but Docker Desktop currently ships Kubernetes 1.34 via its built-in kubeadm provider — and there is no way to inject custom feature gates into that provider. The workaround is to run a kind cluster inside Docker Desktop, where feature gates can be configured via the kind config (`tests/e2e/kind-config.yaml`). However, kind clusters cannot access locally built images directly — images must be available in a registry. This is why the `e2e.yaml` workflow pushes all images to ghcr.io before tests can run.
+The E2E agent tests deploy Puppet code via OCI volume mounts (`image` volumes), which require the Kubernetes `ImageVolume` feature gate. This feature is default-enabled since Kubernetes 1.35, but Docker Desktop currently ships Kubernetes 1.34 via its built-in kubeadm provider -- and there is no way to inject custom feature gates into that provider. The workaround is to run a kind cluster inside Docker Desktop, where feature gates can be configured via the kind config (`tests/e2e/kind-config.yaml`). However, kind clusters cannot access locally built images directly -- images must be available in a registry. This is why the `e2e.yaml` workflow pushes all images to ghcr.io before tests can run.
 
 Images are pushed to `ghcr.io/slauger/<image>` with a short SHA tag (e.g. `efac063`) and `:latest`.
 
@@ -110,9 +110,9 @@ These tests run real Puppet agents against deployed stacks to verify the full Pu
 
 They require additional test images:
 
-- **openvox-agent** — Puppet agent based on UBI9
-- **openvox-code** — OCI image with Puppet environments (production, staging, broken)
-- **openvox-mock** — Mock server for ENC, report webhook, and PuppetDB endpoints
+- **openvox-agent** -- Puppet agent based on UBI9
+- **openvox-code** -- OCI image with Puppet environments (production, staging, broken)
+- **openvox-mock** -- Mock server for ENC, report webhook, and PuppetDB endpoints
 
 ##### Agent Basic (`tests/e2e/agent-basic/`)
 

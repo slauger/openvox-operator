@@ -1,0 +1,38 @@
+name: Unicode Lint
+
+on:
+  workflow_call:
+
+jobs:
+  unicode:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check for AI watermark characters
+        run: |
+          # Invisible characters (zero-width, soft hyphen, word joiner)
+          INVISIBLE='\x{200B}\x{200C}\x{200D}\x{FEFF}\x{2060}\x{180E}\x{00AD}'
+          # Special spaces (non-breaking, en/em space, thin space, etc.)
+          SPACES='\x{00A0}\x{2002}\x{2003}\x{2007}\x{2008}\x{2009}\x{200A}\x{202F}'
+          # Special hyphens and dashes (en dash, em dash, etc.)
+          HYPHENS='\x{2011}\x{2012}\x{2013}\x{2014}\x{2015}\x{FE58}\x{FE63}\x{FF0D}'
+          # Decorative characters (box drawings, multi-em dashes)
+          DECORATIVE='\x{2E3A}\x{2E3B}\x{2501}\x{2500}'
+          # Special bullets
+          BULLETS='\x{2022}\x{2023}\x{25E6}\x{2043}\x{204C}\x{204D}\x{23FA}\x{25AA}\x{25AB}\x{25C6}\x{25CF}'
+          # Typographic quotes (smart quotes, guillemets)
+          QUOTES='\x{2018}\x{2019}\x{201A}\x{201B}\x{201C}\x{201D}\x{201E}\x{201F}\x{00AB}\x{00BB}\x{2039}\x{203A}'
+          # Other (ellipsis, fraction slash)
+          OTHER='\x{2026}\x{2044}'
+
+          PATTERN="[${INVISIBLE}${SPACES}${HYPHENS}${DECORATIVE}${BULLETS}${QUOTES}${OTHER}]"
+
+          if grep -rPn "$PATTERN" \
+            --include='*.go' --include='*.yaml' --include='*.yml' \
+            --include='*.md' --include='*.json' --include='*.tpl' \
+            --include='*.pp' --include='*.sh' --include='*.toml' \
+            .; then
+            echo "::error::Found suspicious Unicode characters (possible AI watermarks). Replace with ASCII equivalents."
+            exit 1
+          fi
+          echo "No suspicious Unicode characters found."

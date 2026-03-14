@@ -17,7 +17,7 @@ go build ./...
 
 ## Tool Dependencies
 
-Go tool dependencies are managed via the `tool` directive in `go.mod`. This includes `controller-gen`, `govulncheck`, and `chainsaw`. No manual installation is needed — Go resolves them automatically:
+Go tool dependencies are managed via the `tool` directive in `go.mod`. This includes `controller-gen`, `govulncheck`, and `chainsaw`. No manual installation is needed -- Go resolves them automatically:
 
 ```bash
 go tool controller-gen --version

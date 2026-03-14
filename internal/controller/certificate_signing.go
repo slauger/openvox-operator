@@ -196,7 +196,7 @@ func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openv
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
-	// Step 3: Cert is signed — read key from pending Secret and create TLS Secret
+	// Step 3: Cert is signed -- read key from pending Secret and create TLS Secret
 	pendingSecretName := fmt.Sprintf("%s-tls-pending", cert.Name)
 	pendingSecret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Name: pendingSecretName, Namespace: namespace}, pendingSecret); err != nil {

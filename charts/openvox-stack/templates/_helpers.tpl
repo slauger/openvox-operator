@@ -7,7 +7,7 @@ Defaults to the Release name, overridable via fullnameOverride.
 {{- end }}
 
 {{/*
-Config name — defaults to fullname.
+Config name -- defaults to fullname.
 */}}
 {{- define "openvox-stack.configName" -}}
 {{- .Values.config.name | default (include "openvox-stack.fullname" .) }}
@@ -48,7 +48,7 @@ NodeClassifier name.
 {{- end }}
 
 {{/*
-Server name for a server entry — prefixed with fullname.
+Server name for a server entry -- prefixed with fullname.
 Usage: include "openvox-stack.serverName" (dict "root" $ "entry" $entry)
 */}}
 {{- define "openvox-stack.serverName" -}}

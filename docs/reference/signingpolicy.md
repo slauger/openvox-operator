@@ -1,6 +1,6 @@
 # SigningPolicy
 
-A SigningPolicy defines a policy for automatic CSR signing against a CertificateAuthority. Multiple policies can reference the same CA — if **any** policy matches, the CSR is signed (OR logic between policies). Within a single policy, **all** set fields must match (AND logic).
+A SigningPolicy defines a policy for automatic CSR signing against a CertificateAuthority. Multiple policies can reference the same CA -- if **any** policy matches, the CSR is signed (OR logic between policies). Within a single policy, **all** set fields must match (AND logic).
 
 ## Example
 
@@ -171,8 +171,8 @@ flowchart TD
     Deny["exit 1 (deny)"]
 ```
 
-- **Between policies**: OR — any matching policy is sufficient
-- **Within a policy**: AND — all set fields must match
+- **Between policies**: OR -- any matching policy is sufficient
+- **Within a policy**: AND -- all set fields must match
 - **No policies** → deny all
 - **`any: true`** → approve unconditionally
 

@@ -20,7 +20,7 @@ flowchart LR
 4. puppet.conf gets `node_terminus = exec` and `external_nodes = /usr/local/bin/openvox-enc`
 5. Puppet Server calls the `openvox-enc` binary for every node, which queries the classifier and returns YAML
 
-The `openvox-enc` binary is a static Go binary shipped in the openvox-server container image. Like `openvox-autosign`, configuration changes only update the Secret — kubelet syncs the file without a pod restart.
+The `openvox-enc` binary is a static Go binary shipped in the openvox-server container image. Like `openvox-autosign`, configuration changes only update the Secret -- kubelet syncs the file without a pod restart.
 
 ## Supported Classifiers
 

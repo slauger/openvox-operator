@@ -1,6 +1,6 @@
 #!/bin/bash
 # Rootless entrypoint for OpenVox Server.
-# Starts puppetserver directly via java — no ezbake, no runuser, no sudo.
+# Starts puppetserver directly via java -- no ezbake, no runuser, no sudo.
 
 set -o errexit
 set -o pipefail
@@ -15,7 +15,7 @@ BOOTSTRAP_CONFIG="/etc/puppetlabs/puppetserver/services.d/,/opt/puppetlabs/serve
 
 echo "Starting OpenVox Server (direct java, PID $$)"
 
-# Start puppetserver directly — the core from ezbake's foreground script,
+# Start puppetserver directly -- the core from ezbake's foreground script,
 # without the user-switching and PID file overhead.
 # shellcheck disable=SC2086 # JAVA_ARGS word splitting is intentional
 exec "${JAVA_BIN}" ${JAVA_ARGS} \

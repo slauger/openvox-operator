@@ -100,4 +100,4 @@ sequenceDiagram
 | Job | `{name}-ca-setup` | Runs `puppetserver ca setup`, creates CA Secrets |
 | Secret | `{name}-ca` | Public CA certificate (`ca_crt.pem`) |
 | Secret | `{name}-ca-key` | CA private key (`ca_key.pem`) |
-| Secret | `{name}-ca-crl` | CRL data (`ca_crl.pem`, `infra_crl.pem`) — periodically refreshed |
+| Secret | `{name}-ca-crl` | CRL data (`ca_crl.pem`, `infra_crl.pem`) -- periodically refreshed |

@@ -301,7 +301,9 @@ func TestProducerFallbackToHost(t *testing.T) {
 	}
 
 	var cmd PuppetDBCommand
-	json.Unmarshal(resultJSON, &cmd)
+	if err := json.Unmarshal(resultJSON, &cmd); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
 	payload := cmd.Payload.(map[string]any)
 
 	if payload["producer"] != "node.example.com" {

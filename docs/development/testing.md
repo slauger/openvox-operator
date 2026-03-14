@@ -48,7 +48,7 @@ make e2e
 
 This will:
 
-1. Build local container images (`openvox-operator` and `openvox-server`)
+1. Build all container images (`openvox-operator`, `openvox-server`, `openvox-code`, `openvox-agent`, `openvox-mock`)
 2. Deploy the operator via Helm
 3. Run all Chainsaw test scenarios
 
@@ -56,7 +56,11 @@ This will:
 
 Tests are located in `tests/e2e/` with a shared configuration in `tests/e2e/chainsaw-config.yaml`.
 
-#### Single-Node (`tests/e2e/single-node/`)
+#### Stack Deployment Tests
+
+These tests verify that the operator deploys OpenVox stacks correctly.
+
+##### Single-Node (`tests/e2e/single-node/`)
 
 Deploys a minimal stack with a single CA+Server and verifies:
 
@@ -65,7 +69,7 @@ Deploys a minimal stack with a single CA+Server and verifies:
 - Server reaches `Running` phase with 1/1 replicas ready
 - Operator logs contain no error-level entries
 
-#### Multi-Server (`tests/e2e/multi-server/`)
+##### Multi-Server (`tests/e2e/multi-server/`)
 
 Deploys a stack with a dedicated CA server and 2 compiler replicas:
 
@@ -75,9 +79,84 @@ Deploys a stack with a dedicated CA server and 2 compiler replicas:
 - 3 total server pods exist (1 CA + 2 compilers)
 - Operator logs contain no error-level entries
 
+#### Agent Tests
+
+These tests run real Puppet agents against deployed stacks to verify the full Puppet lifecycle: certificate signing, catalog compilation, catalog application, and report submission.
+
+They require additional test images:
+
+- **openvox-agent** — Puppet agent based on UBI9
+- **openvox-code** — OCI image with Puppet environments (production, staging, broken)
+- **openvox-mock** — Mock server for ENC, report webhook, and PuppetDB endpoints
+
+##### Agent Basic (`tests/e2e/agent-basic/`)
+
+Single Puppet agent run against a server with autosign and code deployment:
+
+- Stack deploys with CA, Server, and code image
+- Puppet agent connects, gets certificate, compiles catalog, applies it
+- Agent Job completes successfully
+
+##### Agent Concurrent (`tests/e2e/agent-concurrent/`)
+
+Three Puppet agents running in parallel against the same server:
+
+- All three agents get certificates and apply catalogs concurrently
+- All three Jobs complete successfully
+
+##### Agent Idempotent (`tests/e2e/agent-idempotent/`)
+
+Two consecutive Puppet agent runs verifying idempotency:
+
+- First run applies changes (exit code 2 → success)
+- Second run completes successfully
+
+##### Agent Broken (`tests/e2e/agent-broken/`)
+
+Puppet agent run with a broken environment (`include nonexistent_class`):
+
+- Agent connects to server with `--environment broken`
+- Catalog compilation fails
+- Agent Job fails as expected
+
+##### Agent ENC (`tests/e2e/agent-enc/`)
+
+Puppet agent with External Node Classification via mock server:
+
+- Mock server deployed with `ENC_CLASSES=e2e_test`
+- NodeClassifier configured to query mock at `/node/{certname}`
+- Agent completes successfully
+- Mock received classification request for the agent's certname
+
+##### Agent Report (`tests/e2e/agent-report/`)
+
+Puppet agent with report forwarding to mock server:
+
+- ReportProcessors configured for generic webhook and PuppetDB
+- Agent completes successfully
+- Mock received report via webhook endpoint
+- Mock received PuppetDB command
+
+##### Agent Full (`tests/e2e/agent-full/`)
+
+Full integration test combining ENC, reports, and PuppetDB:
+
+- NodeClassifier + ReportProcessors all pointing to mock server
+- Agent completes successfully
+- Mock received classification, report, and PuppetDB command
+
 ### Cleanup
 
-Each test scenario cleans up after itself (Helm uninstall + namespace deletion) via Chainsaw's `finally` block, even on failure. Both scenarios use isolated namespaces (`e2e-single-node`, `e2e-multi-server`) so they can run in parallel.
+Each test scenario cleans up after itself (Helm uninstall + namespace deletion) via Chainsaw's `finally` block, even on failure. Scenarios use isolated namespaces so they can run in parallel.
+
+### CI Workflow
+
+Agent E2E tests are available via the **E2E** workflow (`.github/workflows/e2e.yaml`), triggered manually via `workflow_dispatch`. It accepts an optional `image_tag` input:
+
+- **Empty** — builds operator and server from source
+- **Set** (e.g. `latest`, `0a6a7f0`) — pulls pre-built images from `ghcr.io/slauger/openvox-operator` and `ghcr.io/slauger/openvox-server`
+
+Test images (code, agent, mock) are always built from source. Their container image builds are managed separately in `.github/workflows/container-build-test.yaml` (push to main with path filter + manual trigger).
 
 ### Writing New Tests
 

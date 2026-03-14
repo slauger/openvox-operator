@@ -8,7 +8,7 @@ Code is only mounted on pods with `server: true`. CA-only pods are not affected 
 
 Package Puppet code as an OCI image and reference it in the Config. The operator mounts it as a read-only [image volume](https://kubernetes.io/docs/concepts/storage/volumes/#image) directly into the pod.
 
-**Requirements:** Kubernetes 1.35+ (ImageVolume is default-enabled). On Kubernetes 1.31–1.34, the `ImageVolume` feature gate must be enabled manually.
+**Requirements:** Kubernetes 1.35+ (ImageVolume is default-enabled). On Kubernetes 1.31-1.34, the `ImageVolume` feature gate must be enabled manually.
 
 ### Building a Code Image
 

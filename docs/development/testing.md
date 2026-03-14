@@ -206,9 +206,9 @@ Create a new directory under `tests/e2e/` with a `chainsaw-test.yaml`:
 
 ```
 tests/e2e/
-├── chainsaw-config.yaml
-├── my-scenario/
-│   └── chainsaw-test.yaml
++-- chainsaw-config.yaml
++-- my-scenario/
+    +-- chainsaw-test.yaml
 ```
 
 Each test file follows the Chainsaw v1alpha1 Test spec. Key patterns:

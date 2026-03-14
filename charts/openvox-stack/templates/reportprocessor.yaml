@@ -1,0 +1,68 @@
+{{- range $i, $entry := .Values.reportProcessors }}
+---
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: ReportProcessor
+metadata:
+  name: {{ include "openvox-stack.reportProcessorName" (dict "root" $ "entry" $entry "index" $i) }}
+spec:
+  configRef: {{ include "openvox-stack.configName" $ }}
+  url: {{ $entry.url }}
+  {{- with $entry.processor }}
+  processor: {{ . }}
+  {{- end }}
+  {{- with $entry.timeoutSeconds }}
+  timeoutSeconds: {{ . }}
+  {{- end }}
+  {{- with $entry.headers }}
+  headers:
+    {{- range . }}
+    - name: {{ .name }}
+      {{- with .value }}
+      value: {{ . | quote }}
+      {{- end }}
+      {{- with .valueFrom }}
+      valueFrom:
+        {{- with .secretKeyRef }}
+        secretKeyRef:
+          name: {{ .name }}
+          key: {{ .key }}
+        {{- end }}
+        {{- with .configMapKeyRef }}
+        configMapKeyRef:
+          name: {{ .name }}
+          key: {{ .key }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+  {{- with $entry.auth }}
+  auth:
+    {{- if .mtls }}
+    mtls: true
+    {{- end }}
+    {{- with .token }}
+    token:
+      header: {{ .header }}
+      secretKeyRef:
+        name: {{ .secretKeyRef.name }}
+        key: {{ .secretKeyRef.key }}
+    {{- end }}
+    {{- with .bearer }}
+    bearer:
+      secretKeyRef:
+        name: {{ .secretKeyRef.name }}
+        key: {{ .secretKeyRef.key }}
+    {{- end }}
+    {{- with .basic }}
+    basic:
+      secretRef:
+        name: {{ .secretRef.name }}
+        {{- with .secretRef.usernameKey }}
+        usernameKey: {{ . }}
+        {{- end }}
+        {{- with .secretRef.passwordKey }}
+        passwordKey: {{ . }}
+        {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}

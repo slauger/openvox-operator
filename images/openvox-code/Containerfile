@@ -1,0 +1,25 @@
+# OCI code image: Puppet environments with Forge modules
+#
+# Multi-stage build:
+#   1. Install Forge modules via r10k on UBI9
+#   2. Copy environments into a scratch image (mounted as OCI image volume)
+#
+# Build (from repo root):
+#   podman build -t openvox-code:latest -f images/openvox-code/Containerfile .
+
+# Stage 1: Install modules with r10k
+FROM registry.access.redhat.com/ubi9/ubi:9.7-1773204657 AS builder
+
+RUN dnf module enable ruby:3.3 -y \
+    && dnf install -y --setopt=install_weak_deps=False ruby rubygem-bundler git \
+    && dnf clean all \
+    && gem install r10k --no-document
+
+WORKDIR /code/environments
+COPY images/openvox-code/environments/production/Puppetfile /code/environments/production/Puppetfile
+RUN cd /code/environments/production && r10k puppetfile install --verbose
+COPY images/openvox-code/environments/ /code/environments/
+
+# Stage 2: Scratch image (mounted as OCI image volume)
+FROM scratch
+COPY --from=builder /code/environments/ /

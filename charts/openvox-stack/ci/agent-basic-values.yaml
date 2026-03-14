@@ -1,0 +1,38 @@
+signingPolicies:
+  - name: autosign-any
+    any: true
+
+config:
+  code:
+    image: openvox-code:latest
+    imagePullPolicy: Never
+
+servers:
+  - name: ca
+    ca: true
+    server: true
+    poolRefs: [ca, server]
+    certificate:
+      certname: puppet
+      dnsAltNames:
+        - e2e-agent-basic-server
+        - e2e-agent-concurrent-server
+        - e2e-agent-idempotent-server
+        - e2e-agent-broken-server
+    replicas: 1
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+
+pools:
+  - name: ca
+    service:
+      type: ClusterIP
+      port: 8140
+  - name: server
+    service:
+      type: ClusterIP
+      port: 8140

@@ -1,0 +1,85 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: agent-broken
+spec:
+  namespace: e2e-agent-broken
+  steps:
+    - name: Install openvox-stack
+      try:
+        - script:
+            timeout: 2m
+            content: |
+              REPO_ROOT=$(git rev-parse --show-toplevel)
+              LOCAL_TAG=$(git describe --always)
+              helm upgrade --install e2e-agent-broken "${REPO_ROOT}/charts/openvox-stack" \
+                --namespace e2e-agent-broken --create-namespace \
+                --values "${REPO_ROOT}/charts/openvox-stack/ci/agent-basic-values.yaml" \
+                --set config.image.repository=openvox-server \
+                --set config.image.tag="${LOCAL_TAG}" \
+                --set config.image.pullPolicy=Never
+      catch:
+        - events: {}
+
+    - name: Assert Server is Running
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: e2e-agent-broken-ca
+              status:
+                phase: Running
+                ready: 1
+                desired: 1
+
+    - name: Run Puppet agent with broken environment (expect failure)
+      try:
+        - apply:
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: puppet-agent-broken
+                namespace: e2e-agent-broken
+              spec:
+                backoffLimit: 0
+                template:
+                  spec:
+                    restartPolicy: Never
+                    containers:
+                      - name: puppet-agent
+                        image: openvox-agent:latest
+                        imagePullPolicy: Never
+                        command: ["sh", "-c"]
+                        args:
+                          - |
+                            puppet agent --test \
+                              --server e2e-agent-broken-server \
+                              --environment broken \
+                              --waitforcert 30 \
+                              --certname agent-broken-test;
+                            EXIT=$?;
+                            if [ $EXIT -eq 0 ] || [ $EXIT -eq 2 ]; then exit 0; else exit $EXIT; fi
+                        securityContext:
+                          runAsUser: 0
+        - assert:
+            timeout: 5m
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: puppet-agent-broken
+                namespace: e2e-agent-broken
+              status:
+                conditions:
+                  - type: Failed
+                    status: "True"
+      finally:
+        - script:
+            timeout: 2m
+            content: |
+              kubectl logs -n e2e-agent-broken job/puppet-agent-broken || true
+              helm uninstall e2e-agent-broken --namespace e2e-agent-broken --wait 2>/dev/null || true
+              kubectl delete namespace e2e-agent-broken --ignore-not-found 2>/dev/null || true

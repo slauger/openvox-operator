@@ -1,0 +1,44 @@
+signingPolicies:
+  - name: autosign-any
+    any: true
+
+config:
+  code:
+    image: openvox-code:latest
+    imagePullPolicy: Never
+
+nodeClassifier:
+  enabled: true
+  url: http://openvox-mock:8080
+  request:
+    method: GET
+    path: /node/{certname}
+  response:
+    format: yaml
+
+servers:
+  - name: ca
+    ca: true
+    server: true
+    poolRefs: [ca, server]
+    certificate:
+      certname: puppet
+      dnsAltNames:
+        - e2e-agent-enc-server
+    replicas: 1
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+
+pools:
+  - name: ca
+    service:
+      type: ClusterIP
+      port: 8140
+  - name: server
+    service:
+      type: ClusterIP
+      port: 8140

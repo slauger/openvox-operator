@@ -1,0 +1,95 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: agent-basic
+spec:
+  namespace: e2e-agent-basic
+  steps:
+    - name: Install openvox-stack
+      try:
+        - script:
+            timeout: 2m
+            content: |
+              REPO_ROOT=$(git rev-parse --show-toplevel)
+              LOCAL_TAG=$(git describe --always)
+              helm upgrade --install e2e-agent-basic "${REPO_ROOT}/charts/openvox-stack" \
+                --namespace e2e-agent-basic --create-namespace \
+                --values "${REPO_ROOT}/charts/openvox-stack/ci/agent-basic-values.yaml" \
+                --set config.image.repository=openvox-server \
+                --set config.image.tag="${LOCAL_TAG}" \
+                --set config.image.pullPolicy=Never
+      catch:
+        - events: {}
+
+    - name: Assert CertificateAuthority is Ready
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: CertificateAuthority
+              metadata:
+                name: e2e-agent-basic-ca
+              status:
+                phase: Ready
+
+    - name: Assert Server is Running
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: e2e-agent-basic-ca
+              status:
+                phase: Running
+                ready: 1
+                desired: 1
+
+    - name: Run Puppet agent
+      try:
+        - apply:
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: puppet-agent-basic
+                namespace: e2e-agent-basic
+              spec:
+                backoffLimit: 0
+                template:
+                  spec:
+                    restartPolicy: Never
+                    containers:
+                      - name: puppet-agent
+                        image: openvox-agent:latest
+                        imagePullPolicy: Never
+                        command: ["sh", "-c"]
+                        args:
+                          - |
+                            puppet agent --test \
+                              --server e2e-agent-basic-server \
+                              --waitforcert 30 \
+                              --certname agent-basic-test;
+                            EXIT=$?;
+                            if [ $EXIT -eq 0 ] || [ $EXIT -eq 2 ]; then exit 0; else exit $EXIT; fi
+                        securityContext:
+                          runAsUser: 0
+        - assert:
+            timeout: 5m
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: puppet-agent-basic
+                namespace: e2e-agent-basic
+              status:
+                conditions:
+                  - type: Complete
+                    status: "True"
+      finally:
+        - script:
+            timeout: 2m
+            content: |
+              kubectl logs -n e2e-agent-basic job/puppet-agent-basic || true
+              helm uninstall e2e-agent-basic --namespace e2e-agent-basic --wait 2>/dev/null || true
+              kubectl delete namespace e2e-agent-basic --ignore-not-found 2>/dev/null || true

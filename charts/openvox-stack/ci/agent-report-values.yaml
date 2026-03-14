@@ -1,0 +1,44 @@
+signingPolicies:
+  - name: autosign-any
+    any: true
+
+config:
+  puppet:
+    reports: "store,webhook"
+  code:
+    image: openvox-code:latest
+    imagePullPolicy: Never
+
+reportProcessors:
+  - name: e2e-report-webhook
+    url: http://openvox-mock:8080/reports
+  - name: e2e-report-puppetdb
+    url: http://openvox-mock:8080/pdb/cmd/v1
+    processor: puppetdb
+
+servers:
+  - name: ca
+    ca: true
+    server: true
+    poolRefs: [ca, server]
+    certificate:
+      certname: puppet
+      dnsAltNames:
+        - e2e-agent-report-server
+    replicas: 1
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+
+pools:
+  - name: ca
+    service:
+      type: ClusterIP
+      port: 8140
+  - name: server
+    service:
+      type: ClusterIP
+      port: 8140

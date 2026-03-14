@@ -1,0 +1,152 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: agent-enc
+spec:
+  namespace: e2e-agent-enc
+  steps:
+    - name: Deploy mock server
+      try:
+        - apply:
+            resource:
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: openvox-mock
+                namespace: e2e-agent-enc
+              spec:
+                replicas: 1
+                selector:
+                  matchLabels:
+                    app: openvox-mock
+                template:
+                  metadata:
+                    labels:
+                      app: openvox-mock
+                  spec:
+                    containers:
+                      - name: mock
+                        image: openvox-mock:latest
+                        imagePullPolicy: Never
+                        ports:
+                          - containerPort: 8080
+                        env:
+                          - name: ENC_CLASSES
+                            value: "e2e_test"
+                        readinessProbe:
+                          httpGet:
+                            path: /healthz
+                            port: 8080
+                          periodSeconds: 5
+        - apply:
+            resource:
+              apiVersion: v1
+              kind: Service
+              metadata:
+                name: openvox-mock
+                namespace: e2e-agent-enc
+              spec:
+                selector:
+                  app: openvox-mock
+                ports:
+                  - port: 8080
+                    targetPort: 8080
+        - script:
+            timeout: 2m
+            content: |
+              kubectl wait --for=condition=Available deployment/openvox-mock \
+                -n e2e-agent-enc --timeout=2m
+
+    - name: Install openvox-stack with ENC
+      try:
+        - script:
+            timeout: 2m
+            content: |
+              REPO_ROOT=$(git rev-parse --show-toplevel)
+              LOCAL_TAG=$(git describe --always)
+              helm upgrade --install e2e-agent-enc "${REPO_ROOT}/charts/openvox-stack" \
+                --namespace e2e-agent-enc --create-namespace \
+                --values "${REPO_ROOT}/charts/openvox-stack/ci/agent-enc-values.yaml" \
+                --set config.image.repository=openvox-server \
+                --set config.image.tag="${LOCAL_TAG}" \
+                --set config.image.pullPolicy=Never
+      catch:
+        - events: {}
+
+    - name: Assert Server is Running
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: e2e-agent-enc-ca
+              status:
+                phase: Running
+                ready: 1
+                desired: 1
+
+    - name: Run Puppet agent
+      try:
+        - apply:
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: puppet-agent-enc
+                namespace: e2e-agent-enc
+              spec:
+                backoffLimit: 0
+                template:
+                  spec:
+                    restartPolicy: Never
+                    containers:
+                      - name: puppet-agent
+                        image: openvox-agent:latest
+                        imagePullPolicy: Never
+                        command: ["sh", "-c"]
+                        args:
+                          - |
+                            puppet agent --test \
+                              --server e2e-agent-enc-server \
+                              --waitforcert 30 \
+                              --certname agent-enc-test;
+                            EXIT=$?;
+                            if [ $EXIT -eq 0 ] || [ $EXIT -eq 2 ]; then exit 0; else exit $EXIT; fi
+                        securityContext:
+                          runAsUser: 0
+        - assert:
+            timeout: 5m
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: puppet-agent-enc
+                namespace: e2e-agent-enc
+              status:
+                conditions:
+                  - type: Complete
+                    status: "True"
+
+    - name: Verify mock received classification request
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              CLASSIFICATIONS=$(kubectl exec -n e2e-agent-enc deploy/openvox-mock -- \
+                wget -qO- http://localhost:8080/api/classifications)
+              echo "Classifications: ${CLASSIFICATIONS}"
+              if echo "${CLASSIFICATIONS}" | grep -q "agent-enc-test"; then
+                echo "Mock received classification request for agent-enc-test."
+              else
+                echo "ERROR: Mock did not receive classification request."
+                exit 1
+              fi
+      finally:
+        - script:
+            timeout: 2m
+            content: |
+              kubectl logs -n e2e-agent-enc job/puppet-agent-enc || true
+              kubectl logs -n e2e-agent-enc deploy/openvox-mock || true
+              helm uninstall e2e-agent-enc --namespace e2e-agent-enc --wait 2>/dev/null || true
+              kubectl delete namespace e2e-agent-enc --ignore-not-found 2>/dev/null || true

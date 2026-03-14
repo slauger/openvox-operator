@@ -1,0 +1,68 @@
+name: E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          config: tests/e2e/kind-config.yaml
+
+      - name: Build images
+        run: |
+          LOCAL_TAG=$(git describe --always)
+          docker build -t openvox-operator:${LOCAL_TAG} -f images/openvox-operator/Containerfile .
+          docker build -t openvox-server:${LOCAL_TAG} -f images/openvox-server/Containerfile .
+          docker build -t openvox-code:latest -f images/openvox-code/Containerfile .
+          docker build -t openvox-agent:latest -f images/openvox-agent/Containerfile images/openvox-agent/
+          docker build -t openvox-mock:latest -f images/openvox-mock/Containerfile .
+
+      - name: Load images into kind
+        run: |
+          LOCAL_TAG=$(git describe --always)
+          kind load docker-image openvox-operator:${LOCAL_TAG}
+          kind load docker-image openvox-server:${LOCAL_TAG}
+          kind load docker-image openvox-code:latest
+          kind load docker-image openvox-agent:latest
+          kind load docker-image openvox-mock:latest
+
+      - name: Install operator
+        run: |
+          LOCAL_TAG=$(git describe --always)
+          helm upgrade --install openvox-operator charts/openvox-operator \
+            --namespace openvox-system --create-namespace \
+            --set image.repository=openvox-operator \
+            --set image.tag=${LOCAL_TAG} \
+            --set image.pullPolicy=Never
+          kubectl wait --for=condition=Available deployment/openvox-operator \
+            -n openvox-system --timeout=2m
+
+      - name: Run E2E tests
+        run: go tool chainsaw test tests/e2e/
+
+      - name: Collect debug info
+        if: failure()
+        run: |
+          echo "=== Operator logs ==="
+          kubectl logs -n openvox-system deploy/openvox-operator --tail=100 || true
+          echo "=== All pods ==="
+          kubectl get pods -A || true
+          echo "=== Events ==="
+          kubectl get events -A --sort-by=.lastTimestamp || true

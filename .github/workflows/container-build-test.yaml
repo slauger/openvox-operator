@@ -1,0 +1,42 @@
+name: Container Build (Test Images)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'images/openvox-agent/**'
+      - 'images/openvox-code/**'
+      - 'images/openvox-mock/**'
+      - 'cmd/mock/**'
+  workflow_dispatch:
+
+jobs:
+  openvox-agent:
+    uses: ./.github/workflows/container-build.yaml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      image_name: openvox-agent
+      dockerfile: images/openvox-agent/Containerfile
+      context: 'images/openvox-agent'
+
+  openvox-code:
+    uses: ./.github/workflows/container-build.yaml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      image_name: openvox-code
+      dockerfile: images/openvox-code/Containerfile
+      context: '.'
+
+  openvox-mock:
+    uses: ./.github/workflows/container-build.yaml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      image_name: openvox-mock
+      dockerfile: images/openvox-mock/Containerfile
+      context: '.'

@@ -26,6 +26,14 @@ ca:
     size: 1Gi
     storageClass: ""
 
+reportProcessors: []
+# reportProcessors:
+#   - name: my-webhook
+#     url: http://my-webhook:8080/reports
+#   - name: my-puppetdb
+#     url: http://my-puppetdb:8080/pdb/cmd/v1
+#     processor: puppetdb
+
 signingPolicies: []
 # signingPolicies:
 #   - name: autosign-any

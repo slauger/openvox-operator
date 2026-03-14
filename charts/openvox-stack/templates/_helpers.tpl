@@ -68,6 +68,18 @@ Usage: include "openvox-stack.certName" (dict "root" $ "entry" $entry)
 {{- end }}
 
 {{/*
+ReportProcessor name for array entries.
+Usage: include "openvox-stack.reportProcessorName" (dict "root" $ "entry" $entry "index" $i)
+*/}}
+{{- define "openvox-stack.reportProcessorName" -}}
+{{- if .entry.name -}}
+{{- .entry.name }}
+{{- else -}}
+{{- printf "%s-report-processor-%d" (include "openvox-stack.fullname" .root) .index | trunc 63 | trimSuffix "-" }}
+{{- end }}
+{{- end }}
+
+{{/*
 Pool name for a pool entry.
 Usage: include "openvox-stack.poolName" (dict "root" $ "entry" $entry)
 */}}

@@ -1,0 +1,164 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: agent-concurrent
+spec:
+  namespace: e2e-agent-concurrent
+  steps:
+    - name: Install openvox-stack
+      try:
+        - script:
+            timeout: 2m
+            content: |
+              REPO_ROOT=$(git rev-parse --show-toplevel)
+              LOCAL_TAG=$(git describe --always)
+              helm upgrade --install e2e-agent-concurrent "${REPO_ROOT}/charts/openvox-stack" \
+                --namespace e2e-agent-concurrent --create-namespace \
+                --values "${REPO_ROOT}/charts/openvox-stack/ci/agent-basic-values.yaml" \
+                --set config.image.repository=openvox-server \
+                --set config.image.tag="${LOCAL_TAG}" \
+                --set config.image.pullPolicy=Never
+      catch:
+        - events: {}
+
+    - name: Assert Server is Running
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: e2e-agent-concurrent-ca
+              status:
+                phase: Running
+                ready: 1
+                desired: 1
+
+    - name: Run 3 Puppet agents concurrently
+      try:
+        - apply:
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: puppet-agent-concurrent-1
+                namespace: e2e-agent-concurrent
+              spec:
+                backoffLimit: 0
+                template:
+                  spec:
+                    restartPolicy: Never
+                    containers:
+                      - name: puppet-agent
+                        image: openvox-agent:latest
+                        imagePullPolicy: Never
+                        command: ["sh", "-c"]
+                        args:
+                          - |
+                            puppet agent --test \
+                              --server e2e-agent-concurrent-server \
+                              --waitforcert 30 \
+                              --certname agent-concurrent-1;
+                            EXIT=$?;
+                            if [ $EXIT -eq 0 ] || [ $EXIT -eq 2 ]; then exit 0; else exit $EXIT; fi
+                        securityContext:
+                          runAsUser: 0
+        - apply:
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: puppet-agent-concurrent-2
+                namespace: e2e-agent-concurrent
+              spec:
+                backoffLimit: 0
+                template:
+                  spec:
+                    restartPolicy: Never
+                    containers:
+                      - name: puppet-agent
+                        image: openvox-agent:latest
+                        imagePullPolicy: Never
+                        command: ["sh", "-c"]
+                        args:
+                          - |
+                            puppet agent --test \
+                              --server e2e-agent-concurrent-server \
+                              --waitforcert 30 \
+                              --certname agent-concurrent-2;
+                            EXIT=$?;
+                            if [ $EXIT -eq 0 ] || [ $EXIT -eq 2 ]; then exit 0; else exit $EXIT; fi
+                        securityContext:
+                          runAsUser: 0
+        - apply:
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: puppet-agent-concurrent-3
+                namespace: e2e-agent-concurrent
+              spec:
+                backoffLimit: 0
+                template:
+                  spec:
+                    restartPolicy: Never
+                    containers:
+                      - name: puppet-agent
+                        image: openvox-agent:latest
+                        imagePullPolicy: Never
+                        command: ["sh", "-c"]
+                        args:
+                          - |
+                            puppet agent --test \
+                              --server e2e-agent-concurrent-server \
+                              --waitforcert 30 \
+                              --certname agent-concurrent-3;
+                            EXIT=$?;
+                            if [ $EXIT -eq 0 ] || [ $EXIT -eq 2 ]; then exit 0; else exit $EXIT; fi
+                        securityContext:
+                          runAsUser: 0
+        - assert:
+            timeout: 5m
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: puppet-agent-concurrent-1
+                namespace: e2e-agent-concurrent
+              status:
+                conditions:
+                  - type: Complete
+                    status: "True"
+        - assert:
+            timeout: 5m
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: puppet-agent-concurrent-2
+                namespace: e2e-agent-concurrent
+              status:
+                conditions:
+                  - type: Complete
+                    status: "True"
+        - assert:
+            timeout: 5m
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: puppet-agent-concurrent-3
+                namespace: e2e-agent-concurrent
+              status:
+                conditions:
+                  - type: Complete
+                    status: "True"
+      finally:
+        - script:
+            timeout: 2m
+            content: |
+              kubectl logs -n e2e-agent-concurrent job/puppet-agent-concurrent-1 || true
+              kubectl logs -n e2e-agent-concurrent job/puppet-agent-concurrent-2 || true
+              kubectl logs -n e2e-agent-concurrent job/puppet-agent-concurrent-3 || true
+              helm uninstall e2e-agent-concurrent --namespace e2e-agent-concurrent --wait 2>/dev/null || true
+              kubectl delete namespace e2e-agent-concurrent --ignore-not-found 2>/dev/null || true

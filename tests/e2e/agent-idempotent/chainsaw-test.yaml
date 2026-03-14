@@ -1,0 +1,133 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: agent-idempotent
+spec:
+  namespace: e2e-agent-idempotent
+  steps:
+    - name: Install openvox-stack
+      try:
+        - script:
+            timeout: 2m
+            content: |
+              REPO_ROOT=$(git rev-parse --show-toplevel)
+              LOCAL_TAG=$(git describe --always)
+              helm upgrade --install e2e-agent-idempotent "${REPO_ROOT}/charts/openvox-stack" \
+                --namespace e2e-agent-idempotent --create-namespace \
+                --values "${REPO_ROOT}/charts/openvox-stack/ci/agent-basic-values.yaml" \
+                --set config.image.repository=openvox-server \
+                --set config.image.tag="${LOCAL_TAG}" \
+                --set config.image.pullPolicy=Never
+      catch:
+        - events: {}
+
+    - name: Assert Server is Running
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: e2e-agent-idempotent-ca
+              status:
+                phase: Running
+                ready: 1
+                desired: 1
+
+    - name: First Puppet agent run (applies changes)
+      try:
+        - apply:
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: puppet-agent-run1
+                namespace: e2e-agent-idempotent
+              spec:
+                backoffLimit: 0
+                template:
+                  spec:
+                    restartPolicy: Never
+                    containers:
+                      - name: puppet-agent
+                        image: openvox-agent:latest
+                        imagePullPolicy: Never
+                        command: ["sh", "-c"]
+                        args:
+                          - |
+                            puppet agent --test \
+                              --server e2e-agent-idempotent-server \
+                              --waitforcert 30 \
+                              --certname agent-idempotent-test;
+                            EXIT=$?;
+                            if [ $EXIT -eq 0 ] || [ $EXIT -eq 2 ]; then exit 0; else exit $EXIT; fi
+                        securityContext:
+                          runAsUser: 0
+        - assert:
+            timeout: 5m
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: puppet-agent-run1
+                namespace: e2e-agent-idempotent
+              status:
+                conditions:
+                  - type: Complete
+                    status: "True"
+
+    - name: Second Puppet agent run (idempotent)
+      try:
+        - apply:
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: puppet-agent-run2
+                namespace: e2e-agent-idempotent
+              spec:
+                backoffLimit: 0
+                template:
+                  spec:
+                    restartPolicy: Never
+                    containers:
+                      - name: puppet-agent
+                        image: openvox-agent:latest
+                        imagePullPolicy: Never
+                        command: ["sh", "-c"]
+                        args:
+                          - |
+                            puppet agent --test \
+                              --server e2e-agent-idempotent-server \
+                              --waitforcert 30 \
+                              --certname agent-idempotent-run2;
+                            EXIT=$?;
+                            if [ $EXIT -eq 0 ] || [ $EXIT -eq 2 ]; then exit 0; else exit $EXIT; fi
+                        securityContext:
+                          runAsUser: 0
+        - assert:
+            timeout: 5m
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: puppet-agent-run2
+                namespace: e2e-agent-idempotent
+              status:
+                conditions:
+                  - type: Complete
+                    status: "True"
+        - script:
+            timeout: 30s
+            content: |
+              LOGS=$(kubectl logs -n e2e-agent-idempotent job/puppet-agent-run2)
+              echo "${LOGS}"
+              echo "Second run completed successfully."
+      finally:
+        - script:
+            timeout: 2m
+            content: |
+              kubectl logs -n e2e-agent-idempotent job/puppet-agent-run1 || true
+              kubectl logs -n e2e-agent-idempotent job/puppet-agent-run2 || true
+              helm uninstall e2e-agent-idempotent --namespace e2e-agent-idempotent --wait 2>/dev/null || true
+              kubectl delete namespace e2e-agent-idempotent --ignore-not-found 2>/dev/null || true

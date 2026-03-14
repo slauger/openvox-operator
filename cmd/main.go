@@ -67,7 +67,7 @@ func main() {
 	if err = (&controller.CertificateAuthorityReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("certificateauthority-controller"),
+		Recorder: mgr.GetEventRecorder("certificateauthority-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "CertificateAuthority")
 		os.Exit(1)
@@ -76,7 +76,7 @@ func main() {
 	if err = (&controller.CertificateReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("certificate-controller"),
+		Recorder: mgr.GetEventRecorder("certificate-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Certificate")
 		os.Exit(1)
@@ -104,9 +104,18 @@ func main() {
 	if err = (&controller.ServerReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("server-controller"),
+		Recorder: mgr.GetEventRecorder("server-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Server")
+		os.Exit(1)
+	}
+
+	if err = (&controller.ReportProcessorReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorder("reportprocessor-controller"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ReportProcessor")
 		os.Exit(1)
 	}
 

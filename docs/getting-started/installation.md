@@ -15,7 +15,6 @@ The Helm chart is published as an OCI artifact to GitHub Container Registry.
 ```bash
 helm install openvox-operator \
   oci://ghcr.io/slauger/charts/openvox-operator \
-  --version 0.1.0 \
   --namespace openvox-system \
   --create-namespace
 ```
@@ -32,3 +31,7 @@ You should see the operator pod running:
 NAME                                READY   STATUS    AGE
 openvox-operator-7b8f9d6c4-x2k9m   1/1     Running   30s
 ```
+
+## Next Steps
+
+Once the operator is running, follow the [Quick Start](quickstart.md) guide to deploy an OpenVox stack.

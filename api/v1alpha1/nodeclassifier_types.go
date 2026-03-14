@@ -87,7 +87,7 @@ type NodeClassifierResponse struct {
 
 // NodeClassifierAuth defines authentication for the classifier service.
 // At most one method may be configured.
-// +kubebuilder:validation:XValidation:rule="(self.mtls ? 1 : 0) + (has(self.token) ? 1 : 0) + (has(self.bearer) ? 1 : 0) + (has(self.basic) ? 1 : 0) <= 1",message="at most one auth method may be set"
+// +kubebuilder:validation:XValidation:rule="(has(self.mtls) && self.mtls ? 1 : 0) + (has(self.token) ? 1 : 0) + (has(self.bearer) ? 1 : 0) + (has(self.basic) ? 1 : 0) <= 1",message="at most one auth method may be set"
 type NodeClassifierAuth struct {
 	// MTLS uses the Puppet SSL certificates for mutual TLS authentication.
 	// +optional

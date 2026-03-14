@@ -32,6 +32,10 @@ spec:
 | `nodeClassifierRef` | string | - | Reference to a [NodeClassifier](nodeclassifier.md) for ENC support |
 | `puppet` | [PuppetSpec](#puppetspec) | - | Shared puppet.conf settings |
 | `puppetdb` | [PuppetDBSpec](#puppetdbspec) | - | PuppetDB connection settings |
+| `puppetserver` | [PuppetServerSpec](#puppetserverspec) | - | puppetserver.conf, webserver.conf, and auth.conf settings |
+| `logging` | [LoggingSpec](#loggingspec) | - | Logback.xml log level configuration |
+| `metrics` | [MetricsSpec](#metricsspec) | - | Puppet Server metrics (JMX, Graphite) |
+| `code` | [CodeSpec](index.md#codespec) | - | Puppet code source (OCI image or PVC) for all Servers |
 
 ### PuppetSpec
 
@@ -50,6 +54,81 @@ spec:
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `serverUrls` | []string | - | PuppetDB server URLs |
+
+### PuppetServerSpec
+
+Controls puppetserver.conf, webserver.conf, and auth.conf settings.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `maxRequestsPerInstance` | int32 | `0` | Max requests per JRuby instance before restart (0 = unlimited) |
+| `borrowTimeout` | int32 | `1200000` | Timeout in ms for borrowing a JRuby instance from the pool |
+| `compileMode` | string | `off` | JRuby compilation mode (`jit` or `off`) |
+| `clientAuth` | string | `want` | SSL client authentication mode (`want`, `need`, or `none`) |
+| `httpClient` | [HTTPClientSpec](#httpclientspec) | - | HTTP client settings for outgoing connections |
+| `authorizationRules` | [][AuthorizationRule](#authorizationrule) | - | Custom auth.conf rules inserted before the deny-all rule |
+
+### HTTPClientSpec
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `connectTimeoutMs` | int32 | - | Connection timeout in milliseconds |
+| `idleTimeoutMs` | int32 | - | Idle timeout in milliseconds |
+
+### AuthorizationRule
+
+Custom rules for auth.conf. Rules are evaluated in `sortOrder` (lower = earlier) and inserted before the default deny-all rule.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `name` | string | **required** | Descriptive name for the rule |
+| `matchRequest` | [AuthorizationMatchRequest](#authorizationmatchrequest) | **required** | Request matching criteria |
+| `allow` | string | - | Clients to allow (`*` for all authenticated) |
+| `allowUnauthenticated` | bool | `false` | Allow unauthenticated access |
+| `deny` | string | - | Clients to deny (`*` for all) |
+| `sortOrder` | int32 | `500` | Rule evaluation order (lower = earlier) |
+
+### AuthorizationMatchRequest
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `path` | string | **required** | URL path or pattern to match |
+| `type` | string | `path` | Match type (`path` or `regex`) |
+| `method` | []string | - | HTTP methods to match (e.g. `["GET", "POST"]`) |
+
+### LoggingSpec
+
+Controls the Puppet Server logback.xml configuration.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `level` | string | `INFO` | Root log level (`TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`) |
+| `loggers` | map[string]string | - | Per-logger level overrides (key = logger name, value = level) |
+
+### MetricsSpec
+
+Controls Puppet Server metrics.conf settings.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | bool | `false` | Activate Puppet Server metrics |
+| `jmx` | [JMXSpec](#jmxspec) | - | JMX metrics settings |
+| `graphite` | [GraphiteSpec](#graphitespec) | - | Graphite metrics settings |
+
+### JMXSpec
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | bool | `false` | Activate JMX metrics |
+
+### GraphiteSpec
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | bool | `false` | Activate Graphite reporting |
+| `host` | string | - | Graphite server hostname |
+| `port` | int32 | `2003` | Graphite server port |
+| `updateIntervalSeconds` | int32 | `60` | Interval between metric reports in seconds |
 
 ## Status
 

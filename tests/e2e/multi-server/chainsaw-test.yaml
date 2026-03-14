@@ -1,0 +1,97 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: multi-server
+spec:
+  namespace: e2e-multi-server
+  steps:
+    - name: Install openvox-stack (multi-server)
+      try:
+        - script:
+            timeout: 2m
+            content: |
+              REPO_ROOT=$(git rev-parse --show-toplevel)
+              LOCAL_TAG=$(git describe --always)
+              helm upgrade --install openvox-stack-multi "${REPO_ROOT}/charts/openvox-stack" \
+                --namespace e2e-multi-server --create-namespace \
+                --values "${REPO_ROOT}/charts/openvox-stack/ci/multi-server-values.yaml" \
+                --set config.image.repository=openvox-server \
+                --set config.image.tag="${LOCAL_TAG}" \
+                --set config.image.pullPolicy=Never
+      catch:
+        - events: {}
+
+    - name: Assert CertificateAuthority is Ready
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: CertificateAuthority
+              metadata:
+                name: openvox-stack-multi-ca
+              status:
+                phase: Ready
+
+    - name: Assert CA Server is Running
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: openvox-stack-multi-ca
+              status:
+                phase: Running
+                ready: 1
+                desired: 1
+
+    - name: Assert compiler Servers are Running
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: openvox-stack-multi-server
+              status:
+                phase: Running
+                ready: 2
+                desired: 2
+
+    - name: Assert expected Pod count
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              COUNT=$(kubectl get pods -n e2e-multi-server \
+                -l openvox.voxpupuli.org/server \
+                --no-headers 2>/dev/null | wc -l | tr -d ' ')
+              if [ "${COUNT}" -ne 3 ]; then
+                echo "Expected 3 server pods (1 CA + 2 compilers), got ${COUNT}"
+                kubectl get pods -n e2e-multi-server
+                exit 1
+              fi
+              echo "Found expected 3 server pods."
+
+    - name: Check operator logs for errors
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              OPERATOR_POD=$(kubectl get pods -n openvox-system \
+                -l app.kubernetes.io/name=openvox-operator \
+                -o jsonpath='{.items[0].metadata.name}')
+              ERROR_LINES=$(kubectl logs -n openvox-system "${OPERATOR_POD}" \
+                | grep '"level":"error"' || true)
+              if [ -n "${ERROR_LINES}" ]; then
+                echo "Found error-level log entries in operator:"
+                echo "${ERROR_LINES}"
+                exit 1
+              fi
+              echo "No error-level log entries found."
+      finally:
+        - script:
+            timeout: 2m
+            content: |
+              helm uninstall openvox-stack-multi --namespace e2e-multi-server --wait 2>/dev/null || true
+              kubectl delete namespace e2e-multi-server --ignore-not-found 2>/dev/null || true

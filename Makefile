@@ -2,8 +2,9 @@ IMG ?= ghcr.io/slauger/openvox-operator:latest
 OPENVOX_SERVER_IMG ?= ghcr.io/slauger/openvox-server:latest
 NAMESPACE ?= openvox-system
 CONTAINER_TOOL ?= $(shell which podman 2>/dev/null || which docker 2>/dev/null)
-CONTROLLER_GEN ?= $(shell which controller-gen 2>/dev/null || echo $(GOBIN)/controller-gen)
-GOBIN ?= $(shell go env GOPATH)/bin
+CONTROLLER_GEN = go tool controller-gen
+GOVULNCHECK = go tool govulncheck
+CHAINSAW = go tool chainsaw
 
 .PHONY: all
 all: build
@@ -122,8 +123,7 @@ helm-template: ## Render Helm chart templates locally.
 
 ##@ CI
 
-GOLANGCI_LINT ?= $(shell which golangci-lint 2>/dev/null || echo $(GOBIN)/golangci-lint)
-GOVULNCHECK ?= $(shell which govulncheck 2>/dev/null || echo $(GOBIN)/govulncheck)
+GOLANGCI_LINT ?= $(shell which golangci-lint 2>/dev/null)
 
 .PHONY: lint
 lint: ## Run golangci-lint.
@@ -145,11 +145,13 @@ check-manifests: manifests generate ## Check for CRD and deepcopy drift.
 ci: lint vet test check-manifests vulncheck helm-lint ## Run all CI checks locally.
 	@echo "All CI checks passed."
 
-##@ Tools
+##@ E2E
 
-.PHONY: controller-gen
-controller-gen: ## Install controller-gen.
-	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.20.1
+.PHONY: e2e
+e2e: local-deploy ## Run E2E tests against the current cluster.
+	$(CHAINSAW) test tests/e2e/
+
+##@ Help
 
 .PHONY: help
 help: ## Display this help.

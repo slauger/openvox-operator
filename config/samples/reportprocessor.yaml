@@ -1,0 +1,69 @@
+# PuppetDB Report Processor (mTLS)
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: ReportProcessor
+metadata:
+  name: openvoxdb
+spec:
+  configRef: production
+  processor: puppetdb
+  url: "https://openvoxdb:8081"
+  timeoutSeconds: 30
+  auth:
+    mtls: true
+---
+# Splunk HEC Report Forwarder (Bearer Token via Header)
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: ReportProcessor
+metadata:
+  name: splunk
+spec:
+  configRef: production
+  url: "https://splunk:8088/services/collector/event"
+  timeoutSeconds: 30
+  headers:
+    - name: "Authorization"
+      valueFrom:
+        secretKeyRef:
+          name: splunk-hec-token
+          key: token
+---
+# Elasticsearch Report Forwarder (Basic Auth)
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: ReportProcessor
+metadata:
+  name: elasticsearch
+spec:
+  configRef: production
+  url: "https://elasticsearch:9200/puppet-reports/_doc"
+  timeoutSeconds: 30
+  auth:
+    basic:
+      secretRef:
+        name: elasticsearch-credentials
+        usernameKey: username
+        passwordKey: password
+---
+# Generic Webhook Report Forwarder (Bearer Token)
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: ReportProcessor
+metadata:
+  name: custom-webhook
+spec:
+  configRef: production
+  url: "https://report-service.internal:8443/v1/reports"
+  timeoutSeconds: 30
+  auth:
+    bearer:
+      secretKeyRef:
+        name: webhook-api-token
+        key: token
+---
+# Cluster-internal Report Collector (no auth)
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: ReportProcessor
+metadata:
+  name: internal-collector
+spec:
+  configRef: production
+  url: "http://report-collector.monitoring.svc:8080/reports"
+  timeoutSeconds: 10

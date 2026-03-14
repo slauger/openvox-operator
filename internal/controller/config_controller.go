@@ -20,6 +20,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
+
+	"gopkg.in/yaml.v3"
 )
 
 // ConfigReconciler reconciles a Config object.
@@ -35,6 +37,8 @@ type ConfigReconciler struct {
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=signingpolicies/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=nodeclassifiers,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=nodeclassifiers/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=reportprocessors,verbs=get;list;watch
+// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=reportprocessors/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=configmaps;serviceaccounts;secrets,verbs=get;list;watch;create;update;patch;delete
 
 func (r *ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -105,6 +109,9 @@ func (r *ConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		)).
 		Watches(&openvoxv1alpha1.NodeClassifier{}, handler.EnqueueRequestsFromMapFunc(
 			r.enqueueConfigsForNodeClassifier(mgr.GetClient()),
+		)).
+		Watches(&openvoxv1alpha1.ReportProcessor{}, handler.EnqueueRequestsFromMapFunc(
+			r.enqueueConfigsForReportProcessor(mgr.GetClient()),
 		)).
 		Complete(r)
 }
@@ -203,8 +210,21 @@ func (r *ConfigReconciler) renderPuppetConf(ctx context.Context, cfg *openvoxv1a
 		}
 	}
 
-	if cfg.Spec.Puppet.Reports != "" {
-		fmt.Fprintf(&sb, "reports = %s\n", cfg.Spec.Puppet.Reports)
+	// Reports: include webhook if any ReportProcessor exists for this Config
+	reports := cfg.Spec.Puppet.Reports
+	hasRP, err := r.hasReportProcessors(ctx, cfg)
+	if err != nil {
+		return "", fmt.Errorf("checking report processors: %w", err)
+	}
+	if hasRP {
+		if reports == "" {
+			reports = "webhook"
+		} else if !strings.Contains(reports, "webhook") {
+			reports = reports + ",webhook"
+		}
+	}
+	if reports != "" {
+		fmt.Fprintf(&sb, "reports = %s\n", reports)
 	}
 
 	// CA settings from CertificateAuthority (if one exists for this Config)
@@ -1231,7 +1251,9 @@ func (r *ConfigReconciler) updateSigningPolicyStatus(ctx context.Context, sp *op
 			LastTransitionTime: metav1.Now(),
 		})
 	}
-	_ = r.Status().Update(ctx, sp)
+	if statusErr := r.Status().Update(ctx, sp); statusErr != nil {
+		log.FromContext(ctx).Error(statusErr, "failed to update SigningPolicy status", "name", sp.Name)
+	}
 }
 
 // enqueueConfigsForSigningPolicy maps SigningPolicy changes to Config reconciles.
@@ -1322,50 +1344,84 @@ func (r *ConfigReconciler) reconcileENCSecret(ctx context.Context, cfg *openvoxv
 	return r.Update(ctx, existing)
 }
 
+// encYAMLConfig mirrors the YAML structure read by openvox-enc.
+type encYAMLConfig struct {
+	URL            string         `yaml:"url"`
+	Method         string         `yaml:"method"`
+	Path           string         `yaml:"path"`
+	Body           string         `yaml:"body,omitempty"`
+	ResponseFormat string         `yaml:"responseFormat"`
+	TimeoutSeconds int32          `yaml:"timeoutSeconds"`
+	Auth           *encAuthConfig `yaml:"auth,omitempty"`
+	Cache          *encCache      `yaml:"cache,omitempty"`
+	SSL            encSSLConfig   `yaml:"ssl"`
+}
+
+type encAuthConfig struct {
+	Type     string `yaml:"type"`
+	Header   string `yaml:"header,omitempty"`
+	Token    string `yaml:"token,omitempty"`
+	Username string `yaml:"username,omitempty"`
+	Password string `yaml:"password,omitempty"`
+}
+
+type encCache struct {
+	Enabled   bool   `yaml:"enabled"`
+	Directory string `yaml:"directory"`
+}
+
+type encSSLConfig struct {
+	CertFile string `yaml:"certFile"`
+	KeyFile  string `yaml:"keyFile"`
+	CAFile   string `yaml:"caFile"`
+}
+
 // renderENCConfig renders the enc.yaml that openvox-enc reads.
 func (r *ConfigReconciler) renderENCConfig(ctx context.Context, cfg *openvoxv1alpha1.Config, nc *openvoxv1alpha1.NodeClassifier) (string, error) {
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "url: %s\n", nc.Spec.URL)
-	fmt.Fprintf(&sb, "method: %s\n", nc.Spec.Request.Method)
-	fmt.Fprintf(&sb, "path: %s\n", nc.Spec.Request.Path)
-
-	if nc.Spec.Request.Body != "" {
-		fmt.Fprintf(&sb, "body: %s\n", nc.Spec.Request.Body)
-	}
-
-	fmt.Fprintf(&sb, "responseFormat: %s\n", nc.Spec.Response.Format)
-
 	timeout := int32(10)
 	if nc.Spec.TimeoutSeconds != 0 {
 		timeout = nc.Spec.TimeoutSeconds
 	}
-	fmt.Fprintf(&sb, "timeoutSeconds: %d\n", timeout)
+
+	encCfg := encYAMLConfig{
+		URL:            nc.Spec.URL,
+		Method:         nc.Spec.Request.Method,
+		Path:           nc.Spec.Request.Path,
+		Body:           nc.Spec.Request.Body,
+		ResponseFormat: nc.Spec.Response.Format,
+		TimeoutSeconds: timeout,
+		SSL: encSSLConfig{
+			CertFile: "/etc/puppetlabs/puppet/ssl/certs/puppet.pem",
+			KeyFile:  "/etc/puppetlabs/puppet/ssl/private_keys/puppet.pem",
+			CAFile:   "/etc/puppetlabs/puppet/ssl/certs/ca.pem",
+		},
+	}
 
 	// Auth
 	if nc.Spec.Auth != nil {
-		sb.WriteString("auth:\n")
+		auth := &encAuthConfig{}
 		switch {
 		case nc.Spec.Auth.MTLS:
-			sb.WriteString("  type: mtls\n")
+			auth.Type = "mtls"
 		case nc.Spec.Auth.Token != nil:
-			sb.WriteString("  type: token\n")
-			fmt.Fprintf(&sb, "  header: %s\n", nc.Spec.Auth.Token.Header)
+			auth.Type = "token"
+			auth.Header = nc.Spec.Auth.Token.Header
 			token, err := r.resolveSecretKey(ctx, cfg.Namespace,
 				nc.Spec.Auth.Token.SecretKeyRef.Name, nc.Spec.Auth.Token.SecretKeyRef.Key)
 			if err != nil {
 				return "", fmt.Errorf("resolving token secret: %w", err)
 			}
-			fmt.Fprintf(&sb, "  token: %s\n", token)
+			auth.Token = token
 		case nc.Spec.Auth.Bearer != nil:
-			sb.WriteString("  type: bearer\n")
+			auth.Type = "bearer"
 			token, err := r.resolveSecretKey(ctx, cfg.Namespace,
 				nc.Spec.Auth.Bearer.SecretKeyRef.Name, nc.Spec.Auth.Bearer.SecretKeyRef.Key)
 			if err != nil {
 				return "", fmt.Errorf("resolving bearer secret: %w", err)
 			}
-			fmt.Fprintf(&sb, "  token: %s\n", token)
+			auth.Token = token
 		case nc.Spec.Auth.Basic != nil:
-			sb.WriteString("  type: basic\n")
+			auth.Type = "basic"
 			username, err := r.resolveSecretKey(ctx, cfg.Namespace,
 				nc.Spec.Auth.Basic.SecretRef.Name, nc.Spec.Auth.Basic.SecretRef.UsernameKey)
 			if err != nil {
@@ -1376,29 +1432,26 @@ func (r *ConfigReconciler) renderENCConfig(ctx context.Context, cfg *openvoxv1al
 			if err != nil {
 				return "", fmt.Errorf("resolving basic auth password: %w", err)
 			}
-			fmt.Fprintf(&sb, "  username: %s\n", username)
-			fmt.Fprintf(&sb, "  password: %s\n", password)
+			auth.Username = username
+			auth.Password = password
 		}
+		encCfg.Auth = auth
 	}
 
 	// Cache
 	if nc.Spec.Cache != nil && nc.Spec.Cache.Enabled {
-		sb.WriteString("cache:\n")
-		sb.WriteString("  enabled: true\n")
 		dir := "/var/cache/openvox-enc"
 		if nc.Spec.Cache.Directory != "" {
 			dir = nc.Spec.Cache.Directory
 		}
-		fmt.Fprintf(&sb, "  directory: %s\n", dir)
+		encCfg.Cache = &encCache{Enabled: true, Directory: dir}
 	}
 
-	// SSL paths (for mTLS or server verification)
-	sb.WriteString("ssl:\n")
-	sb.WriteString("  certFile: /etc/puppetlabs/puppet/ssl/certs/puppet.pem\n")
-	sb.WriteString("  keyFile: /etc/puppetlabs/puppet/ssl/private_keys/puppet.pem\n")
-	sb.WriteString("  caFile: /etc/puppetlabs/puppet/ssl/certs/ca.pem\n")
-
-	return sb.String(), nil
+	out, err := yaml.Marshal(encCfg)
+	if err != nil {
+		return "", fmt.Errorf("marshaling ENC config: %w", err)
+	}
+	return string(out), nil
 }
 
 // updateNodeClassifierStatus sets the phase and condition on a NodeClassifier.
@@ -1422,7 +1475,9 @@ func (r *ConfigReconciler) updateNodeClassifierStatus(ctx context.Context, nc *o
 			LastTransitionTime: metav1.Now(),
 		})
 	}
-	_ = r.Status().Update(ctx, nc)
+	if statusErr := r.Status().Update(ctx, nc); statusErr != nil {
+		log.FromContext(ctx).Error(statusErr, "failed to update NodeClassifier status", "name", nc.Name)
+	}
 }
 
 // enqueueConfigsForNodeClassifier maps NodeClassifier changes to Config reconciles.
@@ -1447,6 +1502,40 @@ func (r *ConfigReconciler) enqueueConfigsForNodeClassifier(c client.Reader) hand
 			}
 		}
 		return requests
+	}
+}
+
+// --- ReportProcessor ---
+
+// hasReportProcessors returns true if any ReportProcessor references this Config.
+func (r *ConfigReconciler) hasReportProcessors(ctx context.Context, cfg *openvoxv1alpha1.Config) (bool, error) {
+	rpList := &openvoxv1alpha1.ReportProcessorList{}
+	if err := r.List(ctx, rpList, client.InNamespace(cfg.Namespace)); err != nil {
+		return false, err
+	}
+	for _, rp := range rpList.Items {
+		if rp.Spec.ConfigRef == cfg.Name {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// enqueueConfigsForReportProcessor maps ReportProcessor changes to Config reconciles.
+func (r *ConfigReconciler) enqueueConfigsForReportProcessor(c client.Reader) handler.MapFunc {
+	return func(ctx context.Context, obj client.Object) []reconcile.Request {
+		rp, ok := obj.(*openvoxv1alpha1.ReportProcessor)
+		if !ok {
+			return nil
+		}
+
+		// Enqueue the Config that this ReportProcessor references
+		if rp.Spec.ConfigRef != "" {
+			return []reconcile.Request{{
+				NamespacedName: types.NamespacedName{Name: rp.Spec.ConfigRef, Namespace: rp.Namespace},
+			}}
+		}
+		return nil
 	}
 }
 

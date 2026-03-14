@@ -1,0 +1,9 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Configuration
+metadata:
+  name: openvox-e2e
+spec:
+  timeouts:
+    apply: 1m
+    assert: 5m
+    cleanup: 2m

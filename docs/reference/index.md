@@ -10,12 +10,14 @@ graph TD
     CA["CertificateAuthority"]
     SP["SigningPolicy"]
     NC["NodeClassifier"]
+    RP["ReportProcessor"]
     Cert["Certificate"]
     Srv["Server"]
     Pool["Pool"]
 
     Cfg -->|authorityRef| CA
     Cfg -->|nodeClassifierRef| NC
+    Cfg -->|configRef| RP
     CA -->|certificateAuthorityRef| SP
     CA -->|authorityRef| Cert
     Cert -->|certificateRef| Srv
@@ -36,6 +38,7 @@ Each resource references its parent. The operator reconciles them in order: a Co
 | [Certificate](certificate.md) | `cert` | Lifecycle of a single certificate (request, sign) |
 | [Server](server.md) | - | OpenVox Server Deployment (CA and/or server role) |
 | [Pool](pool.md) | - | Networking resource: Service for Servers that reference this Pool |
+| [ReportProcessor](reportprocessor.md) | `rp` | Webhook-based report forwarding endpoint |
 
 ## Shared Types
 

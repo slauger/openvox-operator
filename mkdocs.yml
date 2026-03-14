@@ -58,11 +58,15 @@ nav:
       - Traffic Flow: concepts/traffic-flow.md
       - Gateway API: concepts/gateway-api.md
       - External Node Classification: concepts/external-node-classification.md
+      - Report Processing: concepts/report-processing.md
   - Getting Started:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quickstart.md
   - Examples:
       - Overview: examples/index.md
+  - Development:
+      - Local Setup: development/local-setup.md
+      - Testing: development/testing.md
   - Reference:
       - Overview: reference/index.md
       - Config: reference/config.md
@@ -72,3 +76,4 @@ nav:
       - Server: reference/server.md
       - Pool: reference/pool.md
       - NodeClassifier: reference/nodeclassifier.md
+      - ReportProcessor: reference/reportprocessor.md

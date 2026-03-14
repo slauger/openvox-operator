@@ -5,10 +5,10 @@ metadata:
 rules:
   # CRDs
   - apiGroups: ["openvox.voxpupuli.org"]
-    resources: ["configs", "pools", "servers", "certificateauthorities", "certificates", "signingpolicies", "nodeclassifiers"]
+    resources: ["configs", "pools", "servers", "certificateauthorities", "certificates", "signingpolicies", "nodeclassifiers", "reportprocessors"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["openvox.voxpupuli.org"]
-    resources: ["configs/status", "pools/status", "servers/status", "certificateauthorities/status", "certificates/status", "signingpolicies/status", "nodeclassifiers/status"]
+    resources: ["configs/status", "pools/status", "servers/status", "certificateauthorities/status", "certificates/status", "signingpolicies/status", "nodeclassifiers/status", "reportprocessors/status"]
     verbs: ["get", "update", "patch"]
   - apiGroups: ["openvox.voxpupuli.org"]
     resources: ["configs/finalizers", "pools/finalizers", "servers/finalizers", "certificateauthorities/finalizers", "certificates/finalizers"]
@@ -28,6 +28,10 @@ rules:
   # Batch
   - apiGroups: ["batch"]
     resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Policy (PodDisruptionBudgets)
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   # Autoscaling
   - apiGroups: ["autoscaling"]

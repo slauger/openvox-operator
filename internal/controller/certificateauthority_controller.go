@@ -18,7 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -33,7 +33,7 @@ import (
 type CertificateAuthorityReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Recorder events.EventRecorder
 }
 
 // Event reasons for CertificateAuthority.
@@ -123,14 +123,14 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	if !wasReady {
-		r.Recorder.Event(ca, corev1.EventTypeNormal, EventReasonCAInitialized, "CA is initialized and ready")
+		r.Recorder.Eventf(ca, nil, corev1.EventTypeNormal, EventReasonCAInitialized, "Reconcile", "CA is initialized and ready")
 	}
 
 	// Periodic CRL refresh: fetch CRL from CA service and update the CRL secret
 	crlResult, err := r.reconcileCRLRefresh(ctx, ca)
 	if err != nil {
 		logger.Error(err, "CRL refresh failed, will retry")
-		r.Recorder.Eventf(ca, corev1.EventTypeWarning, EventReasonCRLRefreshFailed, "CRL refresh failed: %v", err)
+		r.Recorder.Eventf(ca, nil, corev1.EventTypeWarning, EventReasonCRLRefreshFailed, "Reconcile", "CRL refresh failed: %v", err)
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 	return crlResult, nil
@@ -214,7 +214,7 @@ func (r *CertificateAuthorityReconciler) reconcileCRLRefresh(ctx context.Context
 	}
 
 	logger.Info("CRL secret refreshed", "secret", crlSecretName, "nextRefresh", interval)
-	r.Recorder.Eventf(ca, corev1.EventTypeNormal, EventReasonCRLRefreshed, "CRL refreshed successfully, next refresh in %s", interval)
+	r.Recorder.Eventf(ca, nil, corev1.EventTypeNormal, EventReasonCRLRefreshed, "Reconcile", "CRL refreshed successfully, next refresh in %s", interval)
 	return ctrl.Result{RequeueAfter: interval}, nil
 }
 
@@ -525,7 +525,9 @@ func (r *CertificateAuthorityReconciler) reconcileCASetupJob(ctx context.Context
 
 	// CA not ready — run setup job
 	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseInitializing
-	_ = r.Status().Update(ctx, ca)
+	if statusErr := r.Status().Update(ctx, ca); statusErr != nil {
+		logger.Error(statusErr, "failed to update CertificateAuthority status", "name", ca.Name)
+	}
 
 	jobName := fmt.Sprintf("%s-ca-setup", ca.Name)
 	job := r.buildCASetupJob(ctx, ca, cfg, jobName, certs)

@@ -15,6 +15,7 @@ A Kubernetes Operator that maps [OpenVox Server](https://github.com/OpenVoxProje
 - 🧠 **Auto-tuned JVM** - Heap size calculated from memory limits (90%) - no manual `-Xmx` tuning needed
 - 📦 **OCI Image Volumes** - Package Puppet code as OCI images, deploy immutably with automatic rollout (K8s 1.31+)
 - 🌐 **Gateway API** - SNI-based TLSRoute support - share a single LoadBalancer across environments via TLS passthrough
+- 📊 **Report Processing** - Forward Puppet reports to PuppetDB or custom HTTP endpoints via declarative webhook configuration
 - 🔃 **Automatic Config Rollout** - Config and certificate changes trigger rolling restarts automatically
 - ☸️ **Kubernetes-Native** - All config via ConfigMaps/Secrets, no entrypoint scripts, no ENV translation
 
@@ -31,8 +32,9 @@ The operator manages OpenVox Server infrastructure through a set of Custom Resou
 | **Certificate** | Lifecycle of a single certificate (request, sign) | TLS Secret |
 | **Server** | OpenVox Server instance pool (CA and/or server role), declares pool membership via `poolRefs` | Deployment |
 | **Pool** | Networking resource: Service + optional Gateway API TLSRoute for Servers that reference this Pool | Service, TLSRoute (optional) |
+| **ReportProcessor** | Webhook-based report forwarding (PuppetDB or custom HTTP endpoints) | *(rendered into Config's report-webhook Secret)* |
 
-For details on the CRD hierarchy and design rationale, see [Architecture](concepts/architecture.md). Puppet code is deployed via [OCI image volumes or PVCs](concepts/code-deployment.md). External Node Classifiers (Foreman, PE, custom HTTP) are configured via the [NodeClassifier CRD](concepts/external-node-classification.md). Pools support optional [Gateway API TLSRoute](concepts/gateway-api.md) for SNI-based routing. See [Traffic Flow](concepts/traffic-flow.md) for how agents connect to servers.
+For details on the CRD hierarchy and design rationale, see [Architecture](concepts/architecture.md). Puppet code is deployed via [OCI image volumes or PVCs](concepts/code-deployment.md). External Node Classifiers (Foreman, PE, custom HTTP) are configured via the [NodeClassifier CRD](concepts/external-node-classification.md). Report forwarding is configured via the [ReportProcessor CRD](concepts/report-processing.md). Pools support optional [Gateway API TLSRoute](concepts/gateway-api.md) for SNI-based routing. See [Traffic Flow](concepts/traffic-flow.md) for how agents connect to servers.
 
 ## License
 

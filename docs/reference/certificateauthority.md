@@ -23,11 +23,18 @@ Autosigning is configured via [SigningPolicy](signingpolicy.md) resources that r
 |---|---|---|---|
 | `ttl` | string | `5y` | CA certificate TTL as duration string (e.g. `5y`, `365d`, `8760h`) |
 | `allowSubjectAltNames` | bool | `true` | Allow SANs in CSRs |
+| `allowAuthorizationExtensions` | bool | `true` | Allow authorization extensions (`pp_role`, `pp_environment`, etc.) in CSRs |
+| `enableInfraCRL` | bool | `true` | Enable infrastructure CRL for compile server revocation |
+| `allowAutoRenewal` | bool | `true` | Allow agents to automatically renew certificates before expiry |
+| `autoRenewalCertTTL` | string | `90d` | TTL threshold for automatic certificate renewal (duration: `90d`, `30d`, `2160h`) |
 | `crlRefreshInterval` | string | `5m` | How often the operator refreshes the CRL Secret from the CA (Go duration: `5m`, `1h`, `30s`) |
 | `storage` | [StorageSpec](index.md#storagespec) | - | PVC settings for CA data |
 | `intermediateCA` | [IntermediateCASpec](#intermediatecaspec) | - | Intermediate CA configuration |
 
 ### IntermediateCASpec
+
+!!! note "Not yet implemented"
+    Intermediate CA support is defined in the CRD schema but not yet implemented in the controller. This section documents the planned API surface.
 
 | Field | Type | Default | Description |
 |---|---|---|---|

@@ -4,24 +4,24 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: nodeclassifiers.openvox.voxpupuli.org
+  name: reportprocessors.openvox.voxpupuli.org
 spec:
   group: openvox.voxpupuli.org
   names:
-    kind: NodeClassifier
-    listKind: NodeClassifierList
-    plural: nodeclassifiers
+    kind: ReportProcessor
+    listKind: ReportProcessorList
+    plural: reportprocessors
     shortNames:
-    - nc
-    singular: nodeclassifier
+    - rp
+    singular: reportprocessor
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
     - jsonPath: .spec.url
       name: URL
       type: string
-    - jsonPath: .spec.request.method
-      name: Method
+    - jsonPath: .spec.processor
+      name: Processor
       type: string
     - jsonPath: .status.phase
       name: Phase
@@ -33,8 +33,8 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          NodeClassifier is the Schema for the nodeclassifiers API.
-          It defines an External Node Classifier (ENC) endpoint for Puppet Server.
+          ReportProcessor is the Schema for the reportprocessors API.
+          It defines a report forwarding endpoint for Puppet Server.
         properties:
           apiVersion:
             description: |-
@@ -54,7 +54,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: NodeClassifierSpec defines the desired state of NodeClassifier.
+            description: ReportProcessorSpec defines the desired state of ReportProcessor.
             properties:
               auth:
                 description: Auth defines the authentication method. If omitted, no
@@ -113,8 +113,7 @@ spec:
                       TLS authentication.
                     type: boolean
                   token:
-                    description: Token sends a token via a custom HTTP header (e.g.
-                      X-Authentication for PE).
+                    description: Token sends a token via a custom HTTP header.
                     properties:
                       header:
                         description: Header is the HTTP header name (e.g. X-Authentication).
@@ -143,82 +142,86 @@ spec:
                   rule: '(has(self.mtls) && self.mtls ? 1 : 0) + (has(self.token)
                     ? 1 : 0) + (has(self.bearer) ? 1 : 0) + (has(self.basic) ? 1 :
                     0) <= 1'
-              cache:
-                description: Cache defines optional disk caching for classifier responses.
-                properties:
-                  directory:
-                    default: /var/cache/openvox-enc
-                    description: Directory is the cache directory path inside the
-                      container.
-                    type: string
-                  enabled:
-                    default: false
-                    description: Enabled activates disk caching of classifier responses.
-                    type: boolean
-                required:
-                - enabled
-                type: object
-              request:
-                description: Request defines the HTTP request configuration.
-                properties:
-                  body:
-                    description: |-
-                      Body defines what to send as POST body.
-                      facts: send Puppet facts as JSON (PE-compatible).
-                      certname: send minimal JSON with certname only.
-                      Empty or omitted: no body.
-                    enum:
-                    - facts
-                    - certname
-                    - ""
-                    type: string
-                  method:
-                    default: GET
-                    description: Method is the HTTP method (GET or POST).
-                    type: string
-                  path:
-                    default: /node/{certname}
-                    description: Path is the URL path template. Use {certname} as
-                      placeholder.
-                    type: string
-                required:
-                - method
-                - path
-                type: object
-                x-kubernetes-validations:
-                - message: method must be GET or POST
-                  rule: self.method == 'GET' || self.method == 'POST'
-                - message: body is only allowed with POST method
-                  rule: self.method == 'POST' || !has(self.body) || size(self.body)
-                    == 0
-              response:
-                description: Response defines how to interpret the classifier response.
-                properties:
-                  format:
-                    default: yaml
-                    description: Format is the expected response format.
-                    enum:
-                    - yaml
-                    - json
-                    type: string
-                required:
-                - format
-                type: object
+              configRef:
+                description: ConfigRef references the Config this ReportProcessor
+                  belongs to.
+                minLength: 1
+                type: string
+              headers:
+                description: Headers defines custom HTTP headers to send with each
+                  request.
+                items:
+                  description: |-
+                    HTTPHeader defines a custom HTTP header.
+                    Either value or valueFrom may be set, not both.
+                  properties:
+                    name:
+                      description: Name is the HTTP header name.
+                      type: string
+                    value:
+                      description: Value is a literal header value.
+                      type: string
+                    valueFrom:
+                      description: ValueFrom references a Secret or ConfigMap for
+                        the header value.
+                      properties:
+                        configMapKeyRef:
+                          description: ConfigMapKeyRef references a key in a ConfigMap.
+                          properties:
+                            key:
+                              description: Key is the key within the ConfigMap.
+                              type: string
+                            name:
+                              description: Name is the name of the ConfigMap.
+                              type: string
+                          required:
+                          - key
+                          - name
+                          type: object
+                        secretKeyRef:
+                          description: SecretKeyRef references a key in a Secret.
+                          properties:
+                            key:
+                              description: Key is the key within the Secret.
+                              type: string
+                            name:
+                              description: Name is the name of the Secret.
+                              type: string
+                          required:
+                          - key
+                          - name
+                          type: object
+                      type: object
+                  required:
+                  - name
+                  type: object
+                  x-kubernetes-validations:
+                  - message: value and valueFrom are mutually exclusive
+                    rule: '!(has(self.value) && size(self.value) > 0 && has(self.valueFrom))'
+                type: array
+              processor:
+                description: |-
+                  Processor is the report processor type.
+                  Use "puppetdb" for PuppetDB Wire Format v8 transformation.
+                  Empty string means generic (forward report JSON as-is).
+                enum:
+                - puppetdb
+                - ""
+                type: string
               timeoutSeconds:
-                default: 10
+                default: 30
                 description: TimeoutSeconds is the HTTP request timeout.
                 format: int32
                 type: integer
               url:
-                description: URL is the classifier service base URL.
+                description: URL is the endpoint to forward reports to.
                 type: string
             required:
-            - request
-            - response
+            - configRef
             - url
             type: object
           status:
-            description: NodeClassifierStatus defines the observed state of NodeClassifier.
+            description: ReportProcessorStatus defines the observed state of ReportProcessor.
             properties:
               conditions:
                 description: Conditions represent the latest available observations.

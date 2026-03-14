@@ -13,7 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -26,7 +26,7 @@ import (
 type ServerReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Recorder events.EventRecorder
 }
 
 // Event reasons for Server.
@@ -93,7 +93,9 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	if cert.Status.Phase != openvoxv1alpha1.CertificatePhaseSigned || cert.Status.SecretName == "" {
 		logger.Info("waiting for Certificate to be signed", "certificate", cert.Name, "phase", cert.Status.Phase)
 		server.Status.Phase = openvoxv1alpha1.ServerPhaseWaitingForCert
-		_ = r.Status().Update(ctx, server)
+		if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+			logger.Error(statusErr, "failed to update Server status", "name", server.Name)
+		}
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
@@ -109,7 +111,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// Reconcile Deployment
 	if err := r.reconcileDeployment(ctx, server, cfg, cert, ca); err != nil {
-		r.Recorder.Eventf(server, corev1.EventTypeWarning, EventReasonServerError, "Failed to reconcile Deployment: %v", err)
+		r.Recorder.Eventf(server, nil, corev1.EventTypeWarning, EventReasonServerError, "Reconcile", "Failed to reconcile Deployment: %v", err)
 		return ctrl.Result{}, fmt.Errorf("reconciling Deployment: %w", err)
 	}
 
@@ -131,7 +133,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	r.Recorder.Event(server, corev1.EventTypeNormal, EventReasonServerRunning, "Server reconciled successfully")
+	r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonServerRunning, "Reconcile", "Server reconciled successfully")
 	return ctrl.Result{}, nil
 }
 
@@ -148,7 +150,7 @@ func (r *ServerReconciler) reconcilePDB(ctx context.Context, server *openvoxv1al
 			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
 				return err
 			}
-			r.Recorder.Eventf(server, corev1.EventTypeNormal, EventReasonPDBDeleted, "PodDisruptionBudget %s deleted", pdbName)
+			r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonPDBDeleted, "Reconcile", "PodDisruptionBudget %s deleted", pdbName)
 		}
 		return nil
 	}
@@ -159,7 +161,7 @@ func (r *ServerReconciler) reconcilePDB(ctx context.Context, server *openvoxv1al
 		if err := r.Create(ctx, desired); err != nil {
 			return err
 		}
-		r.Recorder.Eventf(server, corev1.EventTypeNormal, EventReasonPDBCreated, "PodDisruptionBudget %s created", pdbName)
+		r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonPDBCreated, "Reconcile", "PodDisruptionBudget %s created", pdbName)
 		return nil
 	}
 	if err != nil {
@@ -171,7 +173,7 @@ func (r *ServerReconciler) reconcilePDB(ctx context.Context, server *openvoxv1al
 	if err := r.Update(ctx, existing); err != nil {
 		return err
 	}
-	r.Recorder.Eventf(server, corev1.EventTypeNormal, EventReasonPDBUpdated, "PodDisruptionBudget %s updated", pdbName)
+	r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonPDBUpdated, "Reconcile", "PodDisruptionBudget %s updated", pdbName)
 	return nil
 }
 

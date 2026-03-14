@@ -11,7 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -24,7 +24,7 @@ import (
 type CertificateReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Recorder events.EventRecorder
 }
 
 // Event reasons for Certificate.
@@ -74,7 +74,9 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if ca.Status.Phase != openvoxv1alpha1.CertificateAuthorityPhaseReady {
 		logger.Info("waiting for CertificateAuthority to be ready", "ca", ca.Name, "phase", ca.Status.Phase)
 		cert.Status.Phase = openvoxv1alpha1.CertificatePhasePending
-		_ = r.Status().Update(ctx, cert)
+		if statusErr := r.Status().Update(ctx, cert); statusErr != nil {
+			logger.Error(statusErr, "failed to update Certificate status", "name", cert.Name)
+		}
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
@@ -98,7 +100,7 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if err := r.Status().Update(ctx, cert); err != nil {
 			return ctrl.Result{}, err
 		}
-		r.Recorder.Eventf(cert, corev1.EventTypeNormal, EventReasonCertificateSigned, "Certificate signed and available in Secret %s", tlsSecretName)
+		r.Recorder.Eventf(cert, nil, corev1.EventTypeNormal, EventReasonCertificateSigned, "Reconcile", "Certificate signed and available in Secret %s", tlsSecretName)
 		return ctrl.Result{}, nil
 	}
 
@@ -127,7 +129,9 @@ func (r *CertificateReconciler) reconcileCertSigning(ctx context.Context, cert *
 	}
 
 	cert.Status.Phase = openvoxv1alpha1.CertificatePhaseRequesting
-	_ = r.Status().Update(ctx, cert)
+	if statusErr := r.Status().Update(ctx, cert); statusErr != nil {
+		logger.Error(statusErr, "failed to update Certificate status", "name", cert.Name)
+	}
 
 	result, err := r.signCertificate(ctx, cert, ca, caServiceName, cert.Namespace)
 	if err != nil {
@@ -140,7 +144,9 @@ func (r *CertificateReconciler) reconcileCertSigning(ctx context.Context, cert *
 			Message:            err.Error(),
 			LastTransitionTime: metav1.Now(),
 		})
-		_ = r.Status().Update(ctx, cert)
+		if statusErr := r.Status().Update(ctx, cert); statusErr != nil {
+			logger.Error(statusErr, "failed to update Certificate status", "name", cert.Name)
+		}
 		if result.RequeueAfter > 0 {
 			return result, nil
 		}

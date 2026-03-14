@@ -36,6 +36,17 @@ spec:
 | `javaArgs` | string | `-Xms512m -Xmx1024m` | JVM arguments |
 | `maxActiveInstances` | int32 | `2` | Number of JRuby instances per pod |
 | `code` | [CodeSpec](index.md#codespec) | - | Override the Config's code volume |
+| `topologySpreadConstraints` | []TopologySpreadConstraint | - | Pod spread constraints across topology domains |
+| `affinity` | Affinity | - | Pod affinity/anti-affinity rules |
+| `pdb` | [PDBSpec](#pdbspec) | - | PodDisruptionBudget configuration |
+
+### PDBSpec
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | bool | `false` | Activate the PodDisruptionBudget |
+| `minAvailable` | int or string | - | Minimum pods that must be available (mutually exclusive with `maxUnavailable`) |
+| `maxUnavailable` | int or string | - | Maximum pods that can be unavailable (mutually exclusive with `minAvailable`) |
 
 ### AutoscalingSpec
 
@@ -132,3 +143,4 @@ Key differences:
 |---|---|---|
 | Deployment | `{name}` | OpenVox Server pods |
 | HPA | `{name}` | Only when `autoscaling.enabled: true` |
+| PDB | `{name}` | Only when `pdb.enabled: true` |

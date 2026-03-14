@@ -1,0 +1,80 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: single-node
+spec:
+  namespace: e2e-single-node
+  steps:
+    - name: Install openvox-stack (single-node)
+      try:
+        - script:
+            timeout: 2m
+            content: |
+              REPO_ROOT=$(git rev-parse --show-toplevel)
+              LOCAL_TAG=$(git describe --always)
+              helm upgrade --install openvox-stack-single "${REPO_ROOT}/charts/openvox-stack" \
+                --namespace e2e-single-node --create-namespace \
+                --values "${REPO_ROOT}/charts/openvox-stack/ci/single-node-values.yaml" \
+                --set config.image.repository=openvox-server \
+                --set config.image.tag="${LOCAL_TAG}" \
+                --set config.image.pullPolicy=Never
+      catch:
+        - events: {}
+
+    - name: Assert CertificateAuthority is Ready
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: CertificateAuthority
+              metadata:
+                name: openvox-stack-single-ca
+              status:
+                phase: Ready
+
+    - name: Assert Config is Running
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Config
+              metadata:
+                name: openvox-stack-single
+              status:
+                phase: Running
+
+    - name: Assert Server is Running
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: openvox-stack-single-ca
+              status:
+                phase: Running
+                ready: 1
+                desired: 1
+
+    - name: Check operator logs for errors
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              OPERATOR_POD=$(kubectl get pods -n openvox-system \
+                -l app.kubernetes.io/name=openvox-operator \
+                -o jsonpath='{.items[0].metadata.name}')
+              ERROR_LINES=$(kubectl logs -n openvox-system "${OPERATOR_POD}" \
+                | grep '"level":"error"' || true)
+              if [ -n "${ERROR_LINES}" ]; then
+                echo "Found error-level log entries in operator:"
+                echo "${ERROR_LINES}"
+                exit 1
+              fi
+              echo "No error-level log entries found."
+      finally:
+        - script:
+            timeout: 2m
+            content: |
+              helm uninstall openvox-stack-single --namespace e2e-single-node --wait 2>/dev/null || true
+              kubectl delete namespace e2e-single-node --ignore-not-found 2>/dev/null || true

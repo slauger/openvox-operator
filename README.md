@@ -194,6 +194,20 @@ make local-deploy LOCAL_TAG=my-feature
 make local-stack LOCAL_TAG=my-feature STACK_VALUES=charts/openvox-stack/ci/multi-server-values.yaml
 ```
 
+### Testing
+
+Run unit tests:
+
+```bash
+make test
+```
+
+Run E2E tests against the current cluster (requires Docker Desktop Kubernetes or similar). This builds local images, deploys the operator, and runs [Chainsaw](https://kyverno.github.io/chainsaw/) test scenarios (single-node and multi-server):
+
+```bash
+make e2e
+```
+
 ### Available Targets
 
 | Target | Description |
@@ -206,6 +220,7 @@ make local-stack LOCAL_TAG=my-feature STACK_VALUES=charts/openvox-stack/ci/multi
 | `local-deploy` | Build images and deploy the operator via Helm |
 | `local-install` | Deploy operator via Helm with local images (no build) |
 | `local-stack` | Deploy openvox-stack via Helm with local images |
+| `e2e` | Run E2E tests with Chainsaw against the current cluster |
 | `ci` | Run all CI checks locally (lint, vet, test, manifests, vulncheck, helm-lint) |
 
 ## Documentation

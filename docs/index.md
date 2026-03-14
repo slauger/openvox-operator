@@ -13,7 +13,7 @@ A Kubernetes Operator that maps [OpenVox Server](https://github.com/OpenVoxProje
 - 🔒 **Rootless & OpenShift Ready** - Random UID compatible, no root, no ezbake, no privilege escalation
 - 🪶 **Minimal Image** - UBI9-based, no system Ruby, no ezbake packaging - smaller footprint, fewer updates
 - 🧠 **Auto-tuned JVM** - Heap size calculated from memory limits (90%) - no manual `-Xmx` tuning needed
-- 📦 **OCI Image Volumes** - Package Puppet code as OCI images, deploy immutably with automatic rollout (K8s 1.31+)
+- 📦 **OCI Image Volumes** - Package Puppet code as OCI images, deploy immutably with automatic rollout (K8s 1.35+)
 - 🌐 **Gateway API** - SNI-based TLSRoute support - share a single LoadBalancer across environments via TLS passthrough
 - 📊 **Report Processing** - Forward Puppet reports to PuppetDB or custom HTTP endpoints via declarative webhook configuration
 - 🔃 **Automatic Config Rollout** - Config and certificate changes trigger rolling restarts automatically

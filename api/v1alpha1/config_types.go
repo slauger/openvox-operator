@@ -228,7 +228,7 @@ type CodeSpec struct {
 	ClaimName string `json:"claimName,omitempty"`
 
 	// Image is an OCI image reference containing Puppet code.
-	// Mounted as a read-only image volume (requires Kubernetes 1.31+).
+	// Mounted as a read-only image volume (Kubernetes 1.35+, or 1.31+ with ImageVolume feature gate).
 	// Mutually exclusive with ClaimName.
 	// +optional
 	Image string `json:"image,omitempty"`

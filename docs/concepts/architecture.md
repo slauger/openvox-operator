@@ -111,7 +111,7 @@ Puppet code is deployed to Server pods via the `CodeSpec` on the Config or Serve
 
 ### OCI Image Volume (recommended)
 
-Package Puppet code as an OCI image and reference it in the Config's `code.image` field. The operator mounts it as a read-only image volume (requires Kubernetes 1.31+). Code changes are rolled out by updating the image reference.
+Package Puppet code as an OCI image and reference it in the Config's `code.image` field. The operator mounts it as a read-only image volume (Kubernetes 1.35+, or 1.31+ with the `ImageVolume` feature gate). Code changes are rolled out by updating the image reference.
 
 ### PVC
 

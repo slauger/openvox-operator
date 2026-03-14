@@ -17,7 +17,7 @@ A Kubernetes Operator that maps [OpenVox Server](https://github.com/OpenVoxProje
 - 🔒 **Rootless & OpenShift Ready** - Random UID compatible, no root, no ezbake, no privilege escalation
 - 🪶 **Minimal Image** - UBI9-based, no system Ruby, no ezbake packaging - smaller footprint, fewer updates
 - 🧠 **Auto-tuned JVM** - Heap size calculated from memory limits (90%) - no manual `-Xmx` tuning needed
-- 📦 **OCI Image Volumes** - Package Puppet code as OCI images, deploy immutably with automatic rollout (K8s 1.31+)
+- 📦 **OCI Image Volumes** - Package Puppet code as OCI images, deploy immutably with automatic rollout (K8s 1.35+)
 - 🌐 **Gateway API** - SNI-based TLSRoute support - share a single LoadBalancer across environments via TLS passthrough
 - 🔃 **Automatic Config Rollout** - Config and certificate changes trigger rolling restarts automatically
 - ☸️ **Kubernetes-Native** - All config via ConfigMaps/Secrets - no entrypoint scripts, no ENV translation
@@ -53,7 +53,7 @@ graph TD
 
 A **Config** is the root resource - it holds shared configuration (puppet.conf, PuppetDB connection), manages code deployment, and references a **CertificateAuthority** via `authorityRef`. A **CertificateAuthority** initializes the CA infrastructure and periodically refreshes the CRL. Each **Certificate** is signed by the CA and stored as a Kubernetes Secret. A **Server** references a Certificate and creates a Deployment - it can run as CA, catalog server, or both. Servers declare pool membership via `poolRefs`. **Pools** are pure networking resources that create Services selecting Server pods by pool label, with optional Gateway API TLSRoute for SNI-based routing.
 
-Puppet code is mounted into Server pods via **OCI image volumes** (immutable, automatic rollout on image change, K8s 1.31+) or a **PVC** (mutable, externally managed). See [Code Deployment](docs/concepts/code-deployment.md) for details.
+Puppet code is mounted into Server pods via **OCI image volumes** (immutable, automatic rollout on image change, K8s 1.35+) or a **PVC** (mutable, externally managed). See [Code Deployment](docs/concepts/code-deployment.md) for details.
 
 ### Pool Traffic Flow
 

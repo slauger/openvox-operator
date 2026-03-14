@@ -67,6 +67,6 @@ Used by [Config](config.md) and [Server](server.md) to define the Puppet code so
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `claimName` | string | - | Name of an existing PVC containing Puppet code |
-| `image` | string | - | OCI image reference containing Puppet code (requires Kubernetes 1.31+) |
+| `image` | string | - | OCI image reference containing Puppet code (Kubernetes 1.35+, or 1.31+ with feature gate) |
 | `imagePullPolicy` | string | `IfNotPresent` | When to pull the code image |
 | `imagePullSecret` | string | - | Secret name for pulling from private registries |

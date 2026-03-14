@@ -160,7 +160,10 @@ spec:
 
 ## PVC
 
-Reference an existing PVC containing Puppet code. The PVC must be pre-populated externally (e.g. by a CI/CD pipeline or a CronJob running r10k).
+!!! warning "Not recommended"
+    The PVC method requires you to manage code deployment yourself. The operator only mounts the volume — it does not create, populate, or update the PVC contents. There are no plans to add r10k integration or any other code sync mechanism to the operator, as this would add significant complexity to the codebase. We recommend using [OCI image volumes](#oci-image-volumes-recommended) instead.
+
+Reference an existing PVC containing Puppet code. You are responsible for populating and updating the PVC externally (e.g. via a CI/CD pipeline, a CronJob running r10k, or a sidecar container).
 
 ```yaml
 apiVersion: openvox.voxpupuli.org/v1alpha1

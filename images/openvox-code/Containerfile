@@ -12,8 +12,10 @@ FROM registry.access.redhat.com/ubi9/ubi:9.7-1773204657 AS builder
 
 RUN dnf module enable ruby:3.3 -y \
     && dnf install -y --setopt=install_weak_deps=False ruby ruby-devel rubygem-bundler git gcc make redhat-rpm-config \
-    && dnf clean all \
-    && gem install r10k --no-document
+    && dnf clean all
+
+COPY images/openvox-code/Gemfile /tmp/Gemfile
+RUN cd /tmp && bundle install --jobs=4
 
 WORKDIR /code/environments
 COPY images/openvox-code/environments/production/Puppetfile /code/environments/production/Puppetfile

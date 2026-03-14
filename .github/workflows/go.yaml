@@ -50,9 +50,7 @@ jobs:
           go-version-file: go.mod
 
       - name: govulncheck
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
+        run: go tool govulncheck ./...
 
   manifests:
     runs-on: ubuntu-latest
@@ -64,9 +62,6 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-
-      - name: Install controller-gen
-        run: make controller-gen
 
       - name: Check CRD drift
         run: |
@@ -94,6 +89,11 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+
+      - name: Set up envtest
+        run: |
+          go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+          echo "KUBEBUILDER_ASSETS=$(setup-envtest use -p path)" >> "$GITHUB_ENV"
 
       - name: Run tests
         run: go test ./... -coverprofile cover.out

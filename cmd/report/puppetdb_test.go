@@ -170,7 +170,9 @@ func TestTransformResources(t *testing.T) {
 	resultJSON, _ := transformToPuppetDB(reportJSON)
 
 	var cmd PuppetDBCommand
-	json.Unmarshal(resultJSON, &cmd)
+	if err := json.Unmarshal(resultJSON, &cmd); err != nil {
+		t.Fatal(err)
+	}
 	payload := cmd.Payload.(map[string]any)
 
 	resources, ok := payload["resources"].([]any)
@@ -212,7 +214,9 @@ func TestTransformEvents(t *testing.T) {
 	resultJSON, _ := transformToPuppetDB(reportJSON)
 
 	var cmd PuppetDBCommand
-	json.Unmarshal(resultJSON, &cmd)
+	if err := json.Unmarshal(resultJSON, &cmd); err != nil {
+		t.Fatal(err)
+	}
 	payload := cmd.Payload.(map[string]any)
 	resources := payload["resources"].([]any)
 	resource := resources[0].(map[string]any)
@@ -253,7 +257,9 @@ func TestTransformMetrics(t *testing.T) {
 	resultJSON, _ := transformToPuppetDB(reportJSON)
 
 	var cmd PuppetDBCommand
-	json.Unmarshal(resultJSON, &cmd)
+	if err := json.Unmarshal(resultJSON, &cmd); err != nil {
+		t.Fatal(err)
+	}
 	payload := cmd.Payload.(map[string]any)
 
 	metrics, ok := payload["metrics"].([]any)

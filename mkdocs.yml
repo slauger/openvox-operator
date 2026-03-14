@@ -64,6 +64,9 @@ nav:
       - Quick Start: getting-started/quickstart.md
   - Examples:
       - Overview: examples/index.md
+  - Development:
+      - Local Setup: development/local-setup.md
+      - Testing: development/testing.md
   - Reference:
       - Overview: reference/index.md
       - Config: reference/config.md

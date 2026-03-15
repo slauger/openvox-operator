@@ -6,6 +6,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -36,6 +37,9 @@ const (
 	EventReasonPDBCreated       = "PDBCreated"
 	EventReasonPDBUpdated       = "PDBUpdated"
 	EventReasonPDBDeleted       = "PDBDeleted"
+	EventReasonHPACreated       = "HPACreated"
+	EventReasonHPAUpdated       = "HPAUpdated"
+	EventReasonHPADeleted       = "HPADeleted"
 	EventReasonDeploymentSynced = "DeploymentSynced"
 )
 
@@ -75,7 +79,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	if err := r.Get(ctx, types.NamespacedName{Name: server.Spec.ConfigRef, Namespace: server.Namespace}, cfg); err != nil {
 		if errors.IsNotFound(err) {
 			logger.Info("waiting for Config", "configRef", server.Spec.ConfigRef)
-			return ctrl.Result{}, nil
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 		return ctrl.Result{}, err
 	}
@@ -85,7 +89,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	if err := r.Get(ctx, types.NamespacedName{Name: server.Spec.CertificateRef, Namespace: server.Namespace}, cert); err != nil {
 		if errors.IsNotFound(err) {
 			logger.Info("waiting for Certificate", "certificateRef", server.Spec.CertificateRef)
-			return ctrl.Result{}, nil
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 		return ctrl.Result{}, err
 	}
@@ -104,7 +108,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	if err := r.Get(ctx, types.NamespacedName{Name: cert.Spec.AuthorityRef, Namespace: server.Namespace}, ca); err != nil {
 		if errors.IsNotFound(err) {
 			logger.Info("waiting for CertificateAuthority", "authorityRef", cert.Spec.AuthorityRef)
-			return ctrl.Result{}, nil
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 		return ctrl.Result{}, err
 	}
@@ -118,6 +122,11 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	// Reconcile PodDisruptionBudget
 	if err := r.reconcilePDB(ctx, server); err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconciling PDB: %w", err)
+	}
+
+	// Reconcile HorizontalPodAutoscaler
+	if err := r.reconcileHPA(ctx, server); err != nil {
+		return ctrl.Result{}, fmt.Errorf("reconciling HPA: %w", err)
 	}
 
 	// Update status
@@ -155,7 +164,10 @@ func (r *ServerReconciler) reconcilePDB(ctx context.Context, server *openvoxv1al
 		return nil
 	}
 
-	desired := r.buildPDB(server)
+	desired, buildErr := r.buildPDB(server)
+	if buildErr != nil {
+		return buildErr
+	}
 	if errors.IsNotFound(err) {
 		logger.Info("creating PDB", "name", pdbName)
 		if err := r.Create(ctx, desired); err != nil {
@@ -177,7 +189,7 @@ func (r *ServerReconciler) reconcilePDB(ctx context.Context, server *openvoxv1al
 	return nil
 }
 
-func (r *ServerReconciler) buildPDB(server *openvoxv1alpha1.Server) *policyv1.PodDisruptionBudget {
+func (r *ServerReconciler) buildPDB(server *openvoxv1alpha1.Server) (*policyv1.PodDisruptionBudget, error) {
 	pdb := &policyv1.PodDisruptionBudget{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      server.Name,
@@ -204,8 +216,102 @@ func (r *ServerReconciler) buildPDB(server *openvoxv1alpha1.Server) *policyv1.Po
 		minAvailable := intstrInt(1)
 		pdb.Spec.MinAvailable = &minAvailable
 	}
-	_ = controllerutil.SetControllerReference(server, pdb, r.Scheme)
-	return pdb
+	if err := controllerutil.SetControllerReference(server, pdb, r.Scheme); err != nil {
+		return nil, fmt.Errorf("setting controller reference on PDB: %w", err)
+	}
+	return pdb, nil
+}
+
+func (r *ServerReconciler) reconcileHPA(ctx context.Context, server *openvoxv1alpha1.Server) error {
+	logger := log.FromContext(ctx)
+	hpaName := server.Name
+	existing := &autoscalingv2.HorizontalPodAutoscaler{}
+	err := r.Get(ctx, types.NamespacedName{Name: hpaName, Namespace: server.Namespace}, existing)
+
+	// If HPA is disabled, delete if exists
+	if !server.Spec.Autoscaling.Enabled {
+		if err == nil {
+			logger.Info("deleting HPA (disabled)", "name", hpaName)
+			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
+				return err
+			}
+			r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonHPADeleted, "Reconcile", "HorizontalPodAutoscaler %s deleted", hpaName)
+		}
+		return nil
+	}
+
+	desired, buildErr := r.buildHPA(server)
+	if buildErr != nil {
+		return buildErr
+	}
+	if errors.IsNotFound(err) {
+		logger.Info("creating HPA", "name", hpaName)
+		if err := r.Create(ctx, desired); err != nil {
+			return err
+		}
+		r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonHPACreated, "Reconcile", "HorizontalPodAutoscaler %s created", hpaName)
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	// Update existing
+	existing.Spec = desired.Spec
+	if err := r.Update(ctx, existing); err != nil {
+		return err
+	}
+	r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonHPAUpdated, "Reconcile", "HorizontalPodAutoscaler %s updated", hpaName)
+	return nil
+}
+
+func (r *ServerReconciler) buildHPA(server *openvoxv1alpha1.Server) (*autoscalingv2.HorizontalPodAutoscaler, error) {
+	as := server.Spec.Autoscaling
+	targetCPU := as.TargetCPU
+	if targetCPU == 0 {
+		targetCPU = 75
+	}
+	maxReplicas := as.MaxReplicas
+	if maxReplicas == 0 {
+		maxReplicas = 5
+	}
+
+	hpa := &autoscalingv2.HorizontalPodAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      server.Name,
+			Namespace: server.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "openvox-operator",
+				LabelServer:                   server.Name,
+			},
+		},
+		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{
+				APIVersion: "apps/v1",
+				Kind:       "Deployment",
+				Name:       server.Name,
+			},
+			MinReplicas: as.MinReplicas,
+			MaxReplicas: maxReplicas,
+			Metrics: []autoscalingv2.MetricSpec{
+				{
+					Type: autoscalingv2.ResourceMetricSourceType,
+					Resource: &autoscalingv2.ResourceMetricSource{
+						Name: corev1.ResourceCPU,
+						Target: autoscalingv2.MetricTarget{
+							Type:               autoscalingv2.UtilizationMetricType,
+							AverageUtilization: &targetCPU,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(server, hpa, r.Scheme); err != nil {
+		return nil, fmt.Errorf("setting controller reference on HPA: %w", err)
+	}
+	return hpa, nil
 }
 
 func (r *ServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -213,6 +319,7 @@ func (r *ServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&openvoxv1alpha1.Server{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&policyv1.PodDisruptionBudget{}).
+		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).
 		Watches(&corev1.Secret{}, enqueueServersForSecret(mgr.GetClient())).
 		Complete(r)
 }

@@ -125,7 +125,7 @@ func forward(endpoint EndpointConfig, reportJSON []byte) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
 	if err != nil {
 		return fmt.Errorf("reading response: %w", err)
 	}

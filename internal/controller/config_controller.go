@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -27,7 +28,8 @@ import (
 // ConfigReconciler reconciles a Config object.
 type ConfigReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder events.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=configs,verbs=get;list;watch;create;update;patch;delete
@@ -252,8 +254,13 @@ func (r *ConfigReconciler) renderPuppetConf(ctx context.Context, cfg *openvoxv1a
 		fmt.Fprintf(&sb, "external_nodes = %s\n", encBinaryPath)
 	}
 
-	for k, v := range cfg.Spec.Puppet.ExtraConfig {
-		fmt.Fprintf(&sb, "%s = %s\n", k, v)
+	extraKeys := make([]string, 0, len(cfg.Spec.Puppet.ExtraConfig))
+	for k := range cfg.Spec.Puppet.ExtraConfig {
+		extraKeys = append(extraKeys, k)
+	}
+	sort.Strings(extraKeys)
+	for _, k := range extraKeys {
+		fmt.Fprintf(&sb, "%s = %s\n", k, cfg.Spec.Puppet.ExtraConfig[k])
 	}
 
 	return sb.String(), nil
@@ -333,7 +340,7 @@ func (r *ConfigReconciler) renderPuppetserverConf(cfg *openvoxv1alpha1.Config) s
 	sb.WriteString("    master-var-dir: /opt/puppetlabs/server/data/puppetserver\n")
 	sb.WriteString("    master-run-dir: /var/run/puppetlabs/puppetserver\n")
 	sb.WriteString("    master-log-dir: /var/log/puppetlabs/puppetserver\n")
-	sb.WriteString("    max-active-instances: 1\n")
+	sb.WriteString("    max-active-instances: 2\n")
 	fmt.Fprintf(&sb, "    max-requests-per-instance: %d\n", maxRequests)
 	fmt.Fprintf(&sb, "    borrow-timeout: %d\n", borrowTimeout)
 	fmt.Fprintf(&sb, "    compile-mode: %s\n", compileMode)

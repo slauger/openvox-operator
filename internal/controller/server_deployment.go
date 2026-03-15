@@ -112,7 +112,6 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 				Labels:    labels,
 			},
 			Spec: appsv1.DeploymentSpec{
-				Replicas: &replicas,
 				Strategy: strategy,
 				Selector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
@@ -129,6 +128,9 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 			},
 		}
 
+		if !server.Spec.Autoscaling.Enabled {
+			deploy.Spec.Replicas = &replicas
+		}
 		if err := controllerutil.SetControllerReference(server, deploy, r.Scheme); err != nil {
 			return err
 		}
@@ -138,7 +140,10 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 	}
 
 	// Update existing Deployment
-	deploy.Spec.Replicas = &replicas
+	// Only set replicas when HPA is not managing scaling
+	if !server.Spec.Autoscaling.Enabled {
+		deploy.Spec.Replicas = &replicas
+	}
 	deploy.Spec.Strategy = strategy
 	deploy.Spec.Template.Labels = labels
 	deploy.Spec.Template.Annotations = annotations

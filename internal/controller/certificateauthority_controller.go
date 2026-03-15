@@ -240,7 +240,7 @@ func (r *CertificateAuthorityReconciler) fetchCRL(ctx context.Context, caService
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
 	if err != nil {
 		return nil, fmt.Errorf("reading CRL response: %w", err)
 	}

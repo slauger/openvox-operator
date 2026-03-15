@@ -42,7 +42,7 @@ rules:
     resources: ["tlsroutes"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   # Events
-  - apiGroups: [""]
+  - apiGroups: ["", "events.k8s.io"]
     resources: ["events"]
     verbs: ["create", "patch"]
   # Leader election

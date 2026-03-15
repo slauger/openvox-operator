@@ -17,6 +17,7 @@ spec:
   timeoutSeconds: {{ . }}
   {{- end }}
   {{- with .Values.nodeClassifier.auth }}
+  {{- if or .mtls .token .bearer .basic }}
   auth:
     {{- if .mtls }}
     mtls: true
@@ -45,6 +46,7 @@ spec:
         passwordKey: {{ . }}
         {{- end }}
     {{- end }}
+  {{- end }}
   {{- end }}
   {{- if .Values.nodeClassifier.cache.enabled }}
   cache:

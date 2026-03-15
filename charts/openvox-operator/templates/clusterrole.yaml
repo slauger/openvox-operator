@@ -38,7 +38,7 @@ rules:
   - apiGroups: ["gateway.networking.k8s.io"]
     resources: ["tlsroutes"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: [""]
+  - apiGroups: ["", "events.k8s.io"]
     resources: ["events"]
     verbs: ["create", "patch"]
   - apiGroups: ["coordination.k8s.io"]

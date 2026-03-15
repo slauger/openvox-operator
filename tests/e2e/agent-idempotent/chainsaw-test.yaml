@@ -4,6 +4,11 @@ metadata:
   name: agent-idempotent
 spec:
   namespace: e2e-agent-idempotent
+  bindings:
+    - name: registry
+      value: (env('IMAGE_REGISTRY') || 'ghcr.io/slauger')
+    - name: imageTag
+      value: (env('IMAGE_TAG') || 'latest')
   steps:
     - name: Install openvox-stack
       try:
@@ -11,13 +16,15 @@ spec:
             timeout: 2m
             content: |
               REPO_ROOT=$(git rev-parse --show-toplevel)
-              LOCAL_TAG=$(git describe --always)
+              IMAGE_TAG=${IMAGE_TAG:-$(git describe --always)}
+              IMAGE_REGISTRY=${IMAGE_REGISTRY:-ghcr.io/slauger}
               helm upgrade --install e2e-agent-idempotent "${REPO_ROOT}/charts/openvox-stack" \
                 --namespace e2e-agent-idempotent --create-namespace \
                 --values "${REPO_ROOT}/charts/openvox-stack/ci/agent-basic-values.yaml" \
-                --set config.image.repository=ghcr.io/slauger/openvox-server \
-                --set config.image.tag="${LOCAL_TAG}" \
-                --set config.image.pullPolicy=Always
+                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server \
+                --set config.image.tag="${IMAGE_TAG}" \
+                --set config.image.pullPolicy=Always \
+                --set config.code.image=${IMAGE_REGISTRY}/openvox-code:${IMAGE_TAG}
       catch:
         - events: {}
 
@@ -50,7 +57,7 @@ spec:
                     restartPolicy: Never
                     containers:
                       - name: puppet-agent
-                        image: ghcr.io/slauger/openvox-agent:latest
+                        image: (join('', [$registry, '/openvox-agent:', $imageTag]))
                         imagePullPolicy: Always
                         command: ["sh", "-c"]
                         args:
@@ -92,7 +99,7 @@ spec:
                     restartPolicy: Never
                     containers:
                       - name: puppet-agent
-                        image: ghcr.io/slauger/openvox-agent:latest
+                        image: (join('', [$registry, '/openvox-agent:', $imageTag]))
                         imagePullPolicy: Always
                         command: ["sh", "-c"]
                         args:

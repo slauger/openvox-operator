@@ -607,9 +607,9 @@ func (r *CertificateAuthorityReconciler) buildCASetupJob(ctx context.Context, ca
 								{Name: "ca-data", MountPath: "/etc/puppetlabs/puppetserver/ca"},
 								{Name: "ssl", MountPath: "/etc/puppetlabs/puppet/ssl"},
 								{Name: "puppet-conf", MountPath: "/etc/puppetlabs/puppet/puppet.conf", SubPath: "puppet.conf", ReadOnly: true},
+								{Name: "puppetserver-conf", MountPath: "/etc/puppetlabs/puppetserver/conf.d/puppetserver.conf", SubPath: "puppetserver.conf", ReadOnly: true},
+								{Name: "puppetserver-data", MountPath: "/run/puppetserver"},
 								{Name: "tmp", MountPath: "/tmp"},
-								{Name: "puppetserver-yaml", MountPath: "/opt/puppetlabs/server/data/puppetserver/yaml"},
-								{Name: "puppetserver-state", MountPath: "/opt/puppetlabs/server/data/puppetserver/state"},
 							},
 							SecurityContext: &corev1.SecurityContext{
 								AllowPrivilegeEscalation: boolPtr(false),
@@ -630,9 +630,8 @@ func (r *CertificateAuthorityReconciler) buildCASetupJob(ctx context.Context, ca
 							},
 						},
 						{Name: "ssl", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+						{Name: "puppetserver-data", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 						{Name: "tmp", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
-						{Name: "puppetserver-yaml", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
-						{Name: "puppetserver-state", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 						{
 							Name: "puppet-conf",
 							VolumeSource: corev1.VolumeSource{
@@ -641,6 +640,17 @@ func (r *CertificateAuthorityReconciler) buildCASetupJob(ctx context.Context, ca
 										Name: fmt.Sprintf("%s-config", cfg.Name),
 									},
 									Items: []corev1.KeyToPath{{Key: "puppet.conf", Path: "puppet.conf"}},
+								},
+							},
+						},
+						{
+							Name: "puppetserver-conf",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: fmt.Sprintf("%s-config", cfg.Name),
+									},
+									Items: []corev1.KeyToPath{{Key: "puppetserver.conf", Path: "puppetserver.conf"}},
 								},
 							},
 						},

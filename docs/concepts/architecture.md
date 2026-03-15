@@ -121,13 +121,9 @@ Server pods use `readOnlyRootFilesystem: true` for security hardening. All writa
 | `product-conf` | ConfigMap | `.../conf.d/product.conf` | Yes | Product telemetry settings |
 | `logback-xml` | ConfigMap | `.../puppetserver/logback.xml` | Yes | Logging configuration |
 | `metrics-conf` | ConfigMap | `.../conf.d/metrics.conf` | Yes | Metrics endpoint configuration |
-| `puppetserver-yaml` | emptyDir | `.../puppetserver/yaml` | No | Facts cache (YAML facts written by agents) |
-| `puppetserver-state` | emptyDir | `.../puppetserver/state` | No | Server runtime state |
-| `puppetserver-bucket` | emptyDir | `.../puppetserver/bucket` | No | File bucket storage |
-| `puppetserver-reports` | emptyDir | `.../puppetserver/reports` | No | Report storage (local report processor) |
+| `puppetserver-data` | emptyDir | `/run/puppetserver` | No | Server runtime data (`server-var-dir`) |
 | `tmp` | emptyDir | `/tmp` | No | Temporary files |
 | `var-log` | emptyDir | `/var/log/puppetlabs` | No | Server logs |
-| `var-run` | emptyDir | `/var/run` | No | PID files and sockets |
 
 **CA-only volumes** (additional when `server.spec.ca: true`):
 
@@ -151,20 +147,20 @@ The CA setup Job runs once to initialize the Certificate Authority. It uses a mi
 | `ca-data` | PVC | `/etc/puppetlabs/puppetserver/ca` | No | CA data (persisted across restarts) |
 | `ssl` | emptyDir | `/etc/puppetlabs/puppet/ssl` | No | Temporary SSL workspace |
 | `puppet-conf` | ConfigMap | `.../puppet/puppet.conf` | Yes | Puppet configuration |
-| `puppetserver-yaml` | emptyDir | `.../puppetserver/yaml` | No | Required by Puppet Server internals |
-| `puppetserver-state` | emptyDir | `.../puppetserver/state` | No | Required by Puppet Server internals |
+| `puppetserver-conf` | ConfigMap | `.../conf.d/puppetserver.conf` | Yes | JRuby and directory path settings |
+| `puppetserver-data` | emptyDir | `/run/puppetserver` | No | Server runtime data (`server-var-dir`) |
 | `tmp` | emptyDir | `/tmp` | No | Temporary files |
 
-### Why Individual Subdirectory Mounts?
+### Why `/run/puppetserver` Instead of the Default Path?
 
-The writable emptyDir volumes mount specific subdirectories under `/opt/puppetlabs/server/data/puppetserver/` rather than the parent directory. This is critical because the parent directory also contains:
+The container image bundles JRuby gems and libraries under the default `server-var-dir` path (`/opt/puppetlabs/server/data/puppetserver/`):
 
 - `jruby-gems/` -- JRuby gem home (installed during image build)
 - `vendored-jruby-gems/` -- Vendored gems including `openvoxserver-ca` and its dependencies
 - `jars/` -- Server JAR files
 - `lib/` -- Puppet Ruby libraries
 
-Mounting an emptyDir over the parent would hide these bundled files, causing gem resolution failures (`Could not find 'openfact'`) and load errors.
+Puppet Server creates runtime subdirectories (yaml, state, lib, preview, server_data, facts.d, locales) under `server-var-dir` at startup. Mounting an emptyDir over the default path would hide the bundled files, causing gem resolution failures. Instead, the operator reconfigures `server-var-dir` to `/run/puppetserver` (a writable emptyDir) via `puppetserver.conf`, keeping `gem-home` and `gem-path` pointing to the original read-only image paths.
 
 ## Scaling
 

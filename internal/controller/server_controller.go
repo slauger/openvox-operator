@@ -74,7 +74,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	cfg := &openvoxv1alpha1.Config{}
 	if err := r.Get(ctx, types.NamespacedName{Name: server.Spec.ConfigRef, Namespace: server.Namespace}, cfg); err != nil {
 		if errors.IsNotFound(err) {
-			logger.Error(err, "referenced Config not found", "configRef", server.Spec.ConfigRef)
+			logger.Info("waiting for Config", "configRef", server.Spec.ConfigRef)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
@@ -84,7 +84,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	cert := &openvoxv1alpha1.Certificate{}
 	if err := r.Get(ctx, types.NamespacedName{Name: server.Spec.CertificateRef, Namespace: server.Namespace}, cert); err != nil {
 		if errors.IsNotFound(err) {
-			logger.Error(err, "referenced Certificate not found", "certificateRef", server.Spec.CertificateRef)
+			logger.Info("waiting for Certificate", "certificateRef", server.Spec.CertificateRef)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
@@ -103,7 +103,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	ca := &openvoxv1alpha1.CertificateAuthority{}
 	if err := r.Get(ctx, types.NamespacedName{Name: cert.Spec.AuthorityRef, Namespace: server.Namespace}, ca); err != nil {
 		if errors.IsNotFound(err) {
-			logger.Error(err, "referenced CertificateAuthority not found", "authorityRef", cert.Spec.AuthorityRef)
+			logger.Info("waiting for CertificateAuthority", "authorityRef", cert.Spec.AuthorityRef)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err

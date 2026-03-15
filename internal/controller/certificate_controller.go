@@ -64,7 +64,7 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	ca := &openvoxv1alpha1.CertificateAuthority{}
 	if err := r.Get(ctx, types.NamespacedName{Name: cert.Spec.AuthorityRef, Namespace: cert.Namespace}, ca); err != nil {
 		if errors.IsNotFound(err) {
-			logger.Error(err, "referenced CertificateAuthority not found", "authorityRef", cert.Spec.AuthorityRef)
+			logger.Info("waiting for CertificateAuthority", "authorityRef", cert.Spec.AuthorityRef)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
@@ -135,7 +135,7 @@ func (r *CertificateReconciler) reconcileCertSigning(ctx context.Context, cert *
 
 	result, err := r.signCertificate(ctx, cert, ca, caServiceName, cert.Namespace)
 	if err != nil {
-		logger.Error(err, "certificate signing failed")
+		logger.Info("certificate signing failed, will retry", "error", err)
 		cert.Status.Phase = openvoxv1alpha1.CertificatePhaseError
 		meta.SetStatusCondition(&cert.Status.Conditions, metav1.Condition{
 			Type:               openvoxv1alpha1.ConditionCertSigned,

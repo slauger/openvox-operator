@@ -129,7 +129,7 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 	// Periodic CRL refresh: fetch CRL from CA service and update the CRL secret
 	crlResult, err := r.reconcileCRLRefresh(ctx, ca)
 	if err != nil {
-		logger.Error(err, "CRL refresh failed, will retry")
+		logger.Info("CRL refresh failed, will retry", "error", err)
 		r.Recorder.Eventf(ca, nil, corev1.EventTypeWarning, EventReasonCRLRefreshFailed, "Reconcile", "CRL refresh failed: %v", err)
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}

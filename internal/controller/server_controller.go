@@ -134,15 +134,23 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	if server.Spec.Replicas != nil {
 		replicas = *server.Spec.Replicas
 	}
+	ready := r.getReadyReplicas(ctx, server)
 	server.Status.Desired = replicas
-	server.Status.Ready = r.getReadyReplicas(ctx, server)
-	server.Status.Phase = openvoxv1alpha1.ServerPhaseRunning
+	server.Status.Ready = ready
+
+	if ready > 0 {
+		server.Status.Phase = openvoxv1alpha1.ServerPhaseRunning
+	} else {
+		server.Status.Phase = openvoxv1alpha1.ServerPhasePending
+	}
 
 	if err := r.Status().Update(ctx, server); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonServerRunning, "Reconcile", "Server reconciled successfully")
+	if ready > 0 {
+		r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonServerRunning, "Reconcile", "Server reconciled successfully")
+	}
 	return ctrl.Result{}, nil
 }
 

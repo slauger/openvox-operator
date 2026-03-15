@@ -7,6 +7,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
@@ -32,6 +33,7 @@ func enqueueServersForSecret(c client.Client) handler.EventHandler {
 		if caName != "" {
 			cfgList := &openvoxv1alpha1.ConfigList{}
 			if err := c.List(ctx, cfgList, client.InNamespace(obj.GetNamespace())); err != nil {
+				log.FromContext(ctx).Error(err, "failed to list Configs in watcher")
 				return nil
 			}
 			var requests []ctrl.Request
@@ -50,6 +52,7 @@ func enqueueServersForSecret(c client.Client) handler.EventHandler {
 func enqueueServersForConfig(c client.Client, ctx context.Context, namespace, cfgName string) []ctrl.Request {
 	serverList := &openvoxv1alpha1.ServerList{}
 	if err := c.List(ctx, serverList, client.InNamespace(namespace)); err != nil {
+		log.FromContext(ctx).Error(err, "failed to list Servers in watcher")
 		return nil
 	}
 

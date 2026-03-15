@@ -84,6 +84,7 @@ func (r *ReportProcessorReconciler) enqueueReportProcessorsForConfig(c client.Re
 
 		rpList := &openvoxv1alpha1.ReportProcessorList{}
 		if err := c.List(ctx, rpList, client.InNamespace(cfg.Namespace)); err != nil {
+			log.FromContext(ctx).Error(err, "failed to list ReportProcessors in watcher")
 			return nil
 		}
 

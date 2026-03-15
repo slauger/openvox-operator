@@ -1267,12 +1267,14 @@ func (r *ConfigReconciler) enqueueConfigsForSigningPolicy(c client.Reader) handl
 		// Find the CA referenced by this SigningPolicy
 		ca := &openvoxv1alpha1.CertificateAuthority{}
 		if err := c.Get(ctx, types.NamespacedName{Name: sp.Spec.CertificateAuthorityRef, Namespace: sp.Namespace}, ca); err != nil {
+			log.FromContext(ctx).Error(err, "failed to get CertificateAuthority in watcher", "name", sp.Spec.CertificateAuthorityRef)
 			return nil
 		}
 
 		// Enqueue all Configs whose authorityRef points to this CA
 		cfgList := &openvoxv1alpha1.ConfigList{}
 		if err := c.List(ctx, cfgList, client.InNamespace(ca.Namespace)); err != nil {
+			log.FromContext(ctx).Error(err, "failed to list Configs in watcher")
 			return nil
 		}
 
@@ -1490,6 +1492,7 @@ func (r *ConfigReconciler) enqueueConfigsForNodeClassifier(c client.Reader) hand
 
 		cfgList := &openvoxv1alpha1.ConfigList{}
 		if err := c.List(ctx, cfgList, client.InNamespace(nc.Namespace)); err != nil {
+			log.FromContext(ctx).Error(err, "failed to list Configs in watcher")
 			return nil
 		}
 

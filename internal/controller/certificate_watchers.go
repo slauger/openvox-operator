@@ -7,6 +7,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
@@ -36,6 +37,7 @@ func enqueueCertificatesForSecret(c client.Client) handler.EventHandler {
 
 		certList := &openvoxv1alpha1.CertificateList{}
 		if err := c.List(ctx, certList, client.InNamespace(obj.GetNamespace())); err != nil {
+			log.FromContext(ctx).Error(err, "failed to list Certificates in watcher")
 			return nil
 		}
 

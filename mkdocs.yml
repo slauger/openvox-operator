@@ -59,6 +59,7 @@ nav:
       - Gateway API: concepts/gateway-api.md
       - External Node Classification: concepts/external-node-classification.md
       - Report Processing: concepts/report-processing.md
+      - Configuration Rollout: concepts/config-rollout.md
   - Getting Started:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quickstart.md

@@ -40,6 +40,8 @@ type ConfigReconciler struct {
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=reportprocessors,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=reportprocessors/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=configmaps;serviceaccounts;secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
+// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=servers,verbs=get;list;watch
 
 func (r *ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -88,6 +90,11 @@ func (r *ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, fmt.Errorf("reconciling server ServiceAccount: %w", err)
 	}
 
+	// Step 5: Track code rollout progress
+	if err := r.reconcileCodeRolloutStatus(ctx, cfg); err != nil {
+		return ctrl.Result{}, fmt.Errorf("reconciling code rollout status: %w", err)
+	}
+
 	// Update status
 	cfg.Status.Phase = openvoxv1alpha1.ConfigPhaseRunning
 
@@ -113,7 +120,39 @@ func (r *ConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&openvoxv1alpha1.ReportProcessor{}, handler.EnqueueRequestsFromMapFunc(
 			r.enqueueConfigsForReportProcessor(mgr.GetClient()),
 		)).
+		Watches(&corev1.Pod{}, handler.EnqueueRequestsFromMapFunc(
+			r.podToConfig(mgr.GetClient()),
+		)).
 		Complete(r)
+}
+
+// podToConfig maps Pod changes to Config reconciles by looking up the Server
+// from pod labels, then finding the Config from the Server's configRef.
+func (r *ConfigReconciler) podToConfig(c client.Reader) handler.MapFunc {
+	return func(ctx context.Context, obj client.Object) []reconcile.Request {
+		pod, ok := obj.(*corev1.Pod)
+		if !ok {
+			return nil
+		}
+
+		serverName := pod.Labels[LabelServer]
+		if serverName == "" {
+			return nil
+		}
+
+		server := &openvoxv1alpha1.Server{}
+		if err := c.Get(ctx, types.NamespacedName{Name: serverName, Namespace: pod.Namespace}, server); err != nil {
+			return nil
+		}
+
+		if server.Spec.ConfigRef == "" {
+			return nil
+		}
+
+		return []reconcile.Request{{
+			NamespacedName: types.NamespacedName{Name: server.Spec.ConfigRef, Namespace: pod.Namespace},
+		}}
+	}
 }
 
 // --- ConfigMap ---
@@ -1537,6 +1576,124 @@ func (r *ConfigReconciler) enqueueConfigsForReportProcessor(c client.Reader) han
 		}
 		return nil
 	}
+}
+
+// --- Code Rollout Status ---
+
+// reconcileCodeRolloutStatus tracks the rollout progress of the code image across Server pods.
+func (r *ConfigReconciler) reconcileCodeRolloutStatus(ctx context.Context, cfg *openvoxv1alpha1.Config) error {
+	// If no code image is configured, clear status and remove condition
+	if cfg.Spec.Code == nil || cfg.Spec.Code.Image == "" {
+		cfg.Status.Code = nil
+		meta.RemoveStatusCondition(&cfg.Status.Conditions, openvoxv1alpha1.ConditionCodeRolloutComplete)
+		return nil
+	}
+
+	expectedImage := cfg.Spec.Code.Image
+
+	// List all Servers referencing this Config
+	serverList := &openvoxv1alpha1.ServerList{}
+	if err := r.List(ctx, serverList, client.InNamespace(cfg.Namespace)); err != nil {
+		return fmt.Errorf("listing Servers: %w", err)
+	}
+
+	var updatedPods, pendingPods []string
+	var ready int32
+
+	for _, server := range serverList.Items {
+		if server.Spec.ConfigRef != cfg.Name {
+			continue
+		}
+
+		// Determine which code image this server should use
+		code := resolveCode(&server, cfg)
+		if code == nil || code.Image == "" {
+			continue
+		}
+
+		// List pods for this server
+		podList := &corev1.PodList{}
+		if err := r.List(ctx, podList,
+			client.InNamespace(cfg.Namespace),
+			client.MatchingLabels{LabelServer: server.Name},
+		); err != nil {
+			return fmt.Errorf("listing pods for Server %s: %w", server.Name, err)
+		}
+
+		for i := range podList.Items {
+			pod := &podList.Items[i]
+			if podHasCodeImage(pod, expectedImage) {
+				updatedPods = append(updatedPods, pod.Name)
+				if isPodReady(pod) {
+					ready++
+				}
+			} else {
+				pendingPods = append(pendingPods, pod.Name)
+			}
+		}
+	}
+
+	sort.Strings(updatedPods)
+	sort.Strings(pendingPods)
+
+	desired := int32(len(updatedPods) + len(pendingPods))
+
+	cfg.Status.Code = &openvoxv1alpha1.CodeRolloutStatus{
+		Image:       expectedImage,
+		Desired:     desired,
+		Ready:       ready,
+		UpdatedPods: updatedPods,
+		PendingPods: pendingPods,
+	}
+
+	// Set condition
+	if desired > 0 && ready == desired {
+		meta.SetStatusCondition(&cfg.Status.Conditions, metav1.Condition{
+			Type:               openvoxv1alpha1.ConditionCodeRolloutComplete,
+			Status:             metav1.ConditionTrue,
+			Reason:             "RolloutComplete",
+			Message:            fmt.Sprintf("All %d pods are running code image %s", ready, expectedImage),
+			LastTransitionTime: metav1.Now(),
+		})
+	} else if desired == 0 {
+		meta.SetStatusCondition(&cfg.Status.Conditions, metav1.Condition{
+			Type:               openvoxv1alpha1.ConditionCodeRolloutComplete,
+			Status:             metav1.ConditionFalse,
+			Reason:             "NoPodsFound",
+			Message:            "No Server pods found for this Config",
+			LastTransitionTime: metav1.Now(),
+		})
+	} else {
+		meta.SetStatusCondition(&cfg.Status.Conditions, metav1.Condition{
+			Type:               openvoxv1alpha1.ConditionCodeRolloutComplete,
+			Status:             metav1.ConditionFalse,
+			Reason:             "RolloutInProgress",
+			Message:            fmt.Sprintf("%d/%d pods running code image %s", ready, desired, expectedImage),
+			LastTransitionTime: metav1.Now(),
+		})
+	}
+
+	return nil
+}
+
+// podHasCodeImage checks if a pod has a volume with the expected code image reference.
+func podHasCodeImage(pod *corev1.Pod, expectedImage string) bool {
+	for _, vol := range pod.Spec.Volumes {
+		if vol.Name == "code" && vol.Image != nil && vol.Image.Reference == expectedImage {
+			return true
+		}
+	}
+	return false
+}
+
+// isPodReady returns true if all containers in the pod are ready.
+func isPodReady(pod *corev1.Pod) bool {
+	for _, cond := range pod.Status.Conditions {
+		if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return false
 }
 
 // --- Server ServiceAccount ---

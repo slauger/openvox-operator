@@ -340,6 +340,37 @@ spec:
           status:
             description: ConfigStatus defines the observed state of Config.
             properties:
+              code:
+                description: |-
+                  Code tracks the rollout progress of the code image across Server pods.
+                  Only populated when spec.code.image is set.
+                properties:
+                  desired:
+                    description: Desired is the total number of Server pods that should
+                      run the code image.
+                    format: int32
+                    type: integer
+                  image:
+                    description: Image is the code image currently being tracked.
+                    type: string
+                  pendingPods:
+                    description: PendingPods lists pod names not yet running the expected
+                      code image.
+                    items:
+                      type: string
+                    type: array
+                  ready:
+                    description: Ready is the number of pods already running the expected
+                      code image and ready.
+                    format: int32
+                    type: integer
+                  updatedPods:
+                    description: UpdatedPods lists pod names already running the expected
+                      code image.
+                    items:
+                      type: string
+                    type: array
+                type: object
               conditions:
                 description: Conditions represent the latest available observations.
                 items:

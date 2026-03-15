@@ -262,11 +262,40 @@ type ConfigStatus struct {
 	// Conditions represent the latest available observations.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// Code tracks the rollout progress of the code image across Server pods.
+	// Only populated when spec.code.image is set.
+	// +optional
+	Code *CodeRolloutStatus `json:"code,omitempty"`
+}
+
+// CodeRolloutStatus tracks the rollout progress of the code image across Server pods.
+type CodeRolloutStatus struct {
+	// Image is the code image currently being tracked.
+	// +optional
+	Image string `json:"image,omitempty"`
+
+	// Desired is the total number of Server pods that should run the code image.
+	// +optional
+	Desired int32 `json:"desired,omitempty"`
+
+	// Ready is the number of pods already running the expected code image and ready.
+	// +optional
+	Ready int32 `json:"ready,omitempty"`
+
+	// UpdatedPods lists pod names already running the expected code image.
+	// +optional
+	UpdatedPods []string `json:"updatedPods,omitempty"`
+
+	// PendingPods lists pod names not yet running the expected code image.
+	// +optional
+	PendingPods []string `json:"pendingPods,omitempty"`
 }
 
 // Condition types for Config.
 const (
-	ConditionConfigReady = "ConfigReady"
+	ConditionConfigReady         = "ConfigReady"
+	ConditionCodeRolloutComplete = "CodeRolloutComplete"
 )
 
 // --- Shared types used by multiple CRDs ---

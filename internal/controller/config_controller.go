@@ -170,6 +170,33 @@ func (r *ConfigReconciler) reconcileConfigMap(ctx context.Context, cfg *openvoxv
 	return r.Update(ctx, cm)
 }
 
+// reconcileSecret creates or updates a Secret owned by the given Config.
+func (r *ConfigReconciler) reconcileSecret(ctx context.Context, cfg *openvoxv1alpha1.Config, name string, data map[string][]byte) error {
+	logger := log.FromContext(ctx)
+	existing := &corev1.Secret{}
+	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: cfg.Namespace}, existing)
+	if errors.IsNotFound(err) {
+		logger.Info("creating Secret", "name", name)
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: cfg.Namespace,
+				Labels:    configLabels(cfg.Name),
+			},
+			Data: data,
+		}
+		if err := controllerutil.SetControllerReference(cfg, secret, r.Scheme); err != nil {
+			return err
+		}
+		return r.Create(ctx, secret)
+	} else if err != nil {
+		return err
+	}
+
+	existing.Data = data
+	return r.Update(ctx, existing)
+}
+
 func (r *ConfigReconciler) findCertificateAuthority(ctx context.Context, cfg *openvoxv1alpha1.Config) *openvoxv1alpha1.CertificateAuthority {
 	if cfg.Spec.AuthorityRef == "" {
 		return nil
@@ -277,25 +304,16 @@ func (r *ConfigReconciler) renderPuppetDBConf(cfg *openvoxv1alpha1.Config) strin
 // renderWebserverConf returns the webserver.conf for non-CA servers.
 // CRL is read from the kubelet-synced secret mount at /etc/puppetlabs/puppet/crl/.
 func (r *ConfigReconciler) renderWebserverConf(cfg *openvoxv1alpha1.Config) string {
-	clientAuth := "want"
-	if cfg.Spec.PuppetServer.ClientAuth != "" {
-		clientAuth = cfg.Spec.PuppetServer.ClientAuth
-	}
-	return fmt.Sprintf(`webserver: {
-    client-auth: %s
-    ssl-host: 0.0.0.0
-    ssl-port: 8140
-    ssl-cert: /etc/puppetlabs/puppet/ssl/certs/puppet.pem
-    ssl-key: /etc/puppetlabs/puppet/ssl/private_keys/puppet.pem
-    ssl-ca-cert: /etc/puppetlabs/puppet/ssl/certs/ca.pem
-    ssl-crl-path: /etc/puppetlabs/puppet/crl/ca_crl.pem
-}
-`, clientAuth)
+	return r.renderWebserverConfWithCRL(cfg, "/etc/puppetlabs/puppet/crl/ca_crl.pem")
 }
 
 // renderWebserverConfCA returns the webserver.conf for CA servers.
 // CRL is read from the PVC-backed ssl directory, managed by Puppetserver itself.
 func (r *ConfigReconciler) renderWebserverConfCA(cfg *openvoxv1alpha1.Config) string {
+	return r.renderWebserverConfWithCRL(cfg, "/etc/puppetlabs/puppet/ssl/crl.pem")
+}
+
+func (r *ConfigReconciler) renderWebserverConfWithCRL(cfg *openvoxv1alpha1.Config, crlPath string) string {
 	clientAuth := "want"
 	if cfg.Spec.PuppetServer.ClientAuth != "" {
 		clientAuth = cfg.Spec.PuppetServer.ClientAuth
@@ -307,9 +325,9 @@ func (r *ConfigReconciler) renderWebserverConfCA(cfg *openvoxv1alpha1.Config) st
     ssl-cert: /etc/puppetlabs/puppet/ssl/certs/puppet.pem
     ssl-key: /etc/puppetlabs/puppet/ssl/private_keys/puppet.pem
     ssl-ca-cert: /etc/puppetlabs/puppet/ssl/certs/ca.pem
-    ssl-crl-path: /etc/puppetlabs/puppet/ssl/crl.pem
+    ssl-crl-path: %s
 }
-`, clientAuth)
+`, clientAuth, crlPath)
 }
 
 func (r *ConfigReconciler) renderPuppetserverConf(cfg *openvoxv1alpha1.Config) string {
@@ -839,7 +857,6 @@ func (r *ConfigReconciler) reconcileAutosignSecrets(ctx context.Context, cfg *op
 // The Secret is always created -- the binary handles all cases (no policies = deny all,
 // any:true = approve all). This keeps puppet.conf static and avoids pod restarts.
 func (r *ConfigReconciler) reconcileAutosignSecret(ctx context.Context, cfg *openvoxv1alpha1.Config, ca *openvoxv1alpha1.CertificateAuthority) error {
-	logger := log.FromContext(ctx)
 	secretName := fmt.Sprintf("%s-autosign-policy", ca.Name)
 
 	policies := r.findSigningPolicies(ctx, ca)
@@ -859,28 +876,7 @@ func (r *ConfigReconciler) reconcileAutosignSecret(ctx context.Context, cfg *ope
 		"autosign-policy.yaml": []byte(policyYAML),
 	}
 
-	existing := &corev1.Secret{}
-	err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cfg.Namespace}, existing)
-	if errors.IsNotFound(err) {
-		logger.Info("creating autosign policy Secret", "name", secretName)
-		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      secretName,
-				Namespace: cfg.Namespace,
-				Labels:    configLabels(cfg.Name),
-			},
-			Data: data,
-		}
-		if err := controllerutil.SetControllerReference(cfg, secret, r.Scheme); err != nil {
-			return err
-		}
-		return r.Create(ctx, secret)
-	} else if err != nil {
-		return err
-	}
-
-	existing.Data = data
-	return r.Update(ctx, existing)
+	return r.reconcileSecret(ctx, cfg, secretName, data)
 }
 
 // renderAutosignPolicyConfig renders the policy config YAML that openvox-autosign reads.
@@ -1008,7 +1004,6 @@ func (r *ConfigReconciler) reconcileENCSecret(ctx context.Context, cfg *openvoxv
 	if cfg.Spec.NodeClassifierRef == "" {
 		return nil
 	}
-	logger := log.FromContext(ctx)
 
 	nc := &openvoxv1alpha1.NodeClassifier{}
 	if err := r.Get(ctx, types.NamespacedName{Name: cfg.Spec.NodeClassifierRef, Namespace: cfg.Namespace}, nc); err != nil {
@@ -1031,28 +1026,7 @@ func (r *ConfigReconciler) reconcileENCSecret(ctx context.Context, cfg *openvoxv
 		"enc.yaml": []byte(encYAML),
 	}
 
-	existing := &corev1.Secret{}
-	err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cfg.Namespace}, existing)
-	if errors.IsNotFound(err) {
-		logger.Info("creating ENC Secret", "name", secretName)
-		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      secretName,
-				Namespace: cfg.Namespace,
-				Labels:    configLabels(cfg.Name),
-			},
-			Data: data,
-		}
-		if err := controllerutil.SetControllerReference(cfg, secret, r.Scheme); err != nil {
-			return err
-		}
-		return r.Create(ctx, secret)
-	} else if err != nil {
-		return err
-	}
-
-	existing.Data = data
-	return r.Update(ctx, existing)
+	return r.reconcileSecret(ctx, cfg, secretName, data)
 }
 
 // encYAMLConfig mirrors the YAML structure read by openvox-enc.

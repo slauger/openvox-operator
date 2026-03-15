@@ -470,6 +470,59 @@ func TestIsNotFound(t *testing.T) {
 	}
 }
 
+func TestValidateCertname(t *testing.T) {
+	valid := []string{
+		"web1.example.com",
+		"node-01.prod",
+		"my_host.local",
+		"UPPERCASE.host",
+		"simple",
+	}
+	for _, name := range valid {
+		if err := validateCertname(name); err != nil {
+			t.Errorf("validateCertname(%q) = %v, want nil", name, err)
+		}
+	}
+
+	invalid := []string{
+		"../../etc/shadow",
+		"foo/bar",
+		"foo;bar",
+		"node name",
+		"node\ttab",
+		"",
+		"foo/../admin",
+		"node@host",
+	}
+	for _, name := range invalid {
+		if err := validateCertname(name); err == nil {
+			t.Errorf("validateCertname(%q) = nil, want error", name)
+		}
+	}
+}
+
+func TestClassify_InvalidCertname(t *testing.T) {
+	cfg := &ENCConfig{
+		URL:            "http://localhost",
+		Method:         "GET",
+		Path:           "/node/{certname}",
+		ResponseFormat: "yaml",
+		TimeoutSeconds: 5,
+	}
+
+	invalid := []string{
+		"../../etc/shadow",
+		"foo/bar",
+		"foo;bar",
+	}
+	for _, name := range invalid {
+		_, err := classify(cfg, name)
+		if err == nil {
+			t.Errorf("classify with certname %q should have failed", name)
+		}
+	}
+}
+
 func TestBuildHTTPClient(t *testing.T) {
 	cfg := &ENCConfig{
 		TimeoutSeconds: 15,

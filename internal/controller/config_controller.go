@@ -1201,7 +1201,7 @@ func (r *ConfigReconciler) renderAutosignPolicyConfig(ctx context.Context, names
 				value := attr.Value
 				if attr.ValueFrom != nil {
 					var err error
-					value, err = r.resolveSecretKey(ctx, namespace,
+					value, err = resolveSecretKey(ctx, r.Client, namespace,
 						attr.ValueFrom.SecretKeyRef.Name, attr.ValueFrom.SecretKeyRef.Key)
 					if err != nil {
 						r.updateSigningPolicyStatus(ctx, &p, err)
@@ -1217,18 +1217,6 @@ func (r *ConfigReconciler) renderAutosignPolicyConfig(ctx context.Context, names
 	return sb.String(), nil
 }
 
-// resolveSecretKey reads a specific key from a Secret.
-func (r *ConfigReconciler) resolveSecretKey(ctx context.Context, namespace, secretName, key string) (string, error) {
-	secret := &corev1.Secret{}
-	if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret); err != nil {
-		return "", fmt.Errorf("getting Secret %s: %w", secretName, err)
-	}
-	val, ok := secret.Data[key]
-	if !ok {
-		return "", fmt.Errorf("key %q not found in Secret %s", key, secretName)
-	}
-	return string(val), nil
-}
 
 // updateSigningPolicyStatus sets the phase and condition on a SigningPolicy.
 func (r *ConfigReconciler) updateSigningPolicyStatus(ctx context.Context, sp *openvoxv1alpha1.SigningPolicy, err error) {
@@ -1408,7 +1396,7 @@ func (r *ConfigReconciler) renderENCConfig(ctx context.Context, cfg *openvoxv1al
 		case nc.Spec.Auth.Token != nil:
 			auth.Type = "token"
 			auth.Header = nc.Spec.Auth.Token.Header
-			token, err := r.resolveSecretKey(ctx, cfg.Namespace,
+			token, err := resolveSecretKey(ctx, r.Client, cfg.Namespace,
 				nc.Spec.Auth.Token.SecretKeyRef.Name, nc.Spec.Auth.Token.SecretKeyRef.Key)
 			if err != nil {
 				return "", fmt.Errorf("resolving token secret: %w", err)
@@ -1416,7 +1404,7 @@ func (r *ConfigReconciler) renderENCConfig(ctx context.Context, cfg *openvoxv1al
 			auth.Token = token
 		case nc.Spec.Auth.Bearer != nil:
 			auth.Type = "bearer"
-			token, err := r.resolveSecretKey(ctx, cfg.Namespace,
+			token, err := resolveSecretKey(ctx, r.Client, cfg.Namespace,
 				nc.Spec.Auth.Bearer.SecretKeyRef.Name, nc.Spec.Auth.Bearer.SecretKeyRef.Key)
 			if err != nil {
 				return "", fmt.Errorf("resolving bearer secret: %w", err)
@@ -1424,12 +1412,12 @@ func (r *ConfigReconciler) renderENCConfig(ctx context.Context, cfg *openvoxv1al
 			auth.Token = token
 		case nc.Spec.Auth.Basic != nil:
 			auth.Type = "basic"
-			username, err := r.resolveSecretKey(ctx, cfg.Namespace,
+			username, err := resolveSecretKey(ctx, r.Client, cfg.Namespace,
 				nc.Spec.Auth.Basic.SecretRef.Name, nc.Spec.Auth.Basic.SecretRef.UsernameKey)
 			if err != nil {
 				return "", fmt.Errorf("resolving basic auth username: %w", err)
 			}
-			password, err := r.resolveSecretKey(ctx, cfg.Namespace,
+			password, err := resolveSecretKey(ctx, r.Client, cfg.Namespace,
 				nc.Spec.Auth.Basic.SecretRef.Name, nc.Spec.Auth.Basic.SecretRef.PasswordKey)
 			if err != nil {
 				return "", fmt.Errorf("resolving basic auth password: %w", err)

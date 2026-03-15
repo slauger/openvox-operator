@@ -12,6 +12,19 @@ import (
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
 
+// resolveSecretKey reads a specific key from a Secret.
+func resolveSecretKey(ctx context.Context, reader client.Reader, namespace, secretName, key string) (string, error) {
+	secret := &corev1.Secret{}
+	if err := reader.Get(ctx, client.ObjectKey{Name: secretName, Namespace: namespace}, secret); err != nil {
+		return "", fmt.Errorf("getting Secret %s: %w", secretName, err)
+	}
+	val, ok := secret.Data[key]
+	if !ok {
+		return "", fmt.Errorf("key %q not found in Secret %s", key, secretName)
+	}
+	return string(val), nil
+}
+
 // configMapVolume creates a Volume from a ConfigMap key where key name == path.
 func configMapVolume(volumeName, cmName, key string) corev1.Volume {
 	return corev1.Volume{

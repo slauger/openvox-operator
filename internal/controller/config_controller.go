@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -40,6 +42,8 @@ type ConfigReconciler struct {
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=reportprocessors,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=reportprocessors/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=configmaps;serviceaccounts;secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
+// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=servers,verbs=get;list;watch
 
 func (r *ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -59,6 +63,14 @@ func (r *ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			return ctrl.Result{}, err
 		}
 	}
+
+	// Compute SHA-256 hash of Config.Spec for rollout tracking
+	specBytes, err := json.Marshal(cfg.Spec)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("marshaling Config spec: %w", err)
+	}
+	specHash := sha256.Sum256(specBytes)
+	configHash := fmt.Sprintf("%x", specHash)
 
 	// Step 1: Reconcile ConfigMaps
 	logger.Info("reconciling ConfigMaps")
@@ -88,6 +100,14 @@ func (r *ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, fmt.Errorf("reconciling server ServiceAccount: %w", err)
 	}
 
+	// Update config hash
+	cfg.Status.ConfigHash = configHash
+
+	// Track rollout progress across Server pods
+	if err := r.trackRolloutProgress(ctx, cfg, configHash); err != nil {
+		logger.Info("failed to track rollout progress, will retry", "error", err)
+	}
+
 	// Update status
 	cfg.Status.Phase = openvoxv1alpha1.ConfigPhaseRunning
 
@@ -113,7 +133,134 @@ func (r *ConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&openvoxv1alpha1.ReportProcessor{}, handler.EnqueueRequestsFromMapFunc(
 			r.enqueueConfigsForReportProcessor(mgr.GetClient()),
 		)).
+		Watches(&corev1.Pod{}, handler.EnqueueRequestsFromMapFunc(
+			r.enqueueConfigsForPod(mgr.GetClient()),
+		)).
 		Complete(r)
+}
+
+// trackRolloutProgress lists all Server pods for this Config and compares
+// their config-spec-hash annotation against the current configHash.
+func (r *ConfigReconciler) trackRolloutProgress(ctx context.Context, cfg *openvoxv1alpha1.Config, configHash string) error {
+	// List all Servers referencing this Config
+	serverList := &openvoxv1alpha1.ServerList{}
+	if err := r.List(ctx, serverList, client.InNamespace(cfg.Namespace)); err != nil {
+		return fmt.Errorf("listing Servers: %w", err)
+	}
+
+	var desired, updated, ready int32
+	var updatedPods, pendingPods []string
+
+	for _, server := range serverList.Items {
+		if server.Spec.ConfigRef != cfg.Name {
+			continue
+		}
+
+		// List pods for this Server
+		podList := &corev1.PodList{}
+		if err := r.List(ctx, podList, client.InNamespace(cfg.Namespace),
+			client.MatchingLabels{LabelServer: server.Name}); err != nil {
+			return fmt.Errorf("listing pods for Server %s: %w", server.Name, err)
+		}
+
+		for i := range podList.Items {
+			pod := &podList.Items[i]
+			desired++
+
+			podHash := pod.Annotations[AnnotationConfigSpecHash]
+			if podHash == configHash {
+				updated++
+				updatedPods = append(updatedPods, pod.Name)
+
+				if isPodReady(pod) {
+					ready++
+				}
+			} else {
+				pendingPods = append(pendingPods, pod.Name)
+			}
+		}
+	}
+
+	sort.Strings(updatedPods)
+	sort.Strings(pendingPods)
+
+	cfg.Status.Rollout = &openvoxv1alpha1.ConfigRolloutStatus{
+		Desired:     desired,
+		Updated:     updated,
+		Ready:       ready,
+		UpdatedPods: updatedPods,
+		PendingPods: pendingPods,
+	}
+
+	// Set RolloutComplete condition
+	if desired > 0 && ready == desired {
+		meta.SetStatusCondition(&cfg.Status.Conditions, metav1.Condition{
+			Type:               openvoxv1alpha1.ConditionRolloutComplete,
+			Status:             metav1.ConditionTrue,
+			Reason:             "AllPodsUpdated",
+			Message:            fmt.Sprintf("All %d pods are running the current config hash", desired),
+			LastTransitionTime: metav1.Now(),
+		})
+	} else if desired == 0 {
+		meta.SetStatusCondition(&cfg.Status.Conditions, metav1.Condition{
+			Type:               openvoxv1alpha1.ConditionRolloutComplete,
+			Status:             metav1.ConditionFalse,
+			Reason:             "NoPodsFound",
+			Message:            "No Server pods found for this Config",
+			LastTransitionTime: metav1.Now(),
+		})
+	} else {
+		meta.SetStatusCondition(&cfg.Status.Conditions, metav1.Condition{
+			Type:               openvoxv1alpha1.ConditionRolloutComplete,
+			Status:             metav1.ConditionFalse,
+			Reason:             "RolloutInProgress",
+			Message:            fmt.Sprintf("%d/%d pods updated, %d/%d ready", updated, desired, ready, desired),
+			LastTransitionTime: metav1.Now(),
+		})
+	}
+
+	return nil
+}
+
+// isPodReady returns true if the pod has the Ready condition set to True.
+func isPodReady(pod *corev1.Pod) bool {
+	for _, c := range pod.Status.Conditions {
+		if c.Type == corev1.PodReady && c.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return false
+}
+
+// enqueueConfigsForPod maps Pod changes to Config reconciles via the Server label.
+func (r *ConfigReconciler) enqueueConfigsForPod(c client.Reader) handler.MapFunc {
+	return func(ctx context.Context, obj client.Object) []reconcile.Request {
+		labels := obj.GetLabels()
+		if labels["app.kubernetes.io/managed-by"] != "openvox-operator" {
+			return nil
+		}
+
+		serverName := labels[LabelServer]
+		if serverName == "" {
+			return nil
+		}
+
+		server := &openvoxv1alpha1.Server{}
+		if err := c.Get(ctx, types.NamespacedName{Name: serverName, Namespace: obj.GetNamespace()}, server); err != nil {
+			return nil
+		}
+
+		if server.Spec.ConfigRef == "" {
+			return nil
+		}
+
+		return []reconcile.Request{{
+			NamespacedName: types.NamespacedName{
+				Name:      server.Spec.ConfigRef,
+				Namespace: obj.GetNamespace(),
+			},
+		}}
+	}
 }
 
 // --- ConfigMap ---

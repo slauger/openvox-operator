@@ -17,6 +17,9 @@ rules:
   - apiGroups: [""]
     resources: ["configmaps", "secrets", "services", "serviceaccounts", "persistentvolumeclaims", "endpoints"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
   # RBAC for CA setup job ServiceAccount
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["roles", "rolebindings"]

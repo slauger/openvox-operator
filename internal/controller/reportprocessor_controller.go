@@ -230,7 +230,7 @@ func (r *ReportProcessorReconciler) renderReportWebhookConfig(ctx context.Contex
 			case rp.Spec.Auth.Token != nil:
 				auth.Type = "token"
 				auth.Header = rp.Spec.Auth.Token.Header
-				token, err := r.resolveSecretKey(ctx, namespace,
+				token, err := resolveSecretKey(ctx, r.Client, namespace,
 					rp.Spec.Auth.Token.SecretKeyRef.Name, rp.Spec.Auth.Token.SecretKeyRef.Key)
 				if err != nil {
 					return "", fmt.Errorf("resolving token secret for %s: %w", rp.Name, err)
@@ -238,7 +238,7 @@ func (r *ReportProcessorReconciler) renderReportWebhookConfig(ctx context.Contex
 				auth.Token = token
 			case rp.Spec.Auth.Bearer != nil:
 				auth.Type = "bearer"
-				token, err := r.resolveSecretKey(ctx, namespace,
+				token, err := resolveSecretKey(ctx, r.Client, namespace,
 					rp.Spec.Auth.Bearer.SecretKeyRef.Name, rp.Spec.Auth.Bearer.SecretKeyRef.Key)
 				if err != nil {
 					return "", fmt.Errorf("resolving bearer secret for %s: %w", rp.Name, err)
@@ -246,12 +246,12 @@ func (r *ReportProcessorReconciler) renderReportWebhookConfig(ctx context.Contex
 				auth.Token = token
 			case rp.Spec.Auth.Basic != nil:
 				auth.Type = "basic"
-				username, err := r.resolveSecretKey(ctx, namespace,
+				username, err := resolveSecretKey(ctx, r.Client, namespace,
 					rp.Spec.Auth.Basic.SecretRef.Name, rp.Spec.Auth.Basic.SecretRef.UsernameKey)
 				if err != nil {
 					return "", fmt.Errorf("resolving basic auth username for %s: %w", rp.Name, err)
 				}
-				password, err := r.resolveSecretKey(ctx, namespace,
+				password, err := resolveSecretKey(ctx, r.Client, namespace,
 					rp.Spec.Auth.Basic.SecretRef.Name, rp.Spec.Auth.Basic.SecretRef.PasswordKey)
 				if err != nil {
 					return "", fmt.Errorf("resolving basic auth password for %s: %w", rp.Name, err)
@@ -268,7 +268,7 @@ func (r *ReportProcessorReconciler) renderReportWebhookConfig(ctx context.Contex
 			if h.ValueFrom != nil {
 				var err error
 				if h.ValueFrom.SecretKeyRef != nil {
-					value, err = r.resolveSecretKey(ctx, namespace,
+					value, err = resolveSecretKey(ctx, r.Client, namespace,
 						h.ValueFrom.SecretKeyRef.Name, h.ValueFrom.SecretKeyRef.Key)
 					if err != nil {
 						return "", fmt.Errorf("resolving header secret for %s: %w", rp.Name, err)
@@ -294,18 +294,6 @@ func (r *ReportProcessorReconciler) renderReportWebhookConfig(ctx context.Contex
 	return string(out), nil
 }
 
-// resolveSecretKey reads a specific key from a Secret.
-func (r *ReportProcessorReconciler) resolveSecretKey(ctx context.Context, namespace, secretName, key string) (string, error) {
-	secret := &corev1.Secret{}
-	if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret); err != nil {
-		return "", fmt.Errorf("getting Secret %s: %w", secretName, err)
-	}
-	val, ok := secret.Data[key]
-	if !ok {
-		return "", fmt.Errorf("key %q not found in Secret %s", key, secretName)
-	}
-	return string(val), nil
-}
 
 // resolveConfigMapKey reads a specific key from a ConfigMap.
 func (r *ReportProcessorReconciler) resolveConfigMapKey(ctx context.Context, namespace, cmName, key string) (string, error) {

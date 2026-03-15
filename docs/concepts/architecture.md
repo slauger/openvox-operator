@@ -99,6 +99,73 @@ The operator creates dedicated ServiceAccounts with minimal privileges:
 
 The operator itself runs with its own ServiceAccount (managed by the Helm chart) with cluster-wide RBAC.
 
+## Pod Volumes
+
+Server pods use `readOnlyRootFilesystem: true` for security hardening. All writable paths are explicit emptyDir mounts; all configuration comes from ConfigMaps and Secrets. This section documents every volume mounted into Server and CA pods.
+
+### Server Pod Volumes
+
+| Volume | Type | Mount Path | RO | Purpose |
+|--------|------|------------|-----|---------|
+| `ssl` | emptyDir | `/etc/puppetlabs/puppet/ssl` | No | SSL directory, populated by init container from Secret volumes |
+| `ssl-cert` | Secret | `/ssl-cert` (init container only) | Yes | TLS certificate + private key from Certificate CRD |
+| `ssl-ca` | Secret | `/ssl-ca` (init container only) | Yes | CA certificate from CertificateAuthority CRD |
+| `ssl-ca-crl` | Secret | `/etc/puppetlabs/puppet/crl` | Yes | CRL data (non-CA pods only, auto-synced by kubelet) |
+| `puppet-conf` | ConfigMap | `.../puppet/puppet.conf` | Yes | Puppet agent/server configuration |
+| `puppetdb-conf` | ConfigMap | `.../puppet/puppetdb.conf` | Yes | PuppetDB connection settings |
+| `puppetserver-conf` | ConfigMap | `.../conf.d/puppetserver.conf` | Yes | JRuby, HTTP client, and profiler settings |
+| `webserver-conf` | ConfigMap | `.../conf.d/webserver.conf` | Yes | Jetty webserver and TLS configuration |
+| `auth-conf` | ConfigMap | `.../conf.d/auth.conf` | Yes | Puppet Server authorization rules (HOCON) |
+| `ca-conf` | ConfigMap | `.../conf.d/ca.conf` | Yes | CA endpoint configuration |
+| `ca-cfg` | ConfigMap | `.../services.d/ca.cfg` | Yes | Service bootstrap (CA enabled/disabled) |
+| `product-conf` | ConfigMap | `.../conf.d/product.conf` | Yes | Product telemetry settings |
+| `logback-xml` | ConfigMap | `.../puppetserver/logback.xml` | Yes | Logging configuration |
+| `metrics-conf` | ConfigMap | `.../conf.d/metrics.conf` | Yes | Metrics endpoint configuration |
+| `puppetserver-yaml` | emptyDir | `.../puppetserver/yaml` | No | Facts cache (YAML facts written by agents) |
+| `puppetserver-state` | emptyDir | `.../puppetserver/state` | No | Server runtime state |
+| `puppetserver-bucket` | emptyDir | `.../puppetserver/bucket` | No | File bucket storage |
+| `puppetserver-reports` | emptyDir | `.../puppetserver/reports` | No | Report storage (local report processor) |
+| `tmp` | emptyDir | `/tmp` | No | Temporary files |
+| `var-log` | emptyDir | `/var/log/puppetlabs` | No | Server logs |
+| `var-run` | emptyDir | `/var/run` | No | PID files and sockets |
+
+**CA-only volumes** (additional when `server.spec.ca: true`):
+
+| Volume | Type | Mount Path | RO | Purpose |
+|--------|------|------------|-----|---------|
+| `ca-data` | PVC | `/etc/puppetlabs/puppetserver/ca` | No | CA private keys and signed certificates |
+| `autosign-policy` | Secret | `.../puppet/autosign-policy.yaml` | Yes | Autosign policy rendered from SigningPolicy CRDs |
+
+**Code volume** (when `code` is configured):
+
+| Volume | Type | Mount Path | RO | Purpose |
+|--------|------|------------|-----|---------|
+| `code` | OCI Image or PVC | `/etc/puppetlabs/code` | Yes | Puppet environments and modules |
+
+### CA Setup Job Volumes
+
+The CA setup Job runs once to initialize the Certificate Authority. It uses a minimal set of volumes:
+
+| Volume | Type | Mount Path | RO | Purpose |
+|--------|------|------------|-----|---------|
+| `ca-data` | PVC | `/etc/puppetlabs/puppetserver/ca` | No | CA data (persisted across restarts) |
+| `ssl` | emptyDir | `/etc/puppetlabs/puppet/ssl` | No | Temporary SSL workspace |
+| `puppet-conf` | ConfigMap | `.../puppet/puppet.conf` | Yes | Puppet configuration |
+| `puppetserver-yaml` | emptyDir | `.../puppetserver/yaml` | No | Required by Puppet Server internals |
+| `puppetserver-state` | emptyDir | `.../puppetserver/state` | No | Required by Puppet Server internals |
+| `tmp` | emptyDir | `/tmp` | No | Temporary files |
+
+### Why Individual Subdirectory Mounts?
+
+The writable emptyDir volumes mount specific subdirectories under `/opt/puppetlabs/server/data/puppetserver/` rather than the parent directory. This is critical because the parent directory also contains:
+
+- `jruby-gems/` -- JRuby gem home (installed during image build)
+- `vendored-jruby-gems/` -- Vendored gems including `openvoxserver-ca` and its dependencies
+- `jars/` -- Server JAR files
+- `lib/` -- Puppet Ruby libraries
+
+Mounting an emptyDir over the parent would hide these bundled files, causing gem resolution failures (`Could not find 'openfact'`) and load errors.
+
 ## Scaling
 
 - **CA Server**: Always a single replica with Recreate deployment strategy (only one pod writes to the CA PVC)

@@ -171,7 +171,10 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 		{Name: "ca-cfg", MountPath: "/etc/puppetlabs/puppetserver/services.d/ca.cfg", SubPath: "ca.cfg", ReadOnly: true},
 		{Name: "logback-xml", MountPath: "/etc/puppetlabs/puppetserver/logback.xml", SubPath: "logback.xml", ReadOnly: true},
 		{Name: "metrics-conf", MountPath: "/etc/puppetlabs/puppetserver/conf.d/metrics.conf", SubPath: "metrics.conf", ReadOnly: true},
-		{Name: "puppetserver-data", MountPath: "/opt/puppetlabs/server/data/puppetserver"},
+		{Name: "puppetserver-yaml", MountPath: "/opt/puppetlabs/server/data/puppetserver/yaml"},
+		{Name: "puppetserver-state", MountPath: "/opt/puppetlabs/server/data/puppetserver/state"},
+		{Name: "puppetserver-bucket", MountPath: "/opt/puppetlabs/server/data/puppetserver/bucket"},
+		{Name: "puppetserver-reports", MountPath: "/opt/puppetlabs/server/data/puppetserver/reports"},
 		{Name: "tmp", MountPath: "/tmp"},
 		{Name: "var-log", MountPath: "/var/log/puppetlabs"},
 		{Name: "var-run", MountPath: "/var/run"},
@@ -184,7 +187,10 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 
 	volumes := []corev1.Volume{
 		{Name: "ssl", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
-		{Name: "puppetserver-data", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+		{Name: "puppetserver-yaml", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+		{Name: "puppetserver-state", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+		{Name: "puppetserver-bucket", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+		{Name: "puppetserver-reports", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 		{Name: "tmp", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 		{Name: "var-log", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 		{Name: "var-run", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},

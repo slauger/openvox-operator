@@ -77,6 +77,11 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 		"openvox.voxpupuli.org/ca-secret-hash":  caHash,
 	}
 
+	// Add Config spec hash for rollout tracking
+	if cfg.Status.ConfigHash != "" {
+		annotations[AnnotationConfigSpecHash] = cfg.Status.ConfigHash
+	}
+
 	// Add code image annotation for server:true pods to trigger rollout on image change
 	if server.Spec.Server {
 		if code := resolveCode(server, cfg); code != nil && code.Image != "" {

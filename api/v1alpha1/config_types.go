@@ -262,11 +262,44 @@ type ConfigStatus struct {
 	// Conditions represent the latest available observations.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// ConfigHash is the SHA-256 hash of the current Config spec.
+	// Used to track whether Server pods are running the latest configuration.
+	// +optional
+	ConfigHash string `json:"configHash,omitempty"`
+
+	// Rollout tracks the rollout progress of configuration changes across Server pods.
+	// +optional
+	Rollout *ConfigRolloutStatus `json:"rollout,omitempty"`
+}
+
+// ConfigRolloutStatus tracks whether all Server pods are running the current Config version.
+type ConfigRolloutStatus struct {
+	// Desired is the total number of Server pods managed by this Config.
+	// +optional
+	Desired int32 `json:"desired,omitempty"`
+
+	// Updated is the number of pods running the current config hash.
+	// +optional
+	Updated int32 `json:"updated,omitempty"`
+
+	// Ready is the number of pods that are updated AND ready.
+	// +optional
+	Ready int32 `json:"ready,omitempty"`
+
+	// UpdatedPods lists names of pods running the current config hash.
+	// +optional
+	UpdatedPods []string `json:"updatedPods,omitempty"`
+
+	// PendingPods lists names of pods not yet running the current config hash.
+	// +optional
+	PendingPods []string `json:"pendingPods,omitempty"`
 }
 
 // Condition types for Config.
 const (
-	ConditionConfigReady = "ConfigReady"
+	ConditionConfigReady     = "ConfigReady"
+	ConditionRolloutComplete = "RolloutComplete"
 )
 
 // --- Shared types used by multiple CRDs ---

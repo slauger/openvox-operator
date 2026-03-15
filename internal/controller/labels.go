@@ -9,6 +9,9 @@ const (
 	LabelRole                 = "openvox.voxpupuli.org/role"
 	LabelCA                   = "openvox.voxpupuli.org/ca"
 
+	// Annotation keys.
+	AnnotationConfigSpecHash = "openvox.voxpupuli.org/config-spec-hash"
+
 	// Role values.
 	RoleCA     = "ca"
 	RoleServer = "server"

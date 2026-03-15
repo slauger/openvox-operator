@@ -128,6 +128,7 @@ func enqueuePoolsForServer(c client.Client) handler.EventHandler {
 	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []ctrl.Request {
 		pools := &openvoxv1alpha1.PoolList{}
 		if err := c.List(ctx, pools, client.InNamespace(obj.GetNamespace())); err != nil {
+			log.FromContext(ctx).Error(err, "failed to list Pools in watcher")
 			return nil
 		}
 		var requests []ctrl.Request

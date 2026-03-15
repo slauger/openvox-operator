@@ -139,7 +139,7 @@ func forward(endpoint EndpointConfig, reportJSON []byte) error {
 
 // buildHTTPClient creates an http.Client with TLS and timeout configuration.
 func buildHTTPClient(endpoint EndpointConfig) (*http.Client, error) {
-	tlsConfig := &tls.Config{}
+	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
 
 	// Load CA certificate for server verification
 	if endpoint.SSL.CAFile != "" {

@@ -235,7 +235,7 @@ func normalizeResponse(body []byte, format string) (string, error) {
 
 // buildHTTPClient creates an http.Client with TLS and timeout configuration.
 func buildHTTPClient(cfg *ENCConfig) (*http.Client, error) {
-	tlsConfig := &tls.Config{}
+	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
 
 	// Load CA certificate for server verification
 	if cfg.SSL.CAFile != "" {

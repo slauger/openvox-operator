@@ -171,13 +171,9 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 		{Name: "ca-cfg", MountPath: "/etc/puppetlabs/puppetserver/services.d/ca.cfg", SubPath: "ca.cfg", ReadOnly: true},
 		{Name: "logback-xml", MountPath: "/etc/puppetlabs/puppetserver/logback.xml", SubPath: "logback.xml", ReadOnly: true},
 		{Name: "metrics-conf", MountPath: "/etc/puppetlabs/puppetserver/conf.d/metrics.conf", SubPath: "metrics.conf", ReadOnly: true},
-		{Name: "puppetserver-yaml", MountPath: "/opt/puppetlabs/server/data/puppetserver/yaml"},
-		{Name: "puppetserver-state", MountPath: "/opt/puppetlabs/server/data/puppetserver/state"},
-		{Name: "puppetserver-bucket", MountPath: "/opt/puppetlabs/server/data/puppetserver/bucket"},
-		{Name: "puppetserver-reports", MountPath: "/opt/puppetlabs/server/data/puppetserver/reports"},
+		{Name: "puppetserver-data", MountPath: "/run/puppetserver"},
 		{Name: "tmp", MountPath: "/tmp"},
 		{Name: "var-log", MountPath: "/var/log/puppetlabs"},
-		{Name: "var-run", MountPath: "/var/run"},
 	}
 
 	// SSL: emptyDir populated by init container from secret volumes.
@@ -187,13 +183,9 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 
 	volumes := []corev1.Volume{
 		{Name: "ssl", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
-		{Name: "puppetserver-yaml", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
-		{Name: "puppetserver-state", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
-		{Name: "puppetserver-bucket", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
-		{Name: "puppetserver-reports", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+		{Name: "puppetserver-data", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 		{Name: "tmp", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 		{Name: "var-log", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
-		{Name: "var-run", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 		{
 			Name: "ssl-cert",
 			VolumeSource: corev1.VolumeSource{
@@ -449,10 +441,9 @@ chmod 640 /ssl/private_keys/puppet.pem`
 		},
 	}
 
-	readOnlyRootFilesystem := true
 	containerSecurityContext := &corev1.SecurityContext{
 		AllowPrivilegeEscalation: boolPtr(false),
-		ReadOnlyRootFilesystem:   &readOnlyRootFilesystem,
+		ReadOnlyRootFilesystem:   &cfg.Spec.ReadOnlyRootFilesystem,
 		Capabilities: &corev1.Capabilities{
 			Drop: []corev1.Capability{"ALL"},
 		},

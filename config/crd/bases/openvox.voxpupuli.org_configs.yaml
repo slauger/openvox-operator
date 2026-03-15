@@ -334,6 +334,14 @@ spec:
                     format: int32
                     type: integer
                 type: object
+              readOnlyRootFilesystem:
+                default: false
+                description: |-
+                  ReadOnlyRootFilesystem enables read-only root filesystem on all Server pods.
+                  When true, all writable paths are backed by emptyDir volumes and
+                  server-var-dir is redirected to /run/puppetserver.
+                  Experimental security hardening feature.
+                type: boolean
             required:
             - image
             type: object

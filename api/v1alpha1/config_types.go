@@ -68,6 +68,14 @@ type ConfigSpec struct {
 	// Only applied to Servers with server=true.
 	// +optional
 	Code *CodeSpec `json:"code,omitempty"`
+
+	// ReadOnlyRootFilesystem enables read-only root filesystem on all Server pods.
+	// When true, all writable paths are backed by emptyDir volumes and
+	// server-var-dir is redirected to /run/puppetserver.
+	// Experimental security hardening feature.
+	// +kubebuilder:default=false
+	// +optional
+	ReadOnlyRootFilesystem bool `json:"readOnlyRootFilesystem,omitempty"`
 }
 
 // PuppetServerSpec defines puppetserver.conf, webserver.conf and auth.conf settings.

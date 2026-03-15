@@ -10,6 +10,7 @@ import (
 // +kubebuilder:printcolumn:name="Authority",type=string,JSONPath=`.spec.authorityRef`
 // +kubebuilder:printcolumn:name="Certname",type=string,JSONPath=`.spec.certname`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
+// +kubebuilder:printcolumn:name="NotAfter",type=date,JSONPath=`.status.notAfter`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // Certificate is the Schema for the certificates API.
@@ -66,6 +67,10 @@ type CertificateStatus struct {
 	// SecretName is the name of the Secret containing cert.pem and key.pem.
 	// +optional
 	SecretName string `json:"secretName,omitempty"`
+
+	// NotAfter is the expiration time of the signed certificate.
+	// +optional
+	NotAfter *metav1.Time `json:"notAfter,omitempty"`
 
 	// Conditions represent the latest available observations.
 	// +optional

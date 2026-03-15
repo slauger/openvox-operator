@@ -3,10 +3,14 @@ package controller
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"sort"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
@@ -103,6 +107,20 @@ func findCAServiceName(ctx context.Context, reader client.Reader, ca *openvoxv1a
 	}
 
 	return ""
+}
+
+// parseCertNotAfter extracts the NotAfter time from a PEM-encoded certificate.
+func parseCertNotAfter(certPEM []byte) *metav1.Time {
+	block, _ := pem.Decode(certPEM)
+	if block == nil || block.Type != "CERTIFICATE" {
+		return nil
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil
+	}
+	t := metav1.NewTime(cert.NotAfter.UTC().Truncate(time.Second))
+	return &t
 }
 
 // resolveCode determines the code source for a Server.

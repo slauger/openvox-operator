@@ -110,6 +110,7 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 	caSecretName := fmt.Sprintf("%s-ca", ca.Name)
 	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseReady
 	ca.Status.CASecretName = caSecretName
+	ca.Status.NotAfter = r.extractCANotAfter(ctx, caSecretName, ca.Namespace)
 	meta.SetStatusCondition(&ca.Status.Conditions, metav1.Condition{
 		Type:               openvoxv1alpha1.ConditionCAReady,
 		Status:             metav1.ConditionTrue,
@@ -852,6 +853,15 @@ func (r *CertificateAuthorityReconciler) deleteAndRequeueJob(ctx context.Context
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+}
+
+// extractCANotAfter reads the ca_crt.pem from the CA Secret and returns its NotAfter time.
+func (r *CertificateAuthorityReconciler) extractCANotAfter(ctx context.Context, secretName, namespace string) *metav1.Time {
+	secret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret); err != nil {
+		return nil
+	}
+	return parseCertNotAfter(secret.Data["ca_crt.pem"])
 }
 
 func (r *CertificateAuthorityReconciler) isSecretReady(ctx context.Context, name, namespace, requiredKey string) bool {

@@ -8,6 +8,7 @@ import (
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=ca
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
+// +kubebuilder:printcolumn:name="NotAfter",type=date,JSONPath=`.status.notAfter`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // CertificateAuthority is the Schema for the certificateauthorities API.
@@ -103,6 +104,10 @@ type CertificateAuthorityStatus struct {
 	// The CA private key is stored separately in {name}-ca-key, and CRLs in {name}-ca-crl.
 	// +optional
 	CASecretName string `json:"caSecretName,omitempty"`
+
+	// NotAfter is the expiration time of the CA certificate.
+	// +optional
+	NotAfter *metav1.Time `json:"notAfter,omitempty"`
 
 	// Conditions represent the latest available observations.
 	// +optional

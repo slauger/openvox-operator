@@ -90,6 +90,7 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 		cert.Status.Phase = openvoxv1alpha1.CertificatePhaseSigned
 		cert.Status.SecretName = tlsSecretName
+		cert.Status.NotAfter = r.extractNotAfter(ctx, tlsSecretName, cert.Namespace)
 		meta.SetStatusCondition(&cert.Status.Conditions, metav1.Condition{
 			Type:               openvoxv1alpha1.ConditionCertSigned,
 			Status:             metav1.ConditionTrue,
@@ -162,6 +163,7 @@ func (r *CertificateReconciler) reconcileCertSigning(ctx context.Context, cert *
 	tlsSecretName := fmt.Sprintf("%s-tls", cert.Name)
 	cert.Status.Phase = openvoxv1alpha1.CertificatePhaseSigned
 	cert.Status.SecretName = tlsSecretName
+	cert.Status.NotAfter = r.extractNotAfter(ctx, tlsSecretName, cert.Namespace)
 	meta.SetStatusCondition(&cert.Status.Conditions, metav1.Condition{
 		Type:               openvoxv1alpha1.ConditionCertSigned,
 		Status:             metav1.ConditionTrue,
@@ -227,6 +229,15 @@ func (r *CertificateReconciler) adoptTLSSecret(ctx context.Context, cert *openvo
 		return err
 	}
 	return r.Update(ctx, secret)
+}
+
+// extractNotAfter reads the cert.pem from a TLS Secret and returns its NotAfter time.
+func (r *CertificateReconciler) extractNotAfter(ctx context.Context, secretName, namespace string) *metav1.Time {
+	secret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret); err != nil {
+		return nil
+	}
+	return parseCertNotAfter(secret.Data["cert.pem"])
 }
 
 func (r *CertificateReconciler) isSecretReady(ctx context.Context, name, namespace, requiredKey string) bool {

@@ -20,6 +20,9 @@ spec:
     - jsonPath: .status.phase
       name: Phase
       type: string
+    - jsonPath: .status.notAfter
+      name: NotAfter
+      type: date
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -185,6 +188,10 @@ spec:
                   - type
                   type: object
                 type: array
+              notAfter:
+                description: NotAfter is the expiration time of the CA certificate.
+                format: date-time
+                type: string
               phase:
                 description: Phase is the current lifecycle phase.
                 enum:

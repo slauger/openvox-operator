@@ -129,6 +129,11 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, fmt.Errorf("reconciling HPA: %w", err)
 	}
 
+	// Re-fetch server to avoid conflict errors from concurrent reconciliations
+	if err := r.Get(ctx, req.NamespacedName, server); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// Update status
 	replicas := int32(1)
 	if server.Spec.Replicas != nil {

@@ -17,4 +17,6 @@ RUN rpm -Uvh https://yum.voxpupuli.org/openvox8-release-el-9.noarch.rpm \
     && dnf install -y --setopt=install_weak_deps=False openvox-agent-${OPENVOX_AGENT_VERSION} \
     && dnf clean all
 
+ENV PATH="/opt/puppetlabs/bin:${PATH}"
+
 ENTRYPOINT ["/opt/puppetlabs/bin/puppet"]

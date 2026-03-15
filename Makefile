@@ -160,6 +160,7 @@ IMAGE_REGISTRY ?= ghcr.io/slauger
 IMAGE_TAG ?= $(LOCAL_TAG)
 
 E2E_CHAINSAW = IMAGE_TAG=$(IMAGE_TAG) IMAGE_REGISTRY=$(IMAGE_REGISTRY) $(CHAINSAW) test --config tests/e2e/chainsaw-config.yaml
+E2E_SKIP_CLEANUP ?= false
 
 .PHONY: e2e-operator
 e2e-operator: ## Deploy operator for E2E tests.
@@ -171,21 +172,30 @@ e2e-operator: ## Deploy operator for E2E tests.
 	kubectl wait --for=condition=Available deployment/openvox-operator \
 		-n $(NAMESPACE) --timeout=2m
 
+.PHONY: e2e-cleanup
+e2e-cleanup: ## Remove operator after E2E tests.
+	@if [ "$(E2E_SKIP_CLEANUP)" = "true" ]; then \
+		echo "Skipping operator cleanup (E2E_SKIP_CLEANUP=true)"; \
+	else \
+		helm uninstall openvox-operator --namespace $(NAMESPACE) --wait 2>/dev/null || true; \
+		kubectl delete namespace $(NAMESPACE) --ignore-not-found 2>/dev/null || true; \
+	fi
+
 .PHONY: e2e
 e2e: e2e-operator ## Run all E2E tests.
-	$(E2E_CHAINSAW) tests/e2e/
+	$(E2E_CHAINSAW) tests/e2e/; EXIT=$$?; $(MAKE) e2e-cleanup; exit $$EXIT
 
 .PHONY: e2e-stack
 e2e-stack: e2e-operator ## Run stack deployment tests (single-node, multi-server).
-	$(E2E_CHAINSAW) tests/e2e/single-node tests/e2e/multi-server
+	$(E2E_CHAINSAW) tests/e2e/single-node tests/e2e/multi-server; EXIT=$$?; $(MAKE) e2e-cleanup; exit $$EXIT
 
 .PHONY: e2e-agent
 e2e-agent: e2e-operator ## Run agent tests (basic, broken, idempotent, concurrent).
-	$(E2E_CHAINSAW) tests/e2e/agent-basic tests/e2e/agent-broken tests/e2e/agent-idempotent tests/e2e/agent-concurrent
+	$(E2E_CHAINSAW) tests/e2e/agent-basic tests/e2e/agent-broken tests/e2e/agent-idempotent tests/e2e/agent-concurrent; EXIT=$$?; $(MAKE) e2e-cleanup; exit $$EXIT
 
 .PHONY: e2e-integration
 e2e-integration: e2e-operator ## Run integration tests (enc, report, full).
-	$(E2E_CHAINSAW) tests/e2e/agent-enc tests/e2e/agent-report tests/e2e/agent-full
+	$(E2E_CHAINSAW) tests/e2e/agent-enc tests/e2e/agent-report tests/e2e/agent-full; EXIT=$$?; $(MAKE) e2e-cleanup; exit $$EXIT
 
 ##@ Help
 

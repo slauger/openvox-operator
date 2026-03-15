@@ -365,341 +365,56 @@ func (r *ConfigReconciler) renderPuppetserverConf(cfg *openvoxv1alpha1.Config) s
 
 func (r *ConfigReconciler) renderAuthConf(cfg *openvoxv1alpha1.Config) string {
 	var sb strings.Builder
-	sb.WriteString(`authorization: {
-    version: 1
-    rules: [
-        {
-            match-request: {
-                path: "^/puppet/v3/catalog/([^/]+)$"
-                type: regex
-                method: [get, post]
-            }
-            allow: "$1"
-            sort-order: 500
-            name: "puppetlabs v3 catalog from agents"
-        },
-        {
-            match-request: {
-                path: "^/puppet/v4/catalog/?$"
-                type: regex
-                method: post
-            }
-            deny: "*"
-            sort-order: 500
-            name: "puppetlabs v4 catalog for services"
-        },
-        {
-            match-request: {
-                path: "/puppet-ca/v1/certificate/"
-                type: path
-                method: get
-            }
-            allow-unauthenticated: true
-            sort-order: 500
-            name: "puppetlabs certificate"
-        },
-        {
-            match-request: {
-                path: "/puppet-ca/v1/certificate_revocation_list/ca"
-                type: path
-                method: get
-            }
-            allow-unauthenticated: true
-            sort-order: 500
-            name: "puppetlabs crl"
-        },
-        {
-            match-request: {
-                path: "/puppet-ca/v1/certificate_request"
-                type: path
-                method: [get, put]
-            }
-            allow-unauthenticated: true
-            sort-order: 500
-            name: "puppetlabs csr"
-        },
-        {
-            match-request: {
-                path: "/puppet-ca/v1/certificate_renewal"
-                type: path
-                method: post
-            }
-            allow: "*"
-            sort-order: 500
-            name: "puppetlabs certificate renewal"
-        },
-        {
-            match-request: {
-                path: "/puppet-ca/v1/certificate_status"
-                type: path
-                method: [get, put, delete]
-            }
-            allow: {
-               extensions: {
-                   pp_cli_auth: "true"
-               }
-            }
-            sort-order: 500
-            name: "puppetlabs cert status"
-        },
-        {
-            match-request: {
-                path: "^/puppet-ca/v1/certificate_revocation_list$"
-                type: regex
-                method: put
-            }
-            allow: {
-               extensions: {
-                   pp_cli_auth: "true"
-               }
-            }
-            sort-order: 500
-            name: "puppetlabs CRL update"
-        },
-        {
-            match-request: {
-                path: "/puppet-ca/v1/certificate_statuses"
-                type: path
-                method: get
-            }
-            allow: {
-               extensions: {
-                   pp_cli_auth: "true"
-               }
-            }
-            sort-order: 500
-            name: "puppetlabs cert statuses"
-        },
-        {
-            match-request: {
-                path: "/puppet-ca/v1/expirations"
-                type: path
-                method: get
-            }
-            allow: "*"
-            sort-order: 500
-            name: "puppetlabs CA cert and CRL expirations"
-        },
-        {
-            match-request: {
-                path: "/puppet-ca/v1/clean"
-                type: path
-                method: put
-            }
-            allow: {
-               extensions: {
-                   pp_cli_auth: "true"
-               }
-            }
-            sort-order: 500
-            name: "puppetlabs cert clean"
-        },
-        {
-            match-request: {
-                path: "/puppet-ca/v1/sign"
-                type: path
-                method: post
-            }
-            allow: {
-               extensions: {
-                   pp_cli_auth: "true"
-               }
-            }
-            sort-order: 500
-            name: "puppetlabs cert sign"
-        },
-        {
-            match-request: {
-                path: "/puppet-ca/v1/sign/all"
-                type: path
-                method: post
-            }
-            allow: {
-               extensions: {
-                   pp_cli_auth: "true"
-               }
-            }
-            sort-order: 500
-            name: "puppetlabs cert sign all"
-        },
-        {
-            match-request: {
-                path: "/status/v1/services"
-                type: path
-                method: get
-            }
-            allow-unauthenticated: true
-            sort-order: 500
-            name: "puppetlabs status service - full"
-        },
-        {
-            match-request: {
-                path: "/status/v1/simple"
-                type: path
-                method: get
-            }
-            allow-unauthenticated: true
-            sort-order: 500
-            name: "puppetlabs status service - simple"
-        },
-        {
-            match-request: {
-                path: "/puppet/v3/environments"
-                type: path
-                method: get
-            }
-            allow: "*"
-            sort-order: 500
-            name: "puppetlabs environments"
-        },
-        {
-            match-request: {
-                path: "/puppet/v3/file_bucket_file"
-                type: path
-                method: [get, head, post, put]
-            }
-            allow: "*"
-            sort-order: 500
-            name: "puppetlabs file bucket file"
-        },
-        {
-            match-request: {
-                path: "/puppet/v3/file_content"
-                type: path
-                method: [get, post]
-            }
-            allow: "*"
-            sort-order: 500
-            name: "puppetlabs file content"
-        },
-        {
-            match-request: {
-                path: "/puppet/v3/file_metadata"
-                type: path
-                method: [get, post]
-            }
-            allow: "*"
-            sort-order: 500
-            name: "puppetlabs file metadata"
-        },
-        {
-            match-request: {
-                path: "^/puppet/v3/node/([^/]+)$"
-                type: regex
-                method: get
-            }
-            allow: "$1"
-            sort-order: 500
-            name: "puppetlabs node"
-        },
-        {
-            match-request: {
-                path: "^/puppet/v3/report/([^/]+)$"
-                type: regex
-                method: put
-            }
-            allow: "$1"
-            sort-order: 500
-            name: "puppetlabs report"
-        },
-        {
-            match-request: {
-                path: "^/puppet/v3/facts/([^/]+)$"
-                type: regex
-                method: put
-            }
-            allow: "$1"
-            sort-order: 500
-            name: "puppetlabs facts"
-        },
-        {
-            match-request: {
-                path: "/puppet/v3/static_file_content"
-                type: path
-                method: get
-            }
-            allow: "*"
-            sort-order: 500
-            name: "puppetlabs static file content"
-        },
-        {
-            match-request: {
-                path: "/puppet/v3/tasks"
-                type: path
-            }
-            allow: "*"
-            sort-order: 500
-            name: "puppet tasks information"
-        },
-        {
-            match-request: {
-                path: "/"
-                type: path
-            }
-            deny: "*"
-            sort-order: 999
-            name: "puppetlabs deny all"
-        }
-    ]
-}
-`)
+	sb.WriteString("authorization: {\n    version: 1\n    rules: [\n")
 
-	// Insert custom authorization rules before the deny-all rule
-	if len(cfg.Spec.PuppetServer.AuthorizationRules) > 0 {
-		sb.Reset()
-		sb.WriteString("authorization: {\n    version: 1\n    rules: [\n")
+	// Built-in rules (always included)
+	sb.WriteString(r.builtinAuthRules())
 
-		// Re-emit the built-in rules (everything before deny-all is static)
-		builtinRules := r.builtinAuthRules()
-		sb.WriteString(builtinRules)
-
-		// Append custom rules
-		for _, rule := range cfg.Spec.PuppetServer.AuthorizationRules {
-			sb.WriteString("        {\n")
-			sb.WriteString("            match-request: {\n")
-			fmt.Fprintf(&sb, "                path: %q\n", rule.MatchRequest.Path)
-			matchType := rule.MatchRequest.Type
-			if matchType == "" {
-				matchType = "path"
-			}
-			fmt.Fprintf(&sb, "                type: %s\n", matchType)
-			if len(rule.MatchRequest.Method) > 0 {
-				if len(rule.MatchRequest.Method) == 1 {
-					fmt.Fprintf(&sb, "                method: %s\n", rule.MatchRequest.Method[0])
-				} else {
-					fmt.Fprintf(&sb, "                method: [%s]\n", strings.Join(rule.MatchRequest.Method, ", "))
-				}
-			}
-			sb.WriteString("            }\n")
-			if rule.AllowUnauthenticated {
-				sb.WriteString("            allow-unauthenticated: true\n")
-			} else if rule.Allow != "" {
-				fmt.Fprintf(&sb, "            allow: %q\n", rule.Allow)
-			} else if rule.Deny != "" {
-				fmt.Fprintf(&sb, "            deny: %q\n", rule.Deny)
-			}
-			sortOrder := rule.SortOrder
-			if sortOrder == 0 {
-				sortOrder = 500
-			}
-			fmt.Fprintf(&sb, "            sort-order: %d\n", sortOrder)
-			fmt.Fprintf(&sb, "            name: %q\n", rule.Name)
-			sb.WriteString("        },\n")
-		}
-
-		// Deny-all rule (always last)
+	// Custom authorization rules (inserted before the deny-all rule)
+	for _, rule := range cfg.Spec.PuppetServer.AuthorizationRules {
 		sb.WriteString("        {\n")
 		sb.WriteString("            match-request: {\n")
-		sb.WriteString("                path: \"/\"\n")
-		sb.WriteString("                type: path\n")
+		fmt.Fprintf(&sb, "                path: %q\n", rule.MatchRequest.Path)
+		matchType := rule.MatchRequest.Type
+		if matchType == "" {
+			matchType = "path"
+		}
+		fmt.Fprintf(&sb, "                type: %s\n", matchType)
+		if len(rule.MatchRequest.Method) > 0 {
+			if len(rule.MatchRequest.Method) == 1 {
+				fmt.Fprintf(&sb, "                method: %s\n", rule.MatchRequest.Method[0])
+			} else {
+				fmt.Fprintf(&sb, "                method: [%s]\n", strings.Join(rule.MatchRequest.Method, ", "))
+			}
+		}
 		sb.WriteString("            }\n")
-		sb.WriteString("            deny: \"*\"\n")
-		sb.WriteString("            sort-order: 999\n")
-		sb.WriteString("            name: \"puppetlabs deny all\"\n")
-		sb.WriteString("        }\n")
-		sb.WriteString("    ]\n}\n")
-		return sb.String()
+		if rule.AllowUnauthenticated {
+			sb.WriteString("            allow-unauthenticated: true\n")
+		} else if rule.Allow != "" {
+			fmt.Fprintf(&sb, "            allow: %q\n", rule.Allow)
+		} else if rule.Deny != "" {
+			fmt.Fprintf(&sb, "            deny: %q\n", rule.Deny)
+		}
+		sortOrder := rule.SortOrder
+		if sortOrder == 0 {
+			sortOrder = 500
+		}
+		fmt.Fprintf(&sb, "            sort-order: %d\n", sortOrder)
+		fmt.Fprintf(&sb, "            name: %q\n", rule.Name)
+		sb.WriteString("        },\n")
 	}
+
+	// Deny-all rule (always last)
+	sb.WriteString("        {\n")
+	sb.WriteString("            match-request: {\n")
+	sb.WriteString("                path: \"/\"\n")
+	sb.WriteString("                type: path\n")
+	sb.WriteString("            }\n")
+	sb.WriteString("            deny: \"*\"\n")
+	sb.WriteString("            sort-order: 999\n")
+	sb.WriteString("            name: \"puppetlabs deny all\"\n")
+	sb.WriteString("        }\n")
+	sb.WriteString("    ]\n}\n")
 
 	return sb.String()
 }

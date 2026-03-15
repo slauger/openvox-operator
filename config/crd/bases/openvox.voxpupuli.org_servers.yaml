@@ -1077,7 +1077,7 @@ spec:
                 description: JavaArgs defines the JVM arguments.
                 type: string
               maxActiveInstances:
-                default: 2
+                default: 1
                 description: MaxActiveInstances is the number of JRuby instances per
                   Pod.
                 format: int32

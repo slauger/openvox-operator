@@ -340,7 +340,7 @@ func (r *ConfigReconciler) renderPuppetserverConf(cfg *openvoxv1alpha1.Config) s
 	sb.WriteString("    master-var-dir: /opt/puppetlabs/server/data/puppetserver\n")
 	sb.WriteString("    master-run-dir: /var/run/puppetlabs/puppetserver\n")
 	sb.WriteString("    master-log-dir: /var/log/puppetlabs/puppetserver\n")
-	sb.WriteString("    max-active-instances: 2\n")
+	sb.WriteString("    max-active-instances: 1\n")
 	fmt.Fprintf(&sb, "    max-requests-per-instance: %d\n", maxRequests)
 	fmt.Fprintf(&sb, "    borrow-timeout: %d\n", borrowTimeout)
 	fmt.Fprintf(&sb, "    compile-mode: %s\n", compileMode)

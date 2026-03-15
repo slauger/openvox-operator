@@ -28,10 +28,14 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 
 	javaArgs := resolveJavaArgs(server)
 	// Override max-active-instances via JVM system property.
-	// The ConfigMap sets max-active-instances: 1 as a safe default,
+	// The ConfigMap sets max-active-instances: 2 as a safe default,
 	// but each Server can specify its own value. HOCON's Typesafe Config
 	// library resolves -D system properties as overrides.
-	javaArgs = fmt.Sprintf("%s -Djruby-puppet.max-active-instances=%d", javaArgs, server.Spec.MaxActiveInstances)
+	maxActive := server.Spec.MaxActiveInstances
+	if maxActive <= 0 {
+		maxActive = 1
+	}
+	javaArgs = fmt.Sprintf("%s -Djruby-puppet.max-active-instances=%d", javaArgs, maxActive)
 
 	role := RoleServer
 	if server.Spec.CA && !server.Spec.Server {

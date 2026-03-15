@@ -82,7 +82,7 @@ type ServerSpec struct {
 	JavaArgs string `json:"javaArgs,omitempty"`
 
 	// MaxActiveInstances is the number of JRuby instances per Pod.
-	// +kubebuilder:default=2
+	// +kubebuilder:default=1
 	// +optional
 	MaxActiveInstances int32 `json:"maxActiveInstances,omitempty"`
 

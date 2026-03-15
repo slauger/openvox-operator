@@ -64,15 +64,22 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			if err := r.List(ctx, allPools, client.InNamespace(pool.Namespace)); err != nil {
 				return ctrl.Result{}, fmt.Errorf("listing Pools for hostname conflict check: %w", err)
 			}
+			hasConflict := false
 			for i := range allPools.Items {
 				other := &allPools.Items[i]
 				if other.Name == pool.Name {
 					continue
 				}
 				if other.Spec.Route != nil && other.Spec.Route.Enabled && other.Spec.Route.Hostname == pool.Spec.Route.Hostname {
-					logger.Info("hostname conflict: another Pool uses the same hostname",
-						"conflictingPool", other.Name, "hostname", pool.Spec.Route.Hostname)
+					logger.Error(fmt.Errorf("hostname %q already used by Pool %q", pool.Spec.Route.Hostname, other.Name),
+						"hostname conflict detected, skipping TLSRoute reconciliation")
+					hasConflict = true
+					break
 				}
+			}
+
+			if hasConflict {
+				return ctrl.Result{}, fmt.Errorf("hostname conflict: %q is already used by another Pool", pool.Spec.Route.Hostname)
 			}
 
 			if err := r.reconcileTLSRoute(ctx, pool); err != nil {
@@ -371,6 +378,16 @@ func (r *PoolReconciler) injectDNSAltNames(ctx context.Context, pool *openvoxv1a
 		cert.Spec.DNSAltNames = append(cert.Spec.DNSAltNames, hostname)
 		if err := r.Update(ctx, cert); err != nil {
 			return fmt.Errorf("updating Certificate %s: %w", cert.Name, err)
+		}
+
+		// Reset certificate phase to trigger re-signing with the new alt name
+		if cert.Status.Phase == openvoxv1alpha1.CertificatePhaseSigned {
+			cert.Status.Phase = openvoxv1alpha1.CertificatePhasePending
+			if err := r.Status().Update(ctx, cert); err != nil {
+				return fmt.Errorf("resetting Certificate %s phase: %w", cert.Name, err)
+			}
+			logger.Info("reset Certificate phase to Pending for re-signing",
+				"certificate", cert.Name)
 		}
 	}
 

@@ -57,7 +57,7 @@ type ExternalCASpec struct {
 }
 
 // CertificateAuthoritySpec defines the desired state of CertificateAuthority.
-// +kubebuilder:validation:XValidation:rule="!(has(self.external) && has(self.storage) && self.storage.size != '' && self.storage.size != '1Gi')",message="external and custom storage are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(has(self.external) && has(self.storage) && size(self.storage.size) > 0 && self.storage.size != '1Gi')",message="external and custom storage are mutually exclusive"
 type CertificateAuthoritySpec struct {
 	// TTL is the CA certificate TTL as a duration string.
 	// Supported units: s (seconds), m (minutes), h (hours), d (days), y (years).

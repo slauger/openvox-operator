@@ -216,8 +216,8 @@ spec:
             type: object
             x-kubernetes-validations:
             - message: external and custom storage are mutually exclusive
-              rule: '!(has(self.external) && has(self.storage) && self.storage.size
-                != '''' && self.storage.size != ''1Gi'')'
+              rule: '!(has(self.external) && has(self.storage) && size(self.storage.size)
+                > 0 && self.storage.size != ''1Gi'')'
           status:
             description: CertificateAuthorityStatus defines the observed state of
               CertificateAuthority.

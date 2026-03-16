@@ -150,7 +150,7 @@ func (in *CertificateAuthority) DeepCopyInto(out *CertificateAuthority) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
 	in.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
-	out.Spec = in.Spec
+	in.Spec.DeepCopyInto(&out.Spec)
 	in.Status.DeepCopyInto(&out.Status)
 }
 
@@ -208,6 +208,7 @@ func (in *CertificateAuthorityList) DeepCopyObject() runtime.Object {
 func (in *CertificateAuthoritySpec) DeepCopyInto(out *CertificateAuthoritySpec) {
 	*out = *in
 	out.Storage = in.Storage
+	in.Resources.DeepCopyInto(&out.Resources)
 	out.IntermediateCA = in.IntermediateCA
 }
 

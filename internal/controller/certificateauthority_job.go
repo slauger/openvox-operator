@@ -8,6 +8,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -173,6 +174,7 @@ func (r *CertificateAuthorityReconciler) buildCASetupJob(ctx context.Context, ca
 							ImagePullPolicy: cfg.Spec.Image.PullPolicy,
 							Command:         []string{"/bin/bash", "-c", script},
 							Env:             envVars,
+							Resources:       resolveCAJobResources(ca),
 							VolumeMounts: []corev1.VolumeMount{
 								{Name: "ca-data", MountPath: "/etc/puppetlabs/puppetserver/ca"},
 								{Name: "ssl", MountPath: "/etc/puppetlabs/puppet/ssl"},
@@ -227,6 +229,23 @@ func (r *CertificateAuthorityReconciler) buildCASetupJob(ctx context.Context, ca
 					},
 				},
 			},
+		},
+	}
+}
+
+// resolveCAJobResources returns the user-specified resources or sensible defaults for the JVM-based CA setup Job.
+func resolveCAJobResources(ca *openvoxv1alpha1.CertificateAuthority) corev1.ResourceRequirements {
+	if len(ca.Spec.Resources.Requests) > 0 || len(ca.Spec.Resources.Limits) > 0 {
+		return ca.Spec.Resources
+	}
+	return corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse(DefaultCAJobCPURequest),
+			corev1.ResourceMemory: resource.MustParse(DefaultCAJobMemoryRequest),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse(DefaultCAJobCPULimit),
+			corev1.ResourceMemory: resource.MustParse(DefaultCAJobMemoryLimit),
 		},
 	}
 }

@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -70,6 +71,11 @@ type CertificateAuthoritySpec struct {
 	// Storage defines the PVC settings for CA data.
 	// +optional
 	Storage StorageSpec `json:"storage,omitempty"`
+
+	// Resources defines the compute resources for the CA setup Job.
+	// If not specified, defaults are applied (requests: 200m CPU, 768Mi memory; limits: 1 CPU, 1Gi memory).
+	// +optional
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 
 	// CRLRefreshInterval defines how often the operator fetches the CRL from the CA
 	// and updates the CRL Secret. Only applies to non-CA servers.

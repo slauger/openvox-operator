@@ -28,6 +28,7 @@ Autosigning is configured via [SigningPolicy](signingpolicy.md) resources that r
 | `allowAutoRenewal` | bool | `true` | Allow agents to automatically renew certificates before expiry |
 | `autoRenewalCertTTL` | string | `90d` | TTL threshold for automatic certificate renewal (duration: `90d`, `30d`, `2160h`) |
 | `crlRefreshInterval` | string | `5m` | How often the operator refreshes the CRL Secret from the CA (Go duration: `5m`, `1h`, `30s`) |
+| `resources` | [ResourceRequirements](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#resources) | requests: 200m/768Mi, limits: 1/1Gi | Compute resources for the CA setup Job |
 | `storage` | [StorageSpec](index.md#storagespec) | - | PVC settings for CA data |
 | `intermediateCA` | [IntermediateCASpec](#intermediatecaspec) | - | Intermediate CA configuration |
 

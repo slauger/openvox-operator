@@ -32,6 +32,14 @@ const (
 	ServerRunAsGroup    = int64(0)
 )
 
+// CA setup Job resource defaults (JRuby/JVM workload).
+const (
+	DefaultCAJobCPURequest    = "200m"
+	DefaultCAJobMemoryRequest = "768Mi"
+	DefaultCAJobCPULimit      = "1"
+	DefaultCAJobMemoryLimit   = "1Gi"
+)
+
 // HPA and PDB defaults for Server resources.
 const (
 	DefaultHPAMaxReplicas = int32(5)

@@ -102,6 +102,9 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{}, err
 		}
 		r.Recorder.Eventf(cert, nil, corev1.EventTypeNormal, EventReasonCertificateSigned, "Reconcile", "Certificate signed and available in Secret %s", tlsSecretName)
+		if cert.Status.NotAfter == nil {
+			return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
+		}
 		return ctrl.Result{}, nil
 	}
 
@@ -175,6 +178,9 @@ func (r *CertificateReconciler) reconcileCertSigning(ctx context.Context, cert *
 		return ctrl.Result{}, err
 	}
 
+	if cert.Status.NotAfter == nil {
+		return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
+	}
 	return ctrl.Result{}, nil
 }
 

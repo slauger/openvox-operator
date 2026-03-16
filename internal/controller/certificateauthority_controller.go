@@ -119,6 +119,12 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 		r.Recorder.Eventf(ca, nil, corev1.EventTypeNormal, EventReasonCAInitialized, "Reconcile", "CA is initialized and ready")
 	}
 
+	// Requeue if NotAfter could not be extracted (informer cache may not have synced yet)
+	if ca.Status.NotAfter == nil {
+		logger.Info("NotAfter not yet available, requeueing", "secret", caSecretName)
+		return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
+	}
+
 	// Periodic CRL refresh: fetch CRL from CA service and update the CRL secret
 	crlResult, err := r.reconcileCRLRefresh(ctx, ca)
 	if err != nil {

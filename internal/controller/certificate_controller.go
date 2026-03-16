@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -77,7 +76,7 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if statusErr := r.Status().Update(ctx, cert); statusErr != nil {
 			logger.Error(statusErr, "failed to update Certificate status", "name", cert.Name)
 		}
-		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: RequeueIntervalMedium}, nil
 	}
 
 	tlsSecretName := fmt.Sprintf("%s-tls", cert.Name)
@@ -126,7 +125,7 @@ func (r *CertificateReconciler) reconcileCertSigning(ctx context.Context, cert *
 	caServiceName := findCAServiceName(ctx, r.Client, ca, cert.Namespace)
 	if caServiceName == "" {
 		logger.Info("waiting for CA server to become available")
-		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: RequeueIntervalMedium}, nil
 	}
 
 	cert.Status.Phase = openvoxv1alpha1.CertificatePhaseRequesting
@@ -151,7 +150,7 @@ func (r *CertificateReconciler) reconcileCertSigning(ctx context.Context, cert *
 		if result.RequeueAfter > 0 {
 			return result, nil
 		}
-		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: RequeueIntervalLong}, nil
 	}
 
 	if result.RequeueAfter > 0 {

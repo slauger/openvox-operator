@@ -77,7 +77,7 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 	cfg := r.findConfigForCA(ctx, ca)
 	if cfg == nil {
 		logger.Info("waiting for a Config with authorityRef pointing to this CA", "ca", ca.Name)
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 	}
 
 	// Step 1: Ensure CA data PVC exists
@@ -132,7 +132,7 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 	if err != nil {
 		logger.Info("CRL refresh failed, will retry", "error", err)
 		r.Recorder.Eventf(ca, nil, corev1.EventTypeWarning, EventReasonCRLRefreshFailed, "Reconcile", "CRL refresh failed: %v", err)
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: RequeueIntervalCRL}, nil
 	}
 	return crlResult, nil
 }
@@ -189,7 +189,7 @@ func (r *CertificateAuthorityReconciler) SetupWithManager(mgr ctrl.Manager) erro
 func (r *CertificateAuthorityReconciler) reconcileCRLRefresh(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	interval := 5 * time.Minute
+	interval := DefaultCRLRefreshInterval
 	if ca.Spec.CRLRefreshInterval != "" {
 		parsed, err := time.ParseDuration(ca.Spec.CRLRefreshInterval)
 		if err != nil {
@@ -222,7 +222,7 @@ func (r *CertificateAuthorityReconciler) reconcileCRLRefresh(ctx context.Context
 // fetchCRL retrieves the CRL from the CA HTTP API.
 func (r *CertificateAuthorityReconciler) fetchCRL(ctx context.Context, caServiceName, namespace string) ([]byte, error) {
 	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: HTTPClientTimeout,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // internal CA
 		},
@@ -241,7 +241,7 @@ func (r *CertificateAuthorityReconciler) fetchCRL(ctx context.Context, caService
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, HTTPBodyLimit))
 	if err != nil {
 		return nil, fmt.Errorf("reading CRL response: %w", err)
 	}
@@ -290,7 +290,7 @@ func (r *CertificateAuthorityReconciler) reconcileCAPVC(ctx context.Context, ca 
 	pvc := &corev1.PersistentVolumeClaim{}
 	err := r.Get(ctx, types.NamespacedName{Name: pvcName, Namespace: ca.Namespace}, pvc)
 	if errors.IsNotFound(err) {
-		storageSize := "1Gi"
+		storageSize := DefaultCAStorageGi
 		if ca.Spec.Storage.Size != "" {
 			storageSize = ca.Spec.Storage.Size
 		}
@@ -538,7 +538,7 @@ func (r *CertificateAuthorityReconciler) reconcileCASetupJob(ctx context.Context
 
 func (r *CertificateAuthorityReconciler) buildCASetupJob(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, cfg *openvoxv1alpha1.Config, jobName string, certs []openvoxv1alpha1.Certificate) *batchv1.Job {
 	image := fmt.Sprintf("%s:%s", cfg.Spec.Image.Repository, cfg.Spec.Image.Tag)
-	backoffLimit := int32(3)
+	backoffLimit := CAJobBackoffLimit
 	saName := fmt.Sprintf("%s-ca-setup", ca.Name)
 	caSecretName := fmt.Sprintf("%s-ca", ca.Name)
 	labels := caLabels(ca.Name)
@@ -590,8 +590,8 @@ func (r *CertificateAuthorityReconciler) buildCASetupJob(ctx context.Context, ca
 					ServiceAccountName: saName,
 					RestartPolicy:      corev1.RestartPolicyNever,
 					SecurityContext: &corev1.PodSecurityContext{
-						RunAsUser:    int64Ptr(1001),
-						RunAsGroup:   int64Ptr(0),
+						RunAsUser:    int64Ptr(CASetupRunAsUser),
+						RunAsGroup:   int64Ptr(CASetupRunAsGroup),
 						RunAsNonRoot: boolPtr(true),
 						SeccompProfile: &corev1.SeccompProfile{
 							Type: corev1.SeccompProfileTypeRuntimeDefault,
@@ -812,7 +812,7 @@ func (r *CertificateAuthorityReconciler) reconcileJob(ctx context.Context, ca *o
 		if err := r.Create(ctx, desiredJob); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: RequeueIntervalMedium}, nil
 	} else if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -843,7 +843,7 @@ func (r *CertificateAuthorityReconciler) reconcileJob(ctx context.Context, ca *o
 		}
 	}
 
-	return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+	return ctrl.Result{RequeueAfter: RequeueIntervalLong}, nil
 }
 
 func (r *CertificateAuthorityReconciler) deleteAndRequeueJob(ctx context.Context, job *batchv1.Job, reason string) (ctrl.Result, error) {
@@ -852,7 +852,7 @@ func (r *CertificateAuthorityReconciler) deleteAndRequeueJob(ctx context.Context
 	if err := r.Delete(ctx, job, &client.DeleteOptions{PropagationPolicy: &propagation}); err != nil {
 		return ctrl.Result{}, err
 	}
-	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	return ctrl.Result{RequeueAfter: RequeueIntervalMedium}, nil
 }
 
 // extractCANotAfter reads the ca_crt.pem from the CA Secret and returns its NotAfter time.

@@ -6,25 +6,9 @@ NodeClassifier is a standalone resource referenced by Config via `nodeClassifier
 
 ## Example
 
-### Foreman (GET, mTLS)
+### Foreman
 
-```yaml
-apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: NodeClassifier
-metadata:
-  name: foreman
-spec:
-  url: https://foreman.example.com
-  request:
-    method: GET
-    path: /node/{certname}
-  response:
-    format: yaml
-  auth:
-    mtls: true
-  cache:
-    enabled: true
-```
+Foreman is not directly compatible with the `NodeClassifier` CRD. See [#26](https://github.com/slauger/openvox-operator/issues/26) and the [External Node Classification](../concepts/external-node-classification.md#foreman) guide for details.
 
 ### Puppet Enterprise (POST, Token Auth)
 

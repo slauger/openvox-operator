@@ -24,52 +24,6 @@ The `openvox-enc` binary is a static Go binary shipped in the openvox-server con
 
 ## Supported Classifiers
 
-### Foreman
-
-Foreman provides an ENC endpoint that returns YAML. It supports both simple GET requests with mTLS (using Puppet certificates) and the v2 API with Basic Auth.
-
-**GET with mTLS (classic):**
-
-```yaml
-apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: NodeClassifier
-metadata:
-  name: foreman
-spec:
-  url: https://foreman.example.com
-  request:
-    method: GET
-    path: /node/{certname}
-  response:
-    format: yaml
-  auth:
-    mtls: true
-  cache:
-    enabled: true
-```
-
-**GET with Basic Auth (API v2):**
-
-```yaml
-apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: NodeClassifier
-metadata:
-  name: foreman-api
-spec:
-  url: https://foreman.example.com
-  request:
-    method: GET
-    path: /api/v2/hosts/{certname}/enc
-  response:
-    format: yaml
-  auth:
-    basic:
-      secretRef:
-        name: foreman-credentials
-        usernameKey: username
-        passwordKey: password
-```
-
 ### Puppet Enterprise
 
 PE's Node Classifier uses a POST-based API that accepts node facts and returns JSON classification data.
@@ -143,7 +97,7 @@ spec:
 
 | Method | Description | Use Case |
 |---|---|---|
-| `mtls` | Mutual TLS using Puppet SSL certificates | Foreman with Puppet CA trust |
+| `mtls` | Mutual TLS using Puppet SSL certificates | Services trusting the Puppet CA |
 | `token` | Custom HTTP header with token value | Puppet Enterprise (X-Authentication) |
 | `bearer` | Authorization: Bearer header | Generic API services |
 | `basic` | HTTP Basic Authentication | Foreman API v2, legacy services |
@@ -179,7 +133,7 @@ metadata:
   name: production
 spec:
   authorityRef: production-ca
-  nodeClassifierRef: foreman
+  nodeClassifierRef: pe-classifier
   image:
     repository: ghcr.io/slauger/openvox-server
     tag: "8.12.1"
@@ -193,3 +147,11 @@ external_nodes = /usr/local/bin/openvox-enc
 ```
 
 For the full CRD reference, see [NodeClassifier](../reference/nodeclassifier.md).
+
+## Known Limitations
+
+### Foreman
+
+Foreman is **not directly compatible** with the `NodeClassifier` CRD. Foreman's ENC protocol requires a separate facts upload (`POST /api/hosts/facts`) before the classification call (`GET /node/{certname}`), because its classification relies on its own internal fact database. The operator's `openvox-enc` binary uses the PE Classifier v1 API format — a single request with facts in the body — which Foreman does not implement.
+
+See [#26](https://github.com/slauger/openvox-operator/issues/26) for details and planned workarounds.

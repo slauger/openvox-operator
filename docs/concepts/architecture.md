@@ -12,9 +12,9 @@ The operator uses multiple CRDs that form a hierarchy:
 graph TD
     Cfg["Config"]
     CA["CertificateAuthority"]
-    SP["SigningPolicy (optional)"]
-    NC["NodeClassifier (optional)"]
-    RP["ReportProcessor (optional)"]
+    SP["SigningPolicy"]
+    NC["NodeClassifier"]
+    RP["ReportProcessor"]
     Cert["Certificate"]
     Srv["Server"]
     Pool["Pool"]

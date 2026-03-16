@@ -152,6 +152,6 @@ For the full CRD reference, see [NodeClassifier](../reference/nodeclassifier.md)
 
 ### Foreman
 
-Foreman is **not directly compatible** with the `NodeClassifier` CRD. Foreman's ENC protocol requires a separate facts upload (`POST /api/hosts/facts`) before the classification call (`GET /node/{certname}`), because its classification relies on its own internal fact database. The operator's `openvox-enc` binary uses the PE Classifier v1 API format — a single request with facts in the body — which Foreman does not implement.
+Foreman is **not directly compatible** with the `NodeClassifier` CRD. Foreman's ENC protocol requires a separate facts upload (`POST /api/hosts/facts`) before the classification call (`GET /node/{certname}`), because its classification relies on its own internal fact database. The operator's `openvox-enc` binary uses the PE Classifier v1 API format (a single request with facts in the body), which Foreman does not implement.
 
 See [#26](https://github.com/slauger/openvox-operator/issues/26) for details and planned workarounds.

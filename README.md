@@ -33,16 +33,13 @@ graph TD
 
     Cfg["📋 Config<br/>production"]
     Cfg -->|authorityRef| CA_CRD["🔐 CertificateAuthority<br/>production-ca"]
-    Cert_CA -->|authorityRef| CA_CRD
-    Cert_Stable -->|authorityRef| CA_CRD
-    Cert_Canary -->|authorityRef| CA_CRD
+    CA_CRD --> Cert_CA["📜 Certificate: ca-cert"]
+    CA_CRD --> Cert_Stable["📜 Certificate: stable-cert"]
+    CA_CRD --> Cert_Canary["📜 Certificate: canary-cert"]
 
-    CA["⚙️ Server: ca<br/>ca: true, server: true"] -->|certificateRef| Cert_CA["📜 Certificate: ca-cert"]
-    Stable["⚙️ Server: stable<br/>v8.12.1"] -->|certificateRef| Cert_Stable["📜 Certificate: stable-cert"]
-    Canary["⚙️ Server: canary<br/>v8.13.0"] -->|certificateRef| Cert_Canary["📜 Certificate: canary-cert"]
-    CA -->|configRef| Cfg
-    Stable -->|configRef| Cfg
-    Canary -->|configRef| Cfg
+    Cert_CA --> CA["⚙️ Server: ca<br/>ca: true, server: true"]
+    Cert_Stable --> Stable["⚙️ Server: stable<br/>v8.12.1"]
+    Cert_Canary --> Canary["⚙️ Server: canary<br/>v8.13.0"]
 
     CA --> CA_D["Deployment"]
     Stable --> ST_D["Deployment"]

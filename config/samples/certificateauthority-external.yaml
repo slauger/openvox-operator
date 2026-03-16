@@ -1,0 +1,37 @@
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: CertificateAuthority
+metadata:
+  name: production-external
+spec:
+  external:
+    url: "https://puppet-ca.example.com:8140"
+    caSecretRef: puppet-ca-cert
+    tlsSecretRef: puppet-client-tls
+---
+# Secret with CA certificate
+apiVersion: v1
+kind: Secret
+metadata:
+  name: puppet-ca-cert
+type: Opaque
+stringData:
+  ca_crt.pem: |
+    -----BEGIN CERTIFICATE-----
+    ... your CA certificate ...
+    -----END CERTIFICATE-----
+---
+# Secret with client TLS credentials for mTLS
+apiVersion: v1
+kind: Secret
+metadata:
+  name: puppet-client-tls
+type: Opaque
+stringData:
+  tls.crt: |
+    -----BEGIN CERTIFICATE-----
+    ... your client certificate ...
+    -----END CERTIFICATE-----
+  tls.key: |
+    -----BEGIN RSA PRIVATE KEY-----
+    ... your client private key ...
+    -----END RSA PRIVATE KEY-----

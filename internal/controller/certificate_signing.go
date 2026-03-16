@@ -12,10 +12,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -24,6 +27,28 @@ import (
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
+
+const (
+	// AnnotationCSRPollAttempts tracks the number of CSR poll attempts on the pending Secret.
+	AnnotationCSRPollAttempts = "openvox.voxpupuli.org/csr-poll-attempts"
+
+	// CSRPollWaitingThreshold is the number of poll attempts before transitioning to WaitingForSigning.
+	CSRPollWaitingThreshold = 10
+)
+
+// csrPollBackoff returns the requeue duration based on the number of poll attempts.
+func csrPollBackoff(attempts int) time.Duration {
+	switch {
+	case attempts < 3:
+		return 5 * time.Second
+	case attempts < 6:
+		return 30 * time.Second
+	case attempts < 10:
+		return 2 * time.Minute
+	default:
+		return 5 * time.Minute
+	}
+}
 
 // caHTTPClient returns an HTTP client for talking to the Puppet CA (internal, self-signed).
 func caHTTPClient() *http.Client {
@@ -197,8 +222,53 @@ func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openv
 	}
 
 	if signedCertPEM == nil {
-		logger.Info("certificate not yet signed, will retry", "certname", cert.Spec.Certname)
-		return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
+		// Read and increment poll attempt count from pending Secret annotation
+		pendingSecretName := fmt.Sprintf("%s-tls-pending", cert.Name)
+		pendingSecret := &corev1.Secret{}
+		if err := r.Get(ctx, types.NamespacedName{Name: pendingSecretName, Namespace: namespace}, pendingSecret); err != nil {
+			return ctrl.Result{}, fmt.Errorf("reading pending Secret for poll tracking: %w", err)
+		}
+
+		attempts := 0
+		if v, ok := pendingSecret.Annotations[AnnotationCSRPollAttempts]; ok {
+			attempts, _ = strconv.Atoi(v)
+		}
+		attempts++
+
+		if pendingSecret.Annotations == nil {
+			pendingSecret.Annotations = make(map[string]string)
+		}
+		pendingSecret.Annotations[AnnotationCSRPollAttempts] = strconv.Itoa(attempts)
+		if err := r.Update(ctx, pendingSecret); err != nil {
+			return ctrl.Result{}, fmt.Errorf("updating poll attempt annotation: %w", err)
+		}
+
+		backoff := csrPollBackoff(attempts)
+		logger.Info("certificate not yet signed, will retry", "certname", cert.Spec.Certname, "attempt", attempts, "backoff", backoff)
+
+		// After threshold, transition to WaitingForSigning phase
+		if attempts >= CSRPollWaitingThreshold {
+			certname := cert.Spec.Certname
+			if certname == "" {
+				certname = "puppet"
+			}
+			cert.Status.Phase = openvoxv1alpha1.CertificatePhaseWaitingForSigning
+			meta.SetStatusCondition(&cert.Status.Conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionCertSigned,
+				Status:             metav1.ConditionFalse,
+				Reason:             "WaitingForManualSigning",
+				Message:            fmt.Sprintf("CSR submitted but not yet signed after %d attempts", attempts),
+				LastTransitionTime: metav1.Now(),
+			})
+			if statusErr := r.Status().Update(ctx, cert); statusErr != nil {
+				logger.Error(statusErr, "failed to update Certificate status to WaitingForSigning")
+			}
+			r.Recorder.Eventf(cert, nil, corev1.EventTypeWarning, EventReasonCSRWaitingForSigning, "Reconcile",
+				"CSR submitted but not yet signed after %d attempts. To sign manually: puppetserver ca sign --certname %s",
+				attempts, certname)
+		}
+
+		return ctrl.Result{RequeueAfter: backoff}, nil
 	}
 
 	// Step 3: Cert is signed -- read key from pending Secret and create TLS Secret

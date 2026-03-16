@@ -28,7 +28,8 @@ type CertificateReconciler struct {
 
 // Event reasons for Certificate.
 const (
-	EventReasonCertificateSigned = "CertificateSigned"
+	EventReasonCertificateSigned       = "CertificateSigned"
+	EventReasonCSRWaitingForSigning    = "CSRWaitingForSigning"
 )
 
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificates,verbs=get;list;watch;create;update;patch;delete

@@ -145,6 +145,7 @@ spec:
                 enum:
                 - Pending
                 - Requesting
+                - WaitingForSigning
                 - Signed
                 - Error
                 type: string

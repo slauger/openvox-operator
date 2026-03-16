@@ -48,14 +48,15 @@ type CertificateSpec struct {
 }
 
 // CertificatePhase represents the current lifecycle phase of a Certificate.
-// +kubebuilder:validation:Enum=Pending;Requesting;Signed;Error
+// +kubebuilder:validation:Enum=Pending;Requesting;WaitingForSigning;Signed;Error
 type CertificatePhase string
 
 const (
-	CertificatePhasePending    CertificatePhase = "Pending"
-	CertificatePhaseRequesting CertificatePhase = "Requesting"
-	CertificatePhaseSigned     CertificatePhase = "Signed"
-	CertificatePhaseError      CertificatePhase = "Error"
+	CertificatePhasePending           CertificatePhase = "Pending"
+	CertificatePhaseRequesting        CertificatePhase = "Requesting"
+	CertificatePhaseWaitingForSigning CertificatePhase = "WaitingForSigning"
+	CertificatePhaseSigned            CertificatePhase = "Signed"
+	CertificatePhaseError             CertificatePhase = "Error"
 )
 
 // CertificateStatus defines the observed state of Certificate.

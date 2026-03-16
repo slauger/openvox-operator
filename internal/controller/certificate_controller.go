@@ -82,7 +82,7 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	tlsSecretName := fmt.Sprintf("%s-tls", cert.Name)
 
 	// Check if TLS Secret already exists (may have been created by CA setup job)
-	if r.isSecretReady(ctx, tlsSecretName, cert.Namespace, "cert.pem") {
+	if isSecretReady(ctx, r.Client, tlsSecretName, cert.Namespace, "cert.pem") {
 		if err := r.adoptTLSSecret(ctx, cert, tlsSecretName); err != nil {
 			return ctrl.Result{}, fmt.Errorf("adopting TLS Secret: %w", err)
 		}
@@ -182,33 +182,10 @@ func (r *CertificateReconciler) createOrUpdateTLSSecret(ctx context.Context, cer
 	labels := caLabels(ca.Name)
 	labels["openvox.voxpupuli.org/certificate"] = cert.Name
 
-	secret := &corev1.Secret{}
-	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: cert.Namespace}, secret)
-	if errors.IsNotFound(err) {
-		secret = &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: cert.Namespace,
-				Labels:    labels,
-			},
-			Data: map[string][]byte{
-				"cert.pem": certPEM,
-				"key.pem":  keyPEM,
-			},
-		}
-		if err := controllerutil.SetControllerReference(cert, secret, r.Scheme); err != nil {
-			return err
-		}
-		return r.Create(ctx, secret)
-	} else if err != nil {
-		return err
-	}
-
-	secret.Data = map[string][]byte{
+	return createOrUpdateSecret(ctx, r.Client, r.Scheme, cert, name, cert.Namespace, labels, map[string][]byte{
 		"cert.pem": certPEM,
 		"key.pem":  keyPEM,
-	}
-	return r.Update(ctx, secret)
+	})
 }
 
 // adoptTLSSecret sets the ownerReference on the TLS Secret to this Certificate.
@@ -239,14 +216,3 @@ func (r *CertificateReconciler) extractNotAfter(ctx context.Context, secretName,
 	return parseCertNotAfter(secret.Data["cert.pem"])
 }
 
-func (r *CertificateReconciler) isSecretReady(ctx context.Context, name, namespace, requiredKey string) bool {
-	secret := &corev1.Secret{}
-	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, secret); err != nil {
-		return false
-	}
-	if requiredKey != "" {
-		_, ok := secret.Data[requiredKey]
-		return ok
-	}
-	return true
-}

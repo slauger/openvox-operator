@@ -10,8 +10,12 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
@@ -121,6 +125,45 @@ func parseCertNotAfter(certPEM []byte) *metav1.Time {
 	}
 	t := metav1.NewTime(cert.NotAfter.UTC().Truncate(time.Second))
 	return &t
+}
+
+// isSecretReady checks if a Secret exists and (optionally) contains the given key.
+func isSecretReady(ctx context.Context, reader client.Reader, name, namespace, requiredKey string) bool {
+	secret := &corev1.Secret{}
+	if err := reader.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, secret); err != nil {
+		return false
+	}
+	if requiredKey != "" {
+		_, ok := secret.Data[requiredKey]
+		return ok
+	}
+	return true
+}
+
+// createOrUpdateSecret creates or updates a Secret with the given data and owner reference.
+func createOrUpdateSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, owner client.Object,
+	name, namespace string, labels map[string]string, data map[string][]byte) error {
+	secret := &corev1.Secret{}
+	err := c.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, secret)
+	if errors.IsNotFound(err) {
+		secret = &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: namespace,
+				Labels:    labels,
+			},
+			Data: data,
+		}
+		if err := controllerutil.SetControllerReference(owner, secret, scheme); err != nil {
+			return err
+		}
+		return c.Create(ctx, secret)
+	} else if err != nil {
+		return err
+	}
+
+	secret.Data = data
+	return c.Update(ctx, secret)
 }
 
 // resolveCode determines the code source for a Server.

@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -79,7 +78,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	if err := r.Get(ctx, types.NamespacedName{Name: server.Spec.ConfigRef, Namespace: server.Namespace}, cfg); err != nil {
 		if errors.IsNotFound(err) {
 			logger.Info("waiting for Config", "configRef", server.Spec.ConfigRef)
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+			return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 		}
 		return ctrl.Result{}, err
 	}
@@ -89,7 +88,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	if err := r.Get(ctx, types.NamespacedName{Name: server.Spec.CertificateRef, Namespace: server.Namespace}, cert); err != nil {
 		if errors.IsNotFound(err) {
 			logger.Info("waiting for Certificate", "certificateRef", server.Spec.CertificateRef)
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+			return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 		}
 		return ctrl.Result{}, err
 	}
@@ -100,7 +99,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if statusErr := r.Status().Update(ctx, server); statusErr != nil {
 			logger.Error(statusErr, "failed to update Server status", "name", server.Name)
 		}
-		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: RequeueIntervalMedium}, nil
 	}
 
 	// Resolve CertificateAuthority (needed for CA PVC name when ca: true)
@@ -108,7 +107,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	if err := r.Get(ctx, types.NamespacedName{Name: cert.Spec.AuthorityRef, Namespace: server.Namespace}, ca); err != nil {
 		if errors.IsNotFound(err) {
 			logger.Info("waiting for CertificateAuthority", "authorityRef", cert.Spec.AuthorityRef)
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+			return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 		}
 		return ctrl.Result{}, err
 	}
@@ -226,7 +225,7 @@ func (r *ServerReconciler) buildPDB(server *openvoxv1alpha1.Server) (*policyv1.P
 		pdb.Spec.MaxUnavailable = server.Spec.PDB.MaxUnavailable
 	} else {
 		// Default: minAvailable: 1
-		minAvailable := intstrInt(1)
+		minAvailable := intstrInt(DefaultPDBMinAvailable)
 		pdb.Spec.MinAvailable = &minAvailable
 	}
 	if err := controllerutil.SetControllerReference(server, pdb, r.Scheme); err != nil {
@@ -282,11 +281,11 @@ func (r *ServerReconciler) buildHPA(server *openvoxv1alpha1.Server) (*autoscalin
 	as := server.Spec.Autoscaling
 	targetCPU := as.TargetCPU
 	if targetCPU == 0 {
-		targetCPU = 75
+		targetCPU = DefaultHPATargetCPU
 	}
 	maxReplicas := as.MaxReplicas
 	if maxReplicas == 0 {
-		maxReplicas = 5
+		maxReplicas = DefaultHPAMaxReplicas
 	}
 
 	hpa := &autoscalingv2.HorizontalPodAutoscaler{

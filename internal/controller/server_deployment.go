@@ -456,8 +456,8 @@ chmod 640 /ssl/private_keys/puppet.pem`
 		ServiceAccountName:           fmt.Sprintf("%s-server", server.Spec.ConfigRef),
 		AutomountServiceAccountToken: &automountServiceAccountToken,
 		SecurityContext: &corev1.PodSecurityContext{
-			RunAsUser:    int64Ptr(1001),
-			RunAsGroup:   int64Ptr(0),
+			RunAsUser:    int64Ptr(ServerRunAsUser),
+			RunAsGroup:   int64Ptr(ServerRunAsGroup),
 			RunAsNonRoot: boolPtr(true),
 			SeccompProfile: &corev1.SeccompProfile{
 				Type: corev1.SeccompProfileTypeRuntimeDefault,

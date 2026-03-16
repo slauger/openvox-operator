@@ -13,7 +13,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -29,7 +28,7 @@ import (
 // caHTTPClient returns an HTTP client for talking to the Puppet CA (internal, self-signed).
 func caHTTPClient() *http.Client {
 	return &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: HTTPClientTimeout,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // internal CA
 		},
@@ -59,7 +58,7 @@ func (r *CertificateReconciler) submitCSR(ctx context.Context, cert *openvoxv1al
 
 	if len(keyPEM) == 0 {
 		// Generate new RSA 4096-bit key
-		privateKey, err := rsa.GenerateKey(rand.Reader, 4096)
+		privateKey, err := rsa.GenerateKey(rand.Reader, RSAKeySize)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("generating RSA key: %w", err)
 		}
@@ -122,17 +121,17 @@ func (r *CertificateReconciler) submitCSR(ctx context.Context, cert *openvoxv1al
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return ctrl.Result{RequeueAfter: 15 * time.Second}, fmt.Errorf("submitting CSR: %w", err)
+		return ctrl.Result{RequeueAfter: RequeueIntervalLong}, fmt.Errorf("submitting CSR: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, HTTPBodyLimit))
 	if resp.StatusCode == http.StatusOK {
 		logger.Info("CSR submitted successfully", "certname", certname)
 	} else if resp.StatusCode == http.StatusBadRequest && strings.Contains(string(body), "already has a requested certificate") {
 		logger.Info("CSR already pending", "certname", certname)
 	} else {
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("CA rejected CSR (HTTP %d): %s", resp.StatusCode, string(body))
+		return ctrl.Result{RequeueAfter: RequeueIntervalCRL}, fmt.Errorf("CA rejected CSR (HTTP %d): %s", resp.StatusCode, string(body))
 	}
 
 	return ctrl.Result{}, nil
@@ -161,7 +160,7 @@ func (r *CertificateReconciler) fetchSignedCert(ctx context.Context, cert *openv
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, HTTPBodyLimit))
 
 	if resp.StatusCode == http.StatusOK && len(body) > 0 {
 		block, _ := pem.Decode(body)
@@ -188,12 +187,12 @@ func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openv
 	signedCertPEM, err := r.fetchSignedCert(ctx, cert, caServiceName, namespace)
 	if err != nil {
 		logger.Info("failed to fetch signed cert, will retry", "error", err)
-		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: RequeueIntervalMedium}, nil
 	}
 
 	if signedCertPEM == nil {
 		logger.Info("certificate not yet signed, will retry", "certname", cert.Spec.Certname)
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 	}
 
 	// Step 3: Cert is signed -- read key from pending Secret and create TLS Secret

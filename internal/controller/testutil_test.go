@@ -414,3 +414,27 @@ func newPoolReconciler(c client.Client, gatewayAPI bool) *PoolReconciler {
 	}
 }
 
+func newCertificateReconciler(c client.Client) *CertificateReconciler {
+	return &CertificateReconciler{
+		Client:   c,
+		Scheme:   testScheme(),
+		Recorder: testRecorder(),
+	}
+}
+
+func newCertificateAuthorityReconciler(c client.Client) *CertificateAuthorityReconciler {
+	return &CertificateAuthorityReconciler{
+		Client:   c,
+		Scheme:   testScheme(),
+		Recorder: testRecorder(),
+	}
+}
+
+func newReportProcessorReconciler(c client.Client) *ReportProcessorReconciler {
+	return &ReportProcessorReconciler{
+		Client:   c,
+		Scheme:   testScheme(),
+		Recorder: testRecorder(),
+	}
+}
+

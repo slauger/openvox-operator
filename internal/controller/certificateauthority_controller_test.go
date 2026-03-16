@@ -1,0 +1,353 @@
+package controller
+
+import (
+	"testing"
+	"time"
+
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/types"
+
+	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
+)
+
+// caPrereqs returns a Config with authorityRef pointing to the given CA name.
+func caPrereqs(caName string) *openvoxv1alpha1.Config {
+	return newConfig("production", withAuthorityRef(caName))
+}
+
+func TestCAReconcile_NotFound(t *testing.T) {
+	c := setupTestClient()
+	r := newCertificateAuthorityReconciler(c)
+
+	res, err := r.Reconcile(testCtx(), testRequest("nonexistent"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.RequeueAfter != 0 {
+		t.Error("expected no requeue for missing CA")
+	}
+}
+
+func TestCAReconcile_NoConfig(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.Phase = "" // reset to trigger initial phase
+	c := setupTestClient(ca)
+	r := newCertificateAuthorityReconciler(c)
+
+	res, err := r.Reconcile(testCtx(), testRequest("test-ca"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.RequeueAfter != 5*time.Second {
+		t.Errorf("expected requeue after 5s, got %v", res.RequeueAfter)
+	}
+}
+
+func TestCAReconcile_PVCCreation(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.Phase = ""
+	cfg := caPrereqs("test-ca")
+	c := setupTestClient(ca, cfg)
+	r := newCertificateAuthorityReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-ca")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	pvc := &corev1.PersistentVolumeClaim{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca-data", Namespace: testNamespace}, pvc); err != nil {
+		t.Fatalf("PVC not created: %v", err)
+	}
+
+	storageQty := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
+	if storageQty.Cmp(resource.MustParse("1Gi")) != 0 {
+		t.Errorf("expected storage 1Gi, got %s", storageQty.String())
+	}
+
+	if pvc.Labels[LabelCertificateAuthority] != "test-ca" {
+		t.Errorf("PVC missing CA label, got %v", pvc.Labels)
+	}
+}
+
+func TestCAReconcile_PVCCustomStorageClass(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.Phase = ""
+	ca.Spec.Storage.StorageClass = "fast-ssd"
+	ca.Spec.Storage.Size = "10Gi"
+	cfg := caPrereqs("test-ca")
+	c := setupTestClient(ca, cfg)
+	r := newCertificateAuthorityReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-ca")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	pvc := &corev1.PersistentVolumeClaim{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca-data", Namespace: testNamespace}, pvc); err != nil {
+		t.Fatalf("PVC not created: %v", err)
+	}
+
+	if pvc.Spec.StorageClassName == nil || *pvc.Spec.StorageClassName != "fast-ssd" {
+		t.Errorf("expected storageClass fast-ssd, got %v", pvc.Spec.StorageClassName)
+	}
+
+	storageQty := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
+	if storageQty.Cmp(resource.MustParse("10Gi")) != 0 {
+		t.Errorf("expected storage 10Gi, got %s", storageQty.String())
+	}
+}
+
+func TestCAReconcile_RBACCreation(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.Phase = ""
+	cfg := caPrereqs("test-ca")
+	c := setupTestClient(ca, cfg)
+	r := newCertificateAuthorityReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-ca")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	baseName := "test-ca-ca-setup"
+
+	sa := &corev1.ServiceAccount{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: baseName, Namespace: testNamespace}, sa); err != nil {
+		t.Fatalf("ServiceAccount not created: %v", err)
+	}
+
+	role := &rbacv1.Role{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: baseName, Namespace: testNamespace}, role); err != nil {
+		t.Fatalf("Role not created: %v", err)
+	}
+
+	rb := &rbacv1.RoleBinding{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: baseName, Namespace: testNamespace}, rb); err != nil {
+		t.Fatalf("RoleBinding not created: %v", err)
+	}
+
+	if rb.RoleRef.Name != baseName {
+		t.Errorf("RoleBinding roleRef name: expected %q, got %q", baseName, rb.RoleRef.Name)
+	}
+}
+
+func TestCAReconcile_RBACResourceNames(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.Phase = ""
+	cfg := caPrereqs("test-ca")
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhasePending)
+	c := setupTestClient(ca, cfg, cert)
+	r := newCertificateAuthorityReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-ca")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	role := &rbacv1.Role{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca-ca-setup", Namespace: testNamespace}, role); err != nil {
+		t.Fatalf("Role not created: %v", err)
+	}
+
+	// The first rule should have resourceNames containing the CA, key, CRL, and TLS secrets
+	if len(role.Rules) < 1 {
+		t.Fatal("expected at least 1 policy rule")
+	}
+
+	expected := map[string]bool{
+		"test-ca-ca":     true,
+		"test-ca-ca-key": true,
+		"test-ca-ca-crl": true,
+		"my-cert-tls":    true,
+	}
+	for _, rn := range role.Rules[0].ResourceNames {
+		delete(expected, rn)
+	}
+	for missing := range expected {
+		t.Errorf("Role resourceNames missing %q", missing)
+	}
+}
+
+func TestCAReconcile_JobCreation(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.Phase = ""
+	cfg := caPrereqs("test-ca")
+	c := setupTestClient(ca, cfg)
+	r := newCertificateAuthorityReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-ca")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	job := &batchv1.Job{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca-ca-setup", Namespace: testNamespace}, job); err != nil {
+		t.Fatalf("Job not created: %v", err)
+	}
+
+	container := job.Spec.Template.Spec.Containers[0]
+	expectedImage := "ghcr.io/slauger/openvox-server:latest"
+	if container.Image != expectedImage {
+		t.Errorf("expected image %q, got %q", expectedImage, container.Image)
+	}
+
+	// Verify security context
+	podSC := job.Spec.Template.Spec.SecurityContext
+	if podSC == nil {
+		t.Fatal("pod security context is nil")
+	}
+	if podSC.RunAsUser == nil || *podSC.RunAsUser != CASetupRunAsUser {
+		t.Errorf("expected RunAsUser %d", CASetupRunAsUser)
+	}
+
+	containerSC := container.SecurityContext
+	if containerSC == nil {
+		t.Fatal("container security context is nil")
+	}
+	if containerSC.AllowPrivilegeEscalation == nil || *containerSC.AllowPrivilegeEscalation != false {
+		t.Error("expected AllowPrivilegeEscalation=false")
+	}
+
+	// Verify env vars
+	envMap := map[string]string{}
+	for _, e := range container.Env {
+		envMap[e.Name] = e.Value
+	}
+	if envMap["CA_SECRET_NAME"] != "test-ca-ca" {
+		t.Errorf("expected CA_SECRET_NAME=test-ca-ca, got %q", envMap["CA_SECRET_NAME"])
+	}
+	if envMap["CA_NAME"] != "test-ca" {
+		t.Errorf("expected CA_NAME=test-ca, got %q", envMap["CA_NAME"])
+	}
+
+	// Verify resources (defaults)
+	if container.Resources.Requests.Cpu().Cmp(resource.MustParse(DefaultCAJobCPURequest)) != 0 {
+		t.Errorf("expected CPU request %s, got %s", DefaultCAJobCPURequest, container.Resources.Requests.Cpu().String())
+	}
+}
+
+func TestCAReconcile_PhasePending(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.Phase = "" // reset
+	cfg := caPrereqs("test-ca")
+	c := setupTestClient(ca, cfg)
+	r := newCertificateAuthorityReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-ca")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	updated := &openvoxv1alpha1.CertificateAuthority{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get CA: %v", err)
+	}
+	// Phase should be Initializing (set during job reconciliation) since CA secret doesn't exist
+	if updated.Status.Phase != openvoxv1alpha1.CertificateAuthorityPhaseInitializing {
+		t.Errorf("expected phase %q, got %q", openvoxv1alpha1.CertificateAuthorityPhaseInitializing, updated.Status.Phase)
+	}
+}
+
+func TestCAReconcile_PhaseReady(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.Phase = ""
+	cfg := caPrereqs("test-ca")
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": []byte("ca-cert"),
+	})
+	c := setupTestClient(ca, cfg, caSecret)
+	r := newCertificateAuthorityReconciler(c)
+
+	// The reconcile will find the CA secret exists so the job reconciler returns immediately.
+	// Then it sets Ready phase.
+	if _, err := r.Reconcile(testCtx(), testRequest("test-ca")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	updated := &openvoxv1alpha1.CertificateAuthority{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get CA: %v", err)
+	}
+	if updated.Status.Phase != openvoxv1alpha1.CertificateAuthorityPhaseReady {
+		t.Errorf("expected phase %q, got %q", openvoxv1alpha1.CertificateAuthorityPhaseReady, updated.Status.Phase)
+	}
+	if updated.Status.CASecretName != "test-ca-ca" {
+		t.Errorf("expected CASecretName %q, got %q", "test-ca-ca", updated.Status.CASecretName)
+	}
+
+	// Verify CAReady condition
+	found := false
+	for _, cond := range updated.Status.Conditions {
+		if cond.Type == openvoxv1alpha1.ConditionCAReady {
+			found = true
+			if cond.Status != "True" {
+				t.Errorf("expected condition status True, got %q", cond.Status)
+			}
+		}
+	}
+	if !found {
+		t.Error("CAReady condition not set")
+	}
+}
+
+func TestCAReconcile_NotAfterRequeue(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.Phase = ""
+	cfg := caPrereqs("test-ca")
+	// CA secret exists but with non-parseable cert data, so NotAfter will be nil
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": []byte("not-a-valid-cert"),
+	})
+	c := setupTestClient(ca, cfg, caSecret)
+	r := newCertificateAuthorityReconciler(c)
+
+	res, err := r.Reconcile(testCtx(), testRequest("test-ca"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.RequeueAfter != 5*time.Second {
+		t.Errorf("expected requeue after 5s when NotAfter is nil, got %v", res.RequeueAfter)
+	}
+}
+
+func TestResolveCAJobResources_Default(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.Spec.Resources = corev1.ResourceRequirements{} // empty
+
+	res := resolveCAJobResources(ca)
+
+	if res.Requests.Cpu().Cmp(resource.MustParse(DefaultCAJobCPURequest)) != 0 {
+		t.Errorf("expected CPU request %s, got %s", DefaultCAJobCPURequest, res.Requests.Cpu().String())
+	}
+	if res.Requests.Memory().Cmp(resource.MustParse(DefaultCAJobMemoryRequest)) != 0 {
+		t.Errorf("expected memory request %s, got %s", DefaultCAJobMemoryRequest, res.Requests.Memory().String())
+	}
+	if res.Limits.Cpu().Cmp(resource.MustParse(DefaultCAJobCPULimit)) != 0 {
+		t.Errorf("expected CPU limit %s, got %s", DefaultCAJobCPULimit, res.Limits.Cpu().String())
+	}
+	if res.Limits.Memory().Cmp(resource.MustParse(DefaultCAJobMemoryLimit)) != 0 {
+		t.Errorf("expected memory limit %s, got %s", DefaultCAJobMemoryLimit, res.Limits.Memory().String())
+	}
+}
+
+func TestResolveCAJobResources_Custom(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.Spec.Resources = corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("500m"),
+			corev1.ResourceMemory: resource.MustParse("1Gi"),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("2"),
+			corev1.ResourceMemory: resource.MustParse("2Gi"),
+		},
+	}
+
+	res := resolveCAJobResources(ca)
+
+	if res.Requests.Cpu().Cmp(resource.MustParse("500m")) != 0 {
+		t.Errorf("expected CPU request 500m, got %s", res.Requests.Cpu().String())
+	}
+	if res.Limits.Memory().Cmp(resource.MustParse("2Gi")) != 0 {
+		t.Errorf("expected memory limit 2Gi, got %s", res.Limits.Memory().String())
+	}
+}

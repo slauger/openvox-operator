@@ -65,6 +65,11 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 	}
 
+	// External CA: skip internal setup, just validate and mark ready
+	if ca.Spec.External != nil {
+		return r.reconcileExternalCA(ctx, ca)
+	}
+
 	// Resolve Config referencing this CA
 	cfg := r.findConfigForCA(ctx, ca)
 	if cfg == nil {
@@ -133,6 +138,60 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{RequeueAfter: RequeueIntervalCRL}, nil
 	}
 	return crlResult, nil
+}
+
+// reconcileExternalCA handles CertificateAuthority resources with spec.external set.
+// It skips PVC/Job creation and marks the CA as ready using the external CA's Secret reference.
+func (r *CertificateAuthorityReconciler) reconcileExternalCA(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
+	// Validate that the referenced CA Secret exists (if specified)
+	caSecretName := ""
+	if ca.Spec.External.CASecretRef != "" {
+		if !isSecretReady(ctx, r.Client, ca.Spec.External.CASecretRef, ca.Namespace, "ca_crt.pem") {
+			logger.Info("waiting for external CA Secret", "secret", ca.Spec.External.CASecretRef)
+			ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhasePending
+			meta.SetStatusCondition(&ca.Status.Conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionCAReady,
+				Status:             metav1.ConditionFalse,
+				Reason:             "CASecretNotFound",
+				Message:            fmt.Sprintf("Secret %s not found or missing ca_crt.pem", ca.Spec.External.CASecretRef),
+				LastTransitionTime: metav1.Now(),
+			})
+			if err := r.Status().Update(ctx, ca); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{RequeueAfter: RequeueIntervalMedium}, nil
+		}
+		caSecretName = ca.Spec.External.CASecretRef
+	}
+
+	wasReady := ca.Status.Phase == openvoxv1alpha1.CertificateAuthorityPhaseExternal
+	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseExternal
+	ca.Status.CASecretName = caSecretName
+	if caSecretName != "" {
+		ca.Status.NotAfter = r.extractCANotAfter(ctx, caSecretName, ca.Namespace)
+	} else {
+		ca.Status.NotAfter = nil
+	}
+	meta.SetStatusCondition(&ca.Status.Conditions, metav1.Condition{
+		Type:               openvoxv1alpha1.ConditionCAReady,
+		Status:             metav1.ConditionTrue,
+		Reason:             "ExternalCA",
+		Message:            fmt.Sprintf("External CA configured at %s", ca.Spec.External.URL),
+		LastTransitionTime: metav1.Now(),
+	})
+
+	if err := r.Status().Update(ctx, ca); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if !wasReady {
+		r.Recorder.Eventf(ca, nil, corev1.EventTypeNormal, EventReasonCAInitialized, "Reconcile", "External CA configured at %s", ca.Spec.External.URL)
+	}
+
+	// No CRL refresh for external CA -- managed externally
+	return ctrl.Result{}, nil
 }
 
 // findConfigForCA returns the first Config in the same namespace whose authorityRef matches this CA.

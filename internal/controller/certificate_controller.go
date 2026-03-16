@@ -70,8 +70,8 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
-	// Wait for CA to be ready
-	if ca.Status.Phase != openvoxv1alpha1.CertificateAuthorityPhaseReady {
+	// Wait for CA to be ready (internal or external)
+	if ca.Status.Phase != openvoxv1alpha1.CertificateAuthorityPhaseReady && ca.Status.Phase != openvoxv1alpha1.CertificateAuthorityPhaseExternal {
 		logger.Info("waiting for CertificateAuthority to be ready", "ca", ca.Name, "phase", ca.Status.Phase)
 		cert.Status.Phase = openvoxv1alpha1.CertificatePhasePending
 		if statusErr := r.Status().Update(ctx, cert); statusErr != nil {
@@ -126,10 +126,16 @@ func (r *CertificateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *CertificateReconciler) reconcileCertSigning(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	caServiceName := findCAServiceName(ctx, r.Client, ca, cert.Namespace)
-	if caServiceName == "" {
-		logger.Info("waiting for CA server to become available")
-		return ctrl.Result{RequeueAfter: RequeueIntervalMedium}, nil
+	var caBaseURL string
+	if ca.Spec.External != nil {
+		caBaseURL = ca.Spec.External.URL
+	} else {
+		caServiceName := findCAServiceName(ctx, r.Client, ca, cert.Namespace)
+		if caServiceName == "" {
+			logger.Info("waiting for CA server to become available")
+			return ctrl.Result{RequeueAfter: RequeueIntervalMedium}, nil
+		}
+		caBaseURL = fmt.Sprintf("https://%s.%s.svc:8140", caServiceName, cert.Namespace)
 	}
 
 	cert.Status.Phase = openvoxv1alpha1.CertificatePhaseRequesting
@@ -137,7 +143,7 @@ func (r *CertificateReconciler) reconcileCertSigning(ctx context.Context, cert *
 		logger.Error(statusErr, "failed to update Certificate status", "name", cert.Name)
 	}
 
-	result, err := r.signCertificate(ctx, cert, ca, caServiceName, cert.Namespace)
+	result, err := r.signCertificate(ctx, cert, ca, caBaseURL, cert.Namespace)
 	if err != nil {
 		logger.Error(err, "certificate signing failed, will retry")
 		cert.Status.Phase = openvoxv1alpha1.CertificatePhaseError

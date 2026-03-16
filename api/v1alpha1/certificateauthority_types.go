@@ -32,6 +32,7 @@ type CertificateAuthorityList struct {
 }
 
 // CertificateAuthoritySpec defines the desired state of CertificateAuthority.
+// +kubebuilder:validation:XValidation:rule="!(has(self.external) && has(self.storage) && (self.storage.size != '' || self.storage.storageClass != ''))",message="external and storage are mutually exclusive"
 type CertificateAuthoritySpec struct {
 	// TTL is the CA certificate TTL as a duration string.
 	// Supported units: s (seconds), m (minutes), h (hours), d (days), y (years).
@@ -87,16 +88,46 @@ type CertificateAuthoritySpec struct {
 	// IntermediateCA configures an intermediate CA setup.
 	// +optional
 	IntermediateCA IntermediateCASpec `json:"intermediateCA,omitempty"`
+
+	// External configures an external (out-of-cluster) CA.
+	// When set, the operator skips CA setup Job and PVC creation.
+	// Mutually exclusive with Storage.
+	// +optional
+	External *ExternalCASpec `json:"external,omitempty"`
+}
+
+// ExternalCASpec defines connection settings for an external Puppet/OpenVox CA.
+type ExternalCASpec struct {
+	// URL is the base URL of the external CA HTTP API.
+	// Example: "https://puppet-ca.example.com:8140"
+	// +kubebuilder:validation:Pattern=`^https?://`
+	URL string `json:"url"`
+
+	// CASecretRef references a Secret containing the CA certificate.
+	// The Secret must have a key "ca_crt.pem" with the PEM-encoded CA certificate.
+	// +optional
+	CASecretRef string `json:"caSecretRef,omitempty"`
+
+	// TLSSecretRef references a Secret with client TLS credentials for mTLS to the CA.
+	// The Secret must contain "tls.crt" and "tls.key".
+	// +optional
+	TLSSecretRef string `json:"tlsSecretRef,omitempty"`
+
+	// InsecureSkipVerify disables TLS verification for the external CA connection.
+	// Not recommended for production use.
+	// +optional
+	InsecureSkipVerify bool `json:"insecureSkipVerify,omitempty"`
 }
 
 // CertificateAuthorityPhase represents the current lifecycle phase of a CertificateAuthority.
-// +kubebuilder:validation:Enum=Pending;Initializing;Ready;Error
+// +kubebuilder:validation:Enum=Pending;Initializing;Ready;External;Error
 type CertificateAuthorityPhase string
 
 const (
 	CertificateAuthorityPhasePending      CertificateAuthorityPhase = "Pending"
 	CertificateAuthorityPhaseInitializing CertificateAuthorityPhase = "Initializing"
 	CertificateAuthorityPhaseReady        CertificateAuthorityPhase = "Ready"
+	CertificateAuthorityPhaseExternal     CertificateAuthorityPhase = "External"
 	CertificateAuthorityPhaseError        CertificateAuthorityPhase = "Error"
 )
 

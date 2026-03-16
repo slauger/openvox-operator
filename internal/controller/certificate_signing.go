@@ -50,14 +50,33 @@ func csrPollBackoff(attempts int) time.Duration {
 	}
 }
 
-// caHTTPClient returns an HTTP client for talking to the Puppet CA (internal, self-signed).
-func caHTTPClient() *http.Client {
+// caHTTPClient returns an HTTP client that trusts only the given CA certificate
+// for communication with the Puppet CA service.
+func caHTTPClient(caCertPEM []byte) (*http.Client, error) {
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(caCertPEM) {
+		return nil, fmt.Errorf("failed to parse CA certificate PEM")
+	}
 	return &http.Client{
 		Timeout: HTTPClientTimeout,
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // internal CA
+			TLSClientConfig: &tls.Config{RootCAs: pool},
 		},
+	}, nil
+}
+
+// getCAPublicCert reads the CA public certificate from the CA Secret.
+func (r *CertificateReconciler) getCAPublicCert(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, namespace string) ([]byte, error) {
+	caSecretName := fmt.Sprintf("%s-ca", ca.Name)
+	secret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: caSecretName, Namespace: namespace}, secret); err != nil {
+		return nil, fmt.Errorf("getting CA Secret %s: %w", caSecretName, err)
 	}
+	certPEM := secret.Data["ca_crt.pem"]
+	if len(certPEM) == 0 {
+		return nil, fmt.Errorf("CA Secret %s has no ca_crt.pem data", caSecretName)
+	}
+	return certPEM, nil
 }
 
 // submitCSR generates an RSA key (or reuses an existing one from a pending Secret),
@@ -132,7 +151,14 @@ func (r *CertificateReconciler) submitCSR(ctx context.Context, cert *openvoxv1al
 	}
 	csrPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER})
 
-	httpClient := caHTTPClient()
+	caCertPEM, err := r.getCAPublicCert(ctx, ca, namespace)
+	if err != nil {
+		return ctrl.Result{RequeueAfter: RequeueIntervalShort}, fmt.Errorf("loading CA certificate: %w", err)
+	}
+	httpClient, err := caHTTPClient(caCertPEM)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("creating CA HTTP client: %w", err)
+	}
 	caBaseURL := fmt.Sprintf("https://%s.%s.svc:8140", caServiceName, namespace)
 	csrURL := fmt.Sprintf("%s/puppet-ca/v1/certificate_request/%s?environment=production", caBaseURL, certname)
 
@@ -166,13 +192,20 @@ func (r *CertificateReconciler) submitCSR(ctx context.Context, cert *openvoxv1al
 }
 
 // fetchSignedCert checks if the CA has signed the certificate. Returns the PEM cert or nil.
-func (r *CertificateReconciler) fetchSignedCert(ctx context.Context, cert *openvoxv1alpha1.Certificate, caServiceName, namespace string) ([]byte, error) {
+func (r *CertificateReconciler) fetchSignedCert(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, caServiceName, namespace string) ([]byte, error) {
 	certname := cert.Spec.Certname
 	if certname == "" {
 		certname = "puppet"
 	}
 
-	httpClient := caHTTPClient()
+	caCertPEM, err := r.getCAPublicCert(ctx, ca, namespace)
+	if err != nil {
+		return nil, fmt.Errorf("loading CA certificate: %w", err)
+	}
+	httpClient, err := caHTTPClient(caCertPEM)
+	if err != nil {
+		return nil, fmt.Errorf("creating CA HTTP client: %w", err)
+	}
 	caBaseURL := fmt.Sprintf("https://%s.%s.svc:8140", caServiceName, namespace)
 	certURL := fmt.Sprintf("%s/puppet-ca/v1/certificate/%s?environment=production", caBaseURL, certname)
 
@@ -215,7 +248,7 @@ func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openv
 	}
 
 	// Step 2: Check if cert is signed (non-blocking, single attempt)
-	signedCertPEM, err := r.fetchSignedCert(ctx, cert, caServiceName, namespace)
+	signedCertPEM, err := r.fetchSignedCert(ctx, cert, ca, caServiceName, namespace)
 	if err != nil {
 		logger.Info("failed to fetch signed cert, will retry", "error", err)
 		return ctrl.Result{RequeueAfter: RequeueIntervalMedium}, nil

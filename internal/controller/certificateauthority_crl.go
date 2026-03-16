@@ -8,6 +8,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -34,7 +35,7 @@ func (r *CertificateAuthorityReconciler) reconcileCRLRefresh(ctx context.Context
 		return ctrl.Result{RequeueAfter: interval}, nil
 	}
 
-	crlPEM, err := r.fetchCRL(ctx, caServiceName, ca.Namespace)
+	crlPEM, err := r.fetchCRL(ctx, ca, caServiceName, ca.Namespace)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("fetching CRL: %w", err)
 	}
@@ -49,9 +50,30 @@ func (r *CertificateAuthorityReconciler) reconcileCRLRefresh(ctx context.Context
 	return ctrl.Result{RequeueAfter: interval}, nil
 }
 
+// getCAPublicCert reads the CA public certificate from the CA Secret.
+func (r *CertificateAuthorityReconciler) getCAPublicCert(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, namespace string) ([]byte, error) {
+	caSecretName := fmt.Sprintf("%s-ca", ca.Name)
+	secret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: caSecretName, Namespace: namespace}, secret); err != nil {
+		return nil, fmt.Errorf("getting CA Secret %s: %w", caSecretName, err)
+	}
+	certPEM := secret.Data["ca_crt.pem"]
+	if len(certPEM) == 0 {
+		return nil, fmt.Errorf("CA Secret %s has no ca_crt.pem data", caSecretName)
+	}
+	return certPEM, nil
+}
+
 // fetchCRL retrieves the CRL from the CA HTTP API.
-func (r *CertificateAuthorityReconciler) fetchCRL(ctx context.Context, caServiceName, namespace string) ([]byte, error) {
-	httpClient := caHTTPClient()
+func (r *CertificateAuthorityReconciler) fetchCRL(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, caServiceName, namespace string) ([]byte, error) {
+	caCertPEM, err := r.getCAPublicCert(ctx, ca, namespace)
+	if err != nil {
+		return nil, fmt.Errorf("loading CA certificate: %w", err)
+	}
+	httpClient, err := caHTTPClient(caCertPEM)
+	if err != nil {
+		return nil, fmt.Errorf("creating CA HTTP client: %w", err)
+	}
 
 	crlURL := fmt.Sprintf("https://%s.%s.svc:8140/puppet-ca/v1/certificate_revocation_list/ca?environment=production", caServiceName, namespace)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, crlURL, nil)

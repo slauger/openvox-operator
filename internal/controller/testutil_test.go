@@ -437,4 +437,3 @@ func newReportProcessorReconciler(c client.Client) *ReportProcessorReconciler {
 		Recorder: testRecorder(),
 	}
 }
-

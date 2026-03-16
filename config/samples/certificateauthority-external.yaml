@@ -1,0 +1,41 @@
+# External CertificateAuthority example
+#
+# This example connects to an existing Puppet/OpenVox CA running outside the cluster.
+# The operator delegates CSR signing and CRL fetching to the external CA URL
+# instead of managing its own CA infrastructure (no PVC, no setup Job).
+#
+# Prerequisites:
+# 1. Create the CA certificate Secret:
+#    kubectl create secret generic external-ca-cert \
+#      --from-file=ca_crt.pem=/path/to/ca_crt.pem
+#
+# 2. (Optional) For mTLS, create a TLS Secret with client certificate:
+#    kubectl create secret generic external-ca-tls \
+#      --from-file=tls.crt=/path/to/client.pem \
+#      --from-file=tls.key=/path/to/client-key.pem
+---
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: CertificateAuthority
+metadata:
+  name: external-ca
+spec:
+  # CA policy settings still apply to certificates issued via external CA
+  allowSubjectAltNames: true
+  allowAuthorizationExtensions: true
+  enableInfraCRL: true
+  crlRefreshInterval: 5m
+
+  external:
+    # Base URL of the external Puppet/OpenVox CA
+    url: https://puppet-ca.example.com:8140
+
+    # Secret containing the CA certificate (key: ca_crt.pem)
+    # Used for TLS verification of the external CA
+    caSecretRef: external-ca-cert
+
+    # Secret containing client certificate and key for mTLS (keys: tls.crt, tls.key)
+    # Required if the external CA enforces client certificate authentication
+    tlsSecretRef: external-ca-tls
+
+    # Set to true to skip TLS verification (not recommended for production)
+    # insecureSkipVerify: false

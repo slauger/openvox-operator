@@ -24,12 +24,12 @@ const RSAKeySize = 4096
 
 // CA setup Job defaults.
 const (
-	CAJobBackoffLimit   = int32(3)
-	DefaultCAStorageGi  = "1Gi"
-	CASetupRunAsUser    = int64(1001)
-	CASetupRunAsGroup   = int64(0)
-	ServerRunAsUser     = int64(1001)
-	ServerRunAsGroup    = int64(0)
+	CAJobBackoffLimit  = int32(3)
+	DefaultCAStorageGi = "1Gi"
+	CASetupRunAsUser   = int64(1001)
+	CASetupRunAsGroup  = int64(0)
+	ServerRunAsUser    = int64(1001)
+	ServerRunAsGroup   = int64(0)
 )
 
 // CA setup Job resource defaults (JRuby/JVM workload).
@@ -42,7 +42,7 @@ const (
 
 // HPA and PDB defaults for Server resources.
 const (
-	DefaultHPAMaxReplicas = int32(5)
-	DefaultHPATargetCPU   = int32(75)
+	DefaultHPAMaxReplicas  = int32(5)
+	DefaultHPATargetCPU    = int32(75)
 	DefaultPDBMinAvailable = 1
 )

@@ -31,7 +31,33 @@ type CertificateAuthorityList struct {
 	Items           []CertificateAuthority `json:"items"`
 }
 
+// ExternalCASpec configures an external CA running outside the cluster.
+// When set, the operator delegates CSR signing and CRL fetching to the external CA URL
+// instead of managing its own CA infrastructure.
+type ExternalCASpec struct {
+	// URL is the base URL of the external Puppet/OpenVox CA (e.g. "https://puppet-ca.example.com:8140").
+	// +kubebuilder:validation:Pattern=`^https?://`
+	URL string `json:"url"`
+
+	// CASecretRef references a Secret containing the CA certificate in key "ca_crt.pem".
+	// Used to verify the external CA's TLS certificate.
+	// +optional
+	CASecretRef string `json:"caSecretRef,omitempty"`
+
+	// TLSSecretRef references a Secret containing "tls.crt" and "tls.key" for mTLS
+	// client authentication against the external CA.
+	// +optional
+	TLSSecretRef string `json:"tlsSecretRef,omitempty"`
+
+	// InsecureSkipVerify disables TLS certificate verification for the external CA.
+	// Only use this for testing or when the CA uses a self-signed certificate
+	// and no CASecretRef is provided.
+	// +optional
+	InsecureSkipVerify bool `json:"insecureSkipVerify,omitempty"`
+}
+
 // CertificateAuthoritySpec defines the desired state of CertificateAuthority.
+// +kubebuilder:validation:XValidation:rule="!(has(self.external) && has(self.storage) && self.storage.size != ” && self.storage.size != '1Gi')",message="external and custom storage are mutually exclusive"
 type CertificateAuthoritySpec struct {
 	// TTL is the CA certificate TTL as a duration string.
 	// Supported units: s (seconds), m (minutes), h (hours), d (days), y (years).
@@ -87,16 +113,24 @@ type CertificateAuthoritySpec struct {
 	// IntermediateCA configures an intermediate CA setup.
 	// +optional
 	IntermediateCA IntermediateCASpec `json:"intermediateCA,omitempty"`
+
+	// External configures an external CA running outside the cluster.
+	// When set, the operator skips PVC/Job-based CA setup and delegates
+	// CSR signing and CRL fetching to the external CA URL.
+	// Mutually exclusive with custom storage settings.
+	// +optional
+	External *ExternalCASpec `json:"external,omitempty"`
 }
 
 // CertificateAuthorityPhase represents the current lifecycle phase of a CertificateAuthority.
-// +kubebuilder:validation:Enum=Pending;Initializing;Ready;Error
+// +kubebuilder:validation:Enum=Pending;Initializing;Ready;External;Error
 type CertificateAuthorityPhase string
 
 const (
 	CertificateAuthorityPhasePending      CertificateAuthorityPhase = "Pending"
 	CertificateAuthorityPhaseInitializing CertificateAuthorityPhase = "Initializing"
 	CertificateAuthorityPhaseReady        CertificateAuthorityPhase = "Ready"
+	CertificateAuthorityPhaseExternal     CertificateAuthorityPhase = "External"
 	CertificateAuthorityPhaseError        CertificateAuthorityPhase = "Error"
 )
 

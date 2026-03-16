@@ -22,11 +22,73 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
+
+// caHTTPClientForCA returns an HTTP client configured for the CA.
+// For external CAs, it builds an mTLS client from the referenced Secrets.
+// For internal CAs, it uses the CA public certificate.
+func (r *CertificateReconciler) caHTTPClientForCA(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, namespace string) (*http.Client, error) {
+	if ca.Spec.External != nil {
+		return buildExternalCAHTTPClient(ctx, r.Client, ca.Spec.External, namespace)
+	}
+
+	caCertPEM, err := r.getCAPublicCert(ctx, ca, namespace)
+	if err != nil {
+		return nil, fmt.Errorf("loading CA certificate: %w", err)
+	}
+	return caHTTPClient(caCertPEM)
+}
+
+// buildExternalCAHTTPClient creates an HTTP client for an external CA with optional mTLS and CA verification.
+func buildExternalCAHTTPClient(ctx context.Context, reader client.Reader, ext *openvoxv1alpha1.ExternalCASpec, namespace string) (*http.Client, error) {
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: ext.InsecureSkipVerify, //nolint:gosec // user-controlled option for external CAs
+	}
+
+	// Load CA certificate for server verification
+	if ext.CASecretRef != "" {
+		secret := &corev1.Secret{}
+		if err := reader.Get(ctx, types.NamespacedName{Name: ext.CASecretRef, Namespace: namespace}, secret); err != nil {
+			return nil, fmt.Errorf("getting CA Secret %s: %w", ext.CASecretRef, err)
+		}
+		caCertPEM := secret.Data["ca_crt.pem"]
+		if len(caCertPEM) > 0 {
+			pool := x509.NewCertPool()
+			if !pool.AppendCertsFromPEM(caCertPEM) {
+				return nil, fmt.Errorf("failed to parse CA certificate from Secret %s", ext.CASecretRef)
+			}
+			tlsConfig.RootCAs = pool
+		}
+	}
+
+	// Load client certificate for mTLS
+	if ext.TLSSecretRef != "" {
+		secret := &corev1.Secret{}
+		if err := reader.Get(ctx, types.NamespacedName{Name: ext.TLSSecretRef, Namespace: namespace}, secret); err != nil {
+			return nil, fmt.Errorf("getting TLS Secret %s: %w", ext.TLSSecretRef, err)
+		}
+		certPEM := secret.Data["tls.crt"]
+		keyPEM := secret.Data["tls.key"]
+		if len(certPEM) == 0 || len(keyPEM) == 0 {
+			return nil, fmt.Errorf("TLS Secret %s missing tls.crt or tls.key", ext.TLSSecretRef)
+		}
+		clientCert, err := tls.X509KeyPair(certPEM, keyPEM)
+		if err != nil {
+			return nil, fmt.Errorf("parsing client certificate from Secret %s: %w", ext.TLSSecretRef, err)
+		}
+		tlsConfig.Certificates = []tls.Certificate{clientCert}
+	}
+
+	return &http.Client{
+		Timeout:   HTTPClientTimeout,
+		Transport: &http.Transport{TLSClientConfig: tlsConfig},
+	}, nil
+}
 
 const (
 	// AnnotationCSRPollAttempts tracks the number of CSR poll attempts on the pending Secret.
@@ -82,7 +144,7 @@ func (r *CertificateReconciler) getCAPublicCert(ctx context.Context, ca *openvox
 // submitCSR generates an RSA key (or reuses an existing one from a pending Secret),
 // submits the CSR to the Puppet CA, and stores the private key in a pending Secret.
 // Returns the pending Secret name.
-func (r *CertificateReconciler) submitCSR(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, caServiceName, namespace string) (ctrl.Result, error) {
+func (r *CertificateReconciler) submitCSR(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, caBaseURL, namespace string) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	certname := cert.Spec.Certname
@@ -151,15 +213,10 @@ func (r *CertificateReconciler) submitCSR(ctx context.Context, cert *openvoxv1al
 	}
 	csrPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER})
 
-	caCertPEM, err := r.getCAPublicCert(ctx, ca, namespace)
+	httpClient, err := r.caHTTPClientForCA(ctx, ca, namespace)
 	if err != nil {
-		return ctrl.Result{RequeueAfter: RequeueIntervalShort}, fmt.Errorf("loading CA certificate: %w", err)
+		return ctrl.Result{RequeueAfter: RequeueIntervalShort}, fmt.Errorf("creating CA HTTP client: %w", err)
 	}
-	httpClient, err := caHTTPClient(caCertPEM)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("creating CA HTTP client: %w", err)
-	}
-	caBaseURL := fmt.Sprintf("https://%s.%s.svc:8140", caServiceName, namespace)
 	csrURL := fmt.Sprintf("%s/puppet-ca/v1/certificate_request/%s?environment=production", caBaseURL, certname)
 
 	logger.Info("submitting CSR to CA", "url", csrURL, "certname", certname)
@@ -192,21 +249,16 @@ func (r *CertificateReconciler) submitCSR(ctx context.Context, cert *openvoxv1al
 }
 
 // fetchSignedCert checks if the CA has signed the certificate. Returns the PEM cert or nil.
-func (r *CertificateReconciler) fetchSignedCert(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, caServiceName, namespace string) ([]byte, error) {
+func (r *CertificateReconciler) fetchSignedCert(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, caBaseURL, namespace string) ([]byte, error) {
 	certname := cert.Spec.Certname
 	if certname == "" {
 		certname = "puppet"
 	}
 
-	caCertPEM, err := r.getCAPublicCert(ctx, ca, namespace)
-	if err != nil {
-		return nil, fmt.Errorf("loading CA certificate: %w", err)
-	}
-	httpClient, err := caHTTPClient(caCertPEM)
+	httpClient, err := r.caHTTPClientForCA(ctx, ca, namespace)
 	if err != nil {
 		return nil, fmt.Errorf("creating CA HTTP client: %w", err)
 	}
-	caBaseURL := fmt.Sprintf("https://%s.%s.svc:8140", caServiceName, namespace)
 	certURL := fmt.Sprintf("%s/puppet-ca/v1/certificate/%s?environment=production", caBaseURL, certname)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, certURL, nil)
@@ -239,16 +291,16 @@ func (r *CertificateReconciler) fetchSignedCert(ctx context.Context, cert *openv
 
 // signCertificate is the non-blocking orchestrator. It submits the CSR (if not already done),
 // checks for the signed cert, and returns RequeueAfter if still waiting.
-func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, caServiceName, namespace string) (ctrl.Result, error) {
+func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, caBaseURL, namespace string) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	// Step 1: Ensure CSR is submitted and key is persisted
-	if result, err := r.submitCSR(ctx, cert, ca, caServiceName, namespace); err != nil {
+	if result, err := r.submitCSR(ctx, cert, ca, caBaseURL, namespace); err != nil {
 		return result, err
 	}
 
 	// Step 2: Check if cert is signed (non-blocking, single attempt)
-	signedCertPEM, err := r.fetchSignedCert(ctx, cert, ca, caServiceName, namespace)
+	signedCertPEM, err := r.fetchSignedCert(ctx, cert, ca, caBaseURL, namespace)
 	if err != nil {
 		logger.Info("failed to fetch signed cert, will retry", "error", err)
 		return ctrl.Result{RequeueAfter: RequeueIntervalMedium}, nil

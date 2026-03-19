@@ -48,6 +48,8 @@ Autosigning is configured via [SigningPolicy](signingpolicy.md) resources that r
 |---|---|---|
 | `phase` | string | Current lifecycle phase |
 | `caSecretName` | string | Name of the Secret containing `ca_crt.pem` (public CA certificate) |
+| `serviceName` | string | Name of the internal ClusterIP Service for operator communication |
+| `notAfter` | time | Expiry time of the CA certificate |
 | `conditions` | []Condition | `CAReady` |
 
 ## Phases
@@ -57,6 +59,7 @@ Autosigning is configured via [SigningPolicy](signingpolicy.md) resources that r
 | `Pending` | CertificateAuthority created, waiting for reconciliation |
 | `Initializing` | CA setup Job is running |
 | `Ready` | CA Secrets created, Certificates can be signed |
+| `External` | External CA configured (no PVC, Job, or internal Service) |
 | `Error` | CA setup failed |
 
 ## CA Secrets
@@ -90,10 +93,17 @@ sequenceDiagram
     Srv->>Srv: TLS handshake uses new CRL
 ```
 
+## Internal Service
+
+The CertificateAuthority controller creates a dedicated ClusterIP Service named `{name}-internal` for operator-internal communication (CSR signing and CRL refresh). This Service is separate from any Pool Service so that users can freely configure the Pool's Service type (ClusterIP, LoadBalancer, NodePort) without conflicting with the operator.
+
+The internal Service FQDN (`{name}-internal.{namespace}.svc`) is automatically added as a SAN to the CA server certificate during setup, so TLS validation succeeds without manual configuration.
+
 ## Created Resources
 
 | Resource | Name | Description |
 |---|---|---|
+| Service | `{name}-internal` | Internal ClusterIP Service for operator communication (port 8140) |
 | PVC | `{name}-data` | Persistent storage for CA keys and data |
 | ServiceAccount | `{name}-ca-setup` | Job ServiceAccount with permission to create CA Secrets |
 | Role | `{name}-ca-setup` | Scoped to CA Secret creation |

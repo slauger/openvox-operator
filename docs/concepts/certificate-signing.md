@@ -16,6 +16,7 @@ sequenceDiagram
 
     User->>Operator: Create CertificateAuthority
     Operator->>K8s: Create PVC ({ca}-data)
+    Operator->>K8s: Create Service ({ca}-internal)
     Operator->>K8s: Create ServiceAccount + RBAC
     Operator->>K8s: Create Job ({ca}-setup)
     Job->>PVC: Run puppetserver ca setup
@@ -88,14 +89,12 @@ The pending Secret ensures idempotency: if the controller restarts mid-signing, 
 
 ### Service Discovery
 
-The Certificate controller discovers the CA server endpoint automatically:
+The Certificate controller connects to the CA via the internal Service created by the CertificateAuthority controller:
 
-1. Find all Configs with `authorityRef` pointing to the CA
-2. Find a Server with `ca: true` referencing one of those Configs
-3. Use the first `poolRef` as the Kubernetes Service name
-4. Endpoint: `https://{pool-name}.{namespace}.svc:8140`
+- **Internal CA:** `https://{ca-name}-internal.{namespace}.svc:8140`
+- **External CA:** Uses the URL from `spec.external.url`
 
-No manual URL configuration is needed.
+The internal Service FQDN is automatically added as a SAN to the CA server certificate during CA setup, so TLS validation works without manual configuration. No Pool or Server discovery is needed.
 
 ## CRL Distribution
 

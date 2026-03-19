@@ -667,7 +667,7 @@ func TestCAReconcile_StatusSigningSecretName_NoCert(t *testing.T) {
 	caSecret := newSecret("test-ca-ca", map[string][]byte{
 		"ca_crt.pem": []byte("ca-cert"),
 	})
-	// No Certificate or Server objects — findCAServerCert returns nil
+	// No Certificate or Server objects - findCAServerCert returns nil
 	c := setupTestClient(ca, cfg, caSecret)
 	r := newCertificateAuthorityReconciler(c)
 

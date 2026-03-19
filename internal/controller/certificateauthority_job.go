@@ -151,6 +151,7 @@ func (r *CertificateAuthorityReconciler) buildCASetupJob(ctx context.Context, ca
 		{Name: "CA_KEY_SECRET_NAME", Value: caKeySecretName},
 		{Name: "CA_CRL_SECRET_NAME", Value: caCRLSecretName},
 		{Name: "CA_NAME", Value: ca.Name},
+		{Name: "CA_UID", Value: string(ca.UID)},
 		{Name: "CONFIG_NAME", Value: cfg.Name},
 		{Name: "SSL_SECRET_NAME", Value: tlsSecretName},
 		{Name: "CERT_RESOURCE_NAME", Value: certResourceName},
@@ -304,6 +305,16 @@ create_or_update_secret() {
   echo "Secret '${SECRET_NAME}' created/updated successfully."
 }
 
+# ownerReference block for all Secrets (GC deletes them when the CA is deleted)
+OWNER_REF="\"ownerReferences\": [{
+      \"apiVersion\": \"openvox.voxpupuli.org/v1alpha1\",
+      \"kind\": \"CertificateAuthority\",
+      \"name\": \"${CA_NAME}\",
+      \"uid\": \"${CA_UID}\",
+      \"controller\": true,
+      \"blockOwnerDeletion\": true
+    }]"
+
 # CA public cert secret (mounted in all pods)
 CA_CRT=$(base64 -w0 /etc/puppetlabs/puppetserver/ca/ca_crt.pem)
 create_or_update_secret "${CA_SECRET_NAME}" "{
@@ -316,7 +327,8 @@ create_or_update_secret "${CA_SECRET_NAME}" "{
       \"app.kubernetes.io/managed-by\": \"openvox-operator\",
       \"app.kubernetes.io/name\": \"openvox\",
       \"openvox.voxpupuli.org/certificateauthority\": \"${CA_NAME}\"
-    }
+    },
+    ${OWNER_REF}
   },
   \"data\": {
     \"ca_crt.pem\": \"${CA_CRT}\"
@@ -335,7 +347,8 @@ create_or_update_secret "${CA_KEY_SECRET_NAME}" "{
       \"app.kubernetes.io/managed-by\": \"openvox-operator\",
       \"app.kubernetes.io/name\": \"openvox\",
       \"openvox.voxpupuli.org/certificateauthority\": \"${CA_NAME}\"
-    }
+    },
+    ${OWNER_REF}
   },
   \"data\": {
     \"ca_key.pem\": \"${CA_KEY}\"
@@ -355,7 +368,8 @@ create_or_update_secret "${CA_CRL_SECRET_NAME}" "{
       \"app.kubernetes.io/managed-by\": \"openvox-operator\",
       \"app.kubernetes.io/name\": \"openvox\",
       \"openvox.voxpupuli.org/certificateauthority\": \"${CA_NAME}\"
-    }
+    },
+    ${OWNER_REF}
   },
   \"data\": {
     \"ca_crl.pem\": \"${CA_CRL}\",
@@ -382,7 +396,8 @@ if [ -n "${SSL_SECRET_NAME}" ] && [ -f "/etc/puppetlabs/puppet/ssl/certs/${CERTN
         \"app.kubernetes.io/name\": \"openvox\",
         \"openvox.voxpupuli.org/certificateauthority\": \"${CA_NAME}\",
         \"openvox.voxpupuli.org/certificate\": \"${CERT_RESOURCE_NAME}\"
-      }
+      },
+      ${OWNER_REF}
     },
     \"data\": {
       \"cert.pem\": \"${CERT}\",

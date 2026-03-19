@@ -18,7 +18,7 @@ import (
 // communication with the CA (CSR signing, CRL refresh).
 func (r *CertificateAuthorityReconciler) reconcileCAService(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority) error {
 	logger := log.FromContext(ctx)
-	svcName := ca.Name
+	svcName := caInternalServiceName(ca.Name)
 
 	labels := caLabels(ca.Name)
 	selector := map[string]string{

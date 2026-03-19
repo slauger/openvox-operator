@@ -128,7 +128,7 @@ func (r *CertificateReconciler) reconcileCertSigning(ctx context.Context, cert *
 	if ca.Spec.External != nil {
 		caBaseURL = ca.Spec.External.URL
 	} else {
-		caBaseURL = fmt.Sprintf("https://%s.%s.svc:8140", ca.Name, cert.Namespace)
+		caBaseURL = fmt.Sprintf("https://%s.%s.svc:8140", caInternalServiceName(ca.Name), cert.Namespace)
 	}
 
 	cert.Status.Phase = openvoxv1alpha1.CertificatePhaseRequesting

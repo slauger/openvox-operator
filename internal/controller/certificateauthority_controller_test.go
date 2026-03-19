@@ -475,13 +475,13 @@ func TestCAReconcile_ServiceCreation(t *testing.T) {
 	}
 
 	svc := &corev1.Service{}
-	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca", Namespace: testNamespace}, svc); err != nil {
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca-internal", Namespace: testNamespace}, svc); err != nil {
 		t.Fatalf("Service not created: %v", err)
 	}
 
 	// Verify name
-	if svc.Name != "test-ca" {
-		t.Errorf("expected Service name %q, got %q", "test-ca", svc.Name)
+	if svc.Name != "test-ca-internal" {
+		t.Errorf("expected Service name %q, got %q", "test-ca-internal", svc.Name)
 	}
 
 	// Verify port
@@ -546,8 +546,8 @@ func TestCAReconcile_JobIncludesServiceFQDN(t *testing.T) {
 		t.Fatal("DNS_ALT_NAMES env var not set")
 	}
 
-	// Should contain original SANs plus the CA Service FQDN
-	expectedFQDN := "test-ca.default.svc"
+	// Should contain original SANs plus the CA internal Service FQDN
+	expectedFQDN := "test-ca-internal.default.svc"
 	if !strings.Contains(dnsAltNames, expectedFQDN) {
 		t.Errorf("expected DNS_ALT_NAMES to contain %q, got %q", expectedFQDN, dnsAltNames)
 	}
@@ -586,8 +586,8 @@ func TestCAReconcile_StatusServiceName(t *testing.T) {
 		t.Fatalf("failed to get CA: %v", err)
 	}
 
-	if updated.Status.ServiceName != "test-ca" {
-		t.Errorf("expected status.serviceName %q, got %q", "test-ca", updated.Status.ServiceName)
+	if updated.Status.ServiceName != "test-ca-internal" {
+		t.Errorf("expected status.serviceName %q, got %q", "test-ca-internal", updated.Status.ServiceName)
 	}
 }
 
@@ -603,7 +603,7 @@ func TestCAReconcile_ExternalCA_NoService(t *testing.T) {
 
 	// No Service should be created for external CA
 	svc := &corev1.Service{}
-	if err := c.Get(testCtx(), types.NamespacedName{Name: "ext-ca", Namespace: testNamespace}, svc); err == nil {
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "ext-ca-internal", Namespace: testNamespace}, svc); err == nil {
 		t.Error("expected no Service for external CA, but one was created")
 	}
 }

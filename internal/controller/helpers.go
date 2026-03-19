@@ -136,6 +136,12 @@ func createOrUpdateSecret(ctx context.Context, c client.Client, scheme *runtime.
 	return c.Update(ctx, secret)
 }
 
+// caInternalServiceName returns the name of the internal ClusterIP Service
+// created by the CA controller for operator communication (CSR signing, CRL refresh).
+func caInternalServiceName(caName string) string {
+	return fmt.Sprintf("%s-internal", caName)
+}
+
 // resolveCode determines the code source for a Server.
 // Priority: Server override > Config default.
 func resolveCode(server *openvoxv1alpha1.Server, cfg *openvoxv1alpha1.Config) *openvoxv1alpha1.CodeSpec {

@@ -113,7 +113,7 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 	caSecretName := fmt.Sprintf("%s-ca", ca.Name)
 	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseReady
 	ca.Status.CASecretName = caSecretName
-	ca.Status.ServiceName = ca.Name
+	ca.Status.ServiceName = caInternalServiceName(ca.Name)
 	ca.Status.NotAfter = r.extractCANotAfter(ctx, caSecretName, ca.Namespace)
 	meta.SetStatusCondition(&ca.Status.Conditions, metav1.Condition{
 		Type:               openvoxv1alpha1.ConditionCAReady,

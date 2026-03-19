@@ -2,8 +2,8 @@ apiVersion: v2
 name: openvox-operator
 description: Kubernetes Operator for running OpenVox Server environments
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: 0.0.0
+appVersion: "0.0.0"
 home: https://github.com/slauger/openvox-operator
 sources:
   - https://github.com/slauger/openvox-operator

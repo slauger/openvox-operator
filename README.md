@@ -203,11 +203,28 @@ Run unit tests:
 make test
 ```
 
-Run E2E tests against the current cluster (requires Docker Desktop Kubernetes or similar). This builds local images, deploys the operator, and runs [Chainsaw](https://kyverno.github.io/chainsaw/) test scenarios (single-node and multi-server):
+Run E2E tests against the current cluster. E2E tests require container images in ghcr.io because they run on a kind cluster with the `ImageVolume` feature gate. Build and push images for the current branch via the E2E workflow, then run the tests locally:
 
 ```bash
+# Build and push images for the current branch
+gh workflow run e2e.yaml --ref $(git branch --show-current)
+
+# Wait for the workflow to finish
+gh run watch $(gh run list --workflow=e2e.yaml --limit=1 --json databaseId -q '.[0].databaseId')
+
+# Run E2E tests
 make e2e
 ```
+
+Subsets of E2E tests can be run separately:
+
+```bash
+make e2e-stack        # stack deployment tests (single-node, multi-server)
+make e2e-agent        # agent tests (basic, broken, idempotent, concurrent)
+make e2e-integration  # integration tests (enc, report, full)
+```
+
+See [Testing](docs/development/testing.md) for details.
 
 ### Available Targets
 

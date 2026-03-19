@@ -307,6 +307,22 @@ func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openv
 	}
 
 	if signedCertPEM == nil {
+		// For internal CAs with a signing secret, sign the CSR directly via the CA API
+		if ca.Spec.External == nil && ca.Status.SigningSecretName != "" {
+			logger.Info("CSR not auto-signed, signing via operator mTLS", "certname", cert.Spec.Certname, "signingSecret", ca.Status.SigningSecretName)
+			if err := r.signCSRViaAPI(ctx, cert, ca, caBaseURL, namespace); err != nil {
+				logger.Info("operator signing failed, falling through to poll", "error", err)
+			} else {
+				// Fetch the now-signed cert immediately
+				signedCertPEM, err = r.fetchSignedCert(ctx, cert, ca, caBaseURL, namespace)
+				if err != nil {
+					logger.Info("failed to fetch cert after operator signing", "error", err)
+				}
+			}
+		}
+	}
+
+	if signedCertPEM == nil {
 		// Read and increment poll attempt count from pending Secret annotation
 		pendingSecretName := fmt.Sprintf("%s-tls-pending", cert.Name)
 		pendingSecret := &corev1.Secret{}
@@ -376,4 +392,74 @@ func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openv
 
 	logger.Info("certificate signed successfully", "certname", cert.Spec.Certname)
 	return ctrl.Result{}, nil
+}
+
+// signCSRViaAPI signs a pending CSR via the Puppet CA HTTP API using mTLS with the
+// CA server's own certificate (which has the pp_cli_auth extension required by auth.conf).
+func (r *CertificateReconciler) signCSRViaAPI(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, caBaseURL, namespace string) error {
+	certname := cert.Spec.Certname
+	if certname == "" {
+		certname = "puppet"
+	}
+
+	// Load CA public cert for TLS server verification
+	caCertPEM, err := r.getCAPublicCert(ctx, ca, namespace)
+	if err != nil {
+		return fmt.Errorf("loading CA certificate: %w", err)
+	}
+
+	// Load signing secret (CA server cert + key) for mTLS client auth
+	signingSecret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: ca.Status.SigningSecretName, Namespace: namespace}, signingSecret); err != nil {
+		return fmt.Errorf("getting signing Secret %s: %w", ca.Status.SigningSecretName, err)
+	}
+
+	clientCertPEM := signingSecret.Data["cert.pem"]
+	clientKeyPEM := signingSecret.Data["key.pem"]
+	if len(clientCertPEM) == 0 || len(clientKeyPEM) == 0 {
+		return fmt.Errorf("signing Secret %s missing cert.pem or key.pem", ca.Status.SigningSecretName)
+	}
+
+	// Build mTLS HTTP client
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(caCertPEM) {
+		return fmt.Errorf("failed to parse CA certificate PEM")
+	}
+	clientCert, err := tls.X509KeyPair(clientCertPEM, clientKeyPEM)
+	if err != nil {
+		return fmt.Errorf("parsing signing certificate: %w", err)
+	}
+	httpClient := &http.Client{
+		Timeout: HTTPClientTimeout,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs:      pool,
+				Certificates: []tls.Certificate{clientCert},
+			},
+		},
+	}
+
+	// PUT /puppet-ca/v1/certificate_status/{certname}?environment=production
+	signURL := fmt.Sprintf("%s/puppet-ca/v1/certificate_status/%s?environment=production", caBaseURL, certname)
+	body := strings.NewReader(`{"desired_state": "signed"}`)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, signURL, body)
+	if err != nil {
+		return fmt.Errorf("building sign request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("signing CSR via API: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, HTTPBodyLimit))
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("CA rejected sign request (HTTP %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	log.FromContext(ctx).Info("CSR signed via operator mTLS", "certname", certname)
+	return nil
 }

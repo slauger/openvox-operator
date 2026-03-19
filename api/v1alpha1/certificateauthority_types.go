@@ -150,6 +150,12 @@ type CertificateAuthorityStatus struct {
 	// +optional
 	ServiceName string `json:"serviceName,omitempty"`
 
+	// SigningSecretName is the name of the TLS Secret used for mTLS authentication
+	// when signing certificates via the CA HTTP API. This Secret contains a certificate
+	// with the pp_cli_auth extension.
+	// +optional
+	SigningSecretName string `json:"signingSecretName,omitempty"`
+
 	// NotAfter is the expiration time of the CA certificate.
 	// +optional
 	NotAfter *metav1.Time `json:"notAfter,omitempty"`

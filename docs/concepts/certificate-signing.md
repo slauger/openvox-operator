@@ -16,6 +16,7 @@ sequenceDiagram
 
     User->>Operator: Create CertificateAuthority
     Operator->>K8s: Create PVC ({ca}-data)
+    Operator->>K8s: Create Service ({ca}-internal)
     Operator->>K8s: Create ServiceAccount + RBAC
     Operator->>K8s: Create Job ({ca}-setup)
     Job->>PVC: Run puppetserver ca setup
@@ -65,10 +66,17 @@ sequenceDiagram
     Cert->>K8s: Store key in {cert}-tls-pending Secret
     Cert->>CA: PUT /puppet-ca/v1/certificate_request/{certname}
     CA-->>Cert: 200 OK (CSR accepted)
-
-    loop Poll every 5s
+    Cert->>CA: GET /puppet-ca/v1/certificate/{certname}
+    alt Auto-signed (SigningPolicy matched)
+        CA-->>Cert: Signed certificate
+    else Not auto-signed (internal CA)
+        CA-->>Cert: No certificate yet
+        Cert->>K8s: Read signing Secret (CA server cert with pp_cli_auth)
+        Cert->>CA: PUT /puppet-ca/v1/certificate_status/{certname} (mTLS)
+        Note right of Cert: {"desired_state": "signed"}
+        CA-->>Cert: 204 No Content
         Cert->>CA: GET /puppet-ca/v1/certificate/{certname}
-        CA-->>Cert: Signed certificate (when ready)
+        CA-->>Cert: Signed certificate
     end
 
     Cert->>K8s: Create {cert}-tls Secret (cert.pem + key.pem)
@@ -81,21 +89,22 @@ The controller:
 1. Generates an RSA 4096-bit private key and stores it in a temporary `{cert}-tls-pending` Secret
 2. Creates a CSR with the configured `certname` and `dnsAltNames`
 3. Submits the CSR via HTTP PUT to the CA server's Puppetserver API
-4. Polls for the signed certificate via HTTP GET (every 5 seconds)
-5. Once signed, creates the final `{cert}-tls` Secret and deletes the pending Secret
+4. Checks if the certificate was auto-signed (e.g. by a matching SigningPolicy)
+5. If not auto-signed and the CA has a signing secret (`status.signingSecretName`), the operator signs the CSR directly via the CA HTTP API using mTLS with the CA server's own certificate (which has the `pp_cli_auth` extension required by `auth.conf`)
+6. Once signed, creates the final `{cert}-tls` Secret and deletes the pending Secret
+
+For **external CAs** (where `spec.external` is set), the operator does not attempt to sign the CSR itself. Instead, it falls back to polling until the certificate is signed externally or via the external CA's own autosign mechanism.
 
 The pending Secret ensures idempotency: if the controller restarts mid-signing, it reuses the same key instead of generating a new one.
 
 ### Service Discovery
 
-The Certificate controller discovers the CA server endpoint automatically:
+The Certificate controller connects to the CA via the internal Service created by the CertificateAuthority controller:
 
-1. Find all Configs with `authorityRef` pointing to the CA
-2. Find a Server with `ca: true` referencing one of those Configs
-3. Use the first `poolRef` as the Kubernetes Service name
-4. Endpoint: `https://{pool-name}.{namespace}.svc:8140`
+- **Internal CA:** `https://{ca-name}-internal.{namespace}.svc:8140`
+- **External CA:** Uses the URL from `spec.external.url`
 
-No manual URL configuration is needed.
+The internal Service FQDN is automatically added as a SAN to the CA server certificate during CA setup, so TLS validation works without manual configuration. No Pool or Server discovery is needed.
 
 ## CRL Distribution
 

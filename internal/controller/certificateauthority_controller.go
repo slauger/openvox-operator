@@ -115,6 +115,11 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 	ca.Status.CASecretName = caSecretName
 	ca.Status.ServiceName = caInternalServiceName(ca.Name)
 	ca.Status.NotAfter = r.extractCANotAfter(ctx, caSecretName, ca.Namespace)
+
+	// Find the CA server cert's TLS secret for signing credentials
+	if caCert := r.findCAServerCert(ctx, ca, certs); caCert != nil {
+		ca.Status.SigningSecretName = fmt.Sprintf("%s-tls", caCert.Name)
+	}
 	meta.SetStatusCondition(&ca.Status.Conditions, metav1.Condition{
 		Type:               openvoxv1alpha1.ConditionCAReady,
 		Status:             metav1.ConditionTrue,

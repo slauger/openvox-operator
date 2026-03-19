@@ -3,11 +3,16 @@ package controller
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"io"
 	"math/big"
+	"net"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -44,6 +49,7 @@ func TestCSRPollBackoff(t *testing.T) {
 
 // generateTestCert creates a self-signed CA certificate and key pair for testing.
 // Returns PEM-encoded certificate, PEM-encoded private key.
+// The cert includes 127.0.0.1 as an IP SAN for use with httptest.NewTLSServer.
 func generateTestCert(t *testing.T) ([]byte, []byte) {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -56,7 +62,9 @@ func generateTestCert(t *testing.T) ([]byte, []byte) {
 		NotBefore:    time.Now().Add(-time.Hour),
 		NotAfter:     time.Now().Add(24 * time.Hour),
 		IsCA:         true,
-		KeyUsage:     x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		KeyUsage:     x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+		IPAddresses:  []net.IP{net.IPv4(127, 0, 0, 1)},
 	}
 	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 	if err != nil {
@@ -182,4 +190,187 @@ func TestBuildExternalCAHTTPClient_TLSSecretMissingKey(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when TLS secret is missing tls.key")
 	}
+}
+
+func TestSignCSRViaAPI_Success(t *testing.T) {
+	certPEM, keyPEM := generateTestCert(t)
+
+	// Start test HTTPS server that accepts the sign request
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Errorf("expected PUT, got %s", r.Method)
+		}
+		if !strings.Contains(r.URL.Path, "/puppet-ca/v1/certificate_status/test-certname") {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
+		}
+		body, _ := io.ReadAll(r.Body)
+		if !strings.Contains(string(body), `"desired_state": "signed"`) {
+			t.Errorf("expected desired_state signed in body, got %s", string(body))
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	// Create secrets: CA public cert and signing secret (CA server cert+key)
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	signingSecret := newSecret("ca-cert-tls", map[string][]byte{
+		"cert.pem": certPEM,
+		"key.pem":  keyPEM,
+	})
+
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.SigningSecretName = "ca-cert-tls"
+
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseRequesting)
+	cert.Spec.Certname = "test-certname"
+
+	c := setupTestClient(ca, cert, caSecret, signingSecret)
+	r := newCertificateReconciler(c)
+
+	err := r.signCSRViaAPI(testCtx(), cert, ca, server.URL, testNamespace)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSignCSRViaAPI_MissingSigningSecret(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.SigningSecretName = "nonexistent-secret"
+
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseRequesting)
+	cert.Spec.Certname = "test-certname"
+
+	// CA public cert exists but signing secret does not
+	certPEM, _ := generateTestCert(t)
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+
+	c := setupTestClient(ca, cert, caSecret)
+	r := newCertificateReconciler(c)
+
+	err := r.signCSRViaAPI(testCtx(), cert, ca, "https://localhost:8140", testNamespace)
+	if err == nil {
+		t.Fatal("expected error when signing secret is missing")
+	}
+	if !strings.Contains(err.Error(), "getting signing Secret") {
+		t.Errorf("expected 'getting signing Secret' error, got: %v", err)
+	}
+}
+
+func TestSignCSRViaAPI_SigningSecretMissingKeys(t *testing.T) {
+	certPEM, _ := generateTestCert(t)
+
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	// Signing secret exists but is missing cert.pem/key.pem
+	signingSecret := newSecret("ca-cert-tls", map[string][]byte{
+		"wrong-key": []byte("data"),
+	})
+
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.SigningSecretName = "ca-cert-tls"
+
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseRequesting)
+
+	c := setupTestClient(ca, cert, caSecret, signingSecret)
+	r := newCertificateReconciler(c)
+
+	err := r.signCSRViaAPI(testCtx(), cert, ca, "https://localhost:8140", testNamespace)
+	if err == nil {
+		t.Fatal("expected error when signing secret is missing cert.pem/key.pem")
+	}
+	if !strings.Contains(err.Error(), "missing cert.pem or key.pem") {
+		t.Errorf("expected 'missing cert.pem or key.pem' error, got: %v", err)
+	}
+}
+
+func TestSignCSRViaAPI_CARejectsRequest(t *testing.T) {
+	certPEM, keyPEM := generateTestCert(t)
+
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte("Not Authorized"))
+	}))
+	defer server.Close()
+
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	signingSecret := newSecret("ca-cert-tls", map[string][]byte{
+		"cert.pem": certPEM,
+		"key.pem":  keyPEM,
+	})
+
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.SigningSecretName = "ca-cert-tls"
+
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseRequesting)
+	cert.Spec.Certname = "test-certname"
+
+	c := setupTestClient(ca, cert, caSecret, signingSecret)
+	r := newCertificateReconciler(c)
+
+	err := r.signCSRViaAPI(testCtx(), cert, ca, server.URL, testNamespace)
+	if err == nil {
+		t.Fatal("expected error when CA rejects sign request")
+	}
+	if !strings.Contains(err.Error(), "HTTP 403") {
+		t.Errorf("expected HTTP 403 error, got: %v", err)
+	}
+}
+
+func TestSignCSRViaAPI_DefaultCertname(t *testing.T) {
+	certPEM, keyPEM := generateTestCert(t)
+
+	var requestedPath string
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestedPath = r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	signingSecret := newSecret("ca-cert-tls", map[string][]byte{
+		"cert.pem": certPEM,
+		"key.pem":  keyPEM,
+	})
+
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.SigningSecretName = "ca-cert-tls"
+
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseRequesting)
+	cert.Spec.Certname = "" // should default to "puppet"
+
+	c := setupTestClient(ca, cert, caSecret, signingSecret)
+	r := newCertificateReconciler(c)
+
+	err := r.signCSRViaAPI(testCtx(), cert, ca, server.URL, testNamespace)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(requestedPath, "/puppet-ca/v1/certificate_status/puppet") {
+		t.Errorf("expected path with default certname 'puppet', got: %s", requestedPath)
+	}
+}
+
+// newTestTLSServer creates a test HTTPS server using the given cert/key for TLS.
+func newTestTLSServer(t *testing.T, certPEM, keyPEM []byte, handler http.Handler) *httptest.Server {
+	t.Helper()
+	tlsCert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		t.Fatalf("loading test TLS cert: %v", err)
+	}
+	server := httptest.NewUnstartedServer(handler)
+	server.TLS = &tls.Config{Certificates: []tls.Certificate{tlsCert}}
+	server.StartTLS()
+	return server
 }

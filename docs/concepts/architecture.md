@@ -47,13 +47,15 @@ By separating the CA lifecycle (`CertificateAuthority`) from certificate signing
 
 The Certificate Authority is managed by the CertificateAuthority controller:
 
-1. The CertificateAuthority controller creates a **PVC** for CA data and a **Job** that runs `puppetserver ca setup`
+1. The CertificateAuthority controller creates a **PVC** for CA data, an internal **ClusterIP Service** (`{name}-internal`), and a **Job** that runs `puppetserver ca setup`
 2. The Job stores CA keys on the PVC and creates three Kubernetes **Secrets**:
    - `{name}-ca` -- public CA certificate (`ca_crt.pem`)
    - `{name}-ca-key` -- CA private key (`ca_key.pem`, never mounted in pods)
    - `{name}-ca-crl` -- CRL data (`ca_crl.pem`, `infra_crl.pem`)
 3. The CertificateAuthority transitions to the `Ready` phase
-4. The controller periodically fetches the CRL from the CA HTTP API and updates the CRL Secret (configurable via `crlRefreshInterval`, default `5m`)
+4. The controller periodically fetches the CRL from the internal Service and updates the CRL Secret (configurable via `crlRefreshInterval`, default `5m`)
+
+The internal Service (`{name}-internal`) is used exclusively by the operator for CSR signing and CRL refresh. Its FQDN is automatically added as a SAN to the CA server certificate. This is separate from the Pool Service, which users can configure as ClusterIP, LoadBalancer, or NodePort for external access.
 
 ## Certificate Lifecycle
 

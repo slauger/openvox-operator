@@ -11,7 +11,7 @@ RUN go mod download
 COPY cmd/mock/ cmd/mock/
 RUN CGO_ENABLED=0 go build -o /openvox-mock ./cmd/mock/
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.7-1773204619
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.7-1773895075
 
 LABEL org.opencontainers.image.title="OpenVox Mock" \
       org.opencontainers.image.description="Mock ENC/Report/PuppetDB receiver for E2E tests" \

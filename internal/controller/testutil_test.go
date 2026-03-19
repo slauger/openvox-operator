@@ -299,24 +299,6 @@ func withExternalCASecret(ref string) caOption {
 	}
 }
 
-func withExternalTLSSecret(ref string) caOption {
-	return func(ca *openvoxv1alpha1.CertificateAuthority) {
-		if ca.Spec.External == nil {
-			ca.Spec.External = &openvoxv1alpha1.ExternalCASpec{}
-		}
-		ca.Spec.External.TLSSecretRef = ref
-	}
-}
-
-func withExternalInsecureSkipVerify(v bool) caOption {
-	return func(ca *openvoxv1alpha1.CertificateAuthority) {
-		if ca.Spec.External == nil {
-			ca.Spec.External = &openvoxv1alpha1.ExternalCASpec{}
-		}
-		ca.Spec.External.InsecureSkipVerify = v
-	}
-}
-
 func newCertificateAuthority(name string, opts ...caOption) *openvoxv1alpha1.CertificateAuthority {
 	ca := &openvoxv1alpha1.CertificateAuthority{
 		ObjectMeta: metav1.ObjectMeta{

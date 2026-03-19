@@ -1,0 +1,135 @@
+# Importing or Connecting an External CA
+
+This guide covers two approaches for using an existing Puppet or OpenVox CA with the operator:
+
+1. **CA Import** -- copy existing CA data into the operator-managed PVC (one-time migration)
+2. **External CA** -- point the operator at a running CA outside the cluster (ongoing delegation)
+
+## Option A: CA Import (One-Time Migration)
+
+If you have an existing CA and want the operator to manage it going forward, you can import the CA data into the operator's PVC.
+
+### Prerequisites
+
+- An existing Puppet/OpenVox CA with `ca_crt.pem`, `ca_key.pem`, and `ca_crl.pem`
+- The operator installed in the cluster
+
+### Steps
+
+1. Create the `CertificateAuthority` resource as usual (without `spec.external`):
+
+    ```yaml
+    apiVersion: openvox.voxpupuli.org/v1alpha1
+    kind: CertificateAuthority
+    metadata:
+      name: production-ca
+    spec:
+      ttl: 5y
+      storage:
+        size: 1Gi
+    ```
+
+2. Wait for the PVC to be created, then copy your CA data into it:
+
+    ```bash
+    # Find the PVC
+    kubectl get pvc -l openvox.voxpupuli.org/certificate-authority=production-ca
+
+    # Create a temporary pod to copy data
+    kubectl run ca-import --image=busybox --restart=Never \
+      --overrides='{
+        "spec": {
+          "containers": [{
+            "name": "ca-import",
+            "image": "busybox",
+            "command": ["sleep", "3600"],
+            "volumeMounts": [{
+              "name": "ca-data",
+              "mountPath": "/ca"
+            }]
+          }],
+          "volumes": [{
+            "name": "ca-data",
+            "persistentVolumeClaim": {
+              "claimName": "production-ca-data"
+            }
+          }]
+        }
+      }'
+
+    # Copy CA files
+    kubectl cp ca_crt.pem ca-import:/ca/ca_crt.pem
+    kubectl cp ca_key.pem ca-import:/ca/ca_key.pem
+    kubectl cp ca_crl.pem ca-import:/ca/ca_crl.pem
+
+    # Clean up
+    kubectl delete pod ca-import
+    ```
+
+3. The CA setup Job will detect existing data and skip regeneration. The operator will create the corresponding Secrets and transition to `Ready`.
+
+## Option B: External CA (Ongoing Delegation)
+
+If you have a Puppet/OpenVox CA running outside the cluster and want to keep using it, configure `spec.external` on the `CertificateAuthority` resource. The operator will delegate CSR signing and CRL fetching to the external CA URL.
+
+### Prerequisites
+
+- A running Puppet/OpenVox CA accessible from the cluster (e.g. `https://puppet-ca.example.com:8140`)
+- The CA's public certificate (`ca_crt.pem`)
+- (Optional) A client certificate and key for mTLS authentication
+
+### Steps
+
+1. Create Secrets with the CA certificate and optional client credentials:
+
+    ```bash
+    # CA certificate for TLS verification
+    kubectl create secret generic external-ca-cert \
+      --from-file=ca_crt.pem=/path/to/ca_crt.pem
+
+    # (Optional) Client certificate for mTLS
+    kubectl create secret generic external-ca-tls \
+      --from-file=tls.crt=/path/to/client.pem \
+      --from-file=tls.key=/path/to/client-key.pem
+    ```
+
+2. Create the `CertificateAuthority` resource with `spec.external`:
+
+    ```yaml
+    apiVersion: openvox.voxpupuli.org/v1alpha1
+    kind: CertificateAuthority
+    metadata:
+      name: external-ca
+    spec:
+      allowSubjectAltNames: true
+      allowAuthorizationExtensions: true
+      enableInfraCRL: true
+      crlRefreshInterval: 5m
+      external:
+        url: https://puppet-ca.example.com:8140
+        caSecretRef: external-ca-cert
+        tlsSecretRef: external-ca-tls
+    ```
+
+3. The operator will:
+   - Skip PVC creation and CA setup Job
+   - Validate the referenced Secrets
+   - Set the CA phase to `External`
+   - Periodically fetch the CRL from the external CA
+   - Route CSR signing requests to the external CA
+
+### External CA Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `url` | Yes | Base URL of the external CA (e.g. `https://puppet-ca.example.com:8140`) |
+| `caSecretRef` | No | Secret name containing `ca_crt.pem` for TLS verification |
+| `tlsSecretRef` | No | Secret name containing `tls.crt` and `tls.key` for mTLS client auth |
+| `insecureSkipVerify` | No | Skip TLS verification (not recommended for production) |
+
+### Notes
+
+- `spec.external` and custom `spec.storage` are mutually exclusive. External CAs do not need local storage.
+- The `Certificate` controller accepts both `Ready` and `External` phases as "CA is available", so existing `Certificate` resources work without changes.
+- The operator does not manage the external CA's lifecycle (upgrades, backups, etc.). You are responsible for maintaining it.
+- CRL refresh still works with external CAs -- the operator fetches the CRL via the Puppet CA HTTP API and stores it in a local Secret.

@@ -2,6 +2,12 @@ name: E2E
 
 on:
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Custom image tag (default: short git SHA)'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -18,6 +24,7 @@ jobs:
       dockerfile: images/openvox-operator/Containerfile
       context: '.'
       push: true
+      image_tag: ${{ inputs.image_tag }}
 
   openvox-server:
     uses: ./.github/workflows/_container-build.yaml
@@ -29,6 +36,7 @@ jobs:
       dockerfile: images/openvox-server/Containerfile
       context: '.'
       push: true
+      image_tag: ${{ inputs.image_tag }}
 
   openvox-code:
     uses: ./.github/workflows/_container-build.yaml
@@ -40,6 +48,7 @@ jobs:
       dockerfile: images/openvox-code/Containerfile
       context: '.'
       push: true
+      image_tag: ${{ inputs.image_tag }}
 
   openvox-agent:
     uses: ./.github/workflows/_container-build.yaml
@@ -51,6 +60,7 @@ jobs:
       dockerfile: images/openvox-agent/Containerfile
       context: 'images/openvox-agent'
       push: true
+      image_tag: ${{ inputs.image_tag }}
 
   openvox-mock:
     uses: ./.github/workflows/_container-build.yaml
@@ -62,3 +72,4 @@ jobs:
       dockerfile: images/openvox-mock/Containerfile
       context: '.'
       push: true
+      image_tag: ${{ inputs.image_tag }}

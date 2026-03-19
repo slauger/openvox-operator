@@ -4,6 +4,7 @@ OPENVOX_CODE_IMG ?= ghcr.io/slauger/openvox-code:latest
 OPENVOX_AGENT_IMG ?= ghcr.io/slauger/openvox-agent:latest
 OPENVOX_MOCK_IMG ?= ghcr.io/slauger/openvox-mock:latest
 NAMESPACE ?= openvox-system
+IMAGE_REGISTRY ?= ghcr.io/slauger
 CONTAINER_TOOL ?= $(shell which podman 2>/dev/null || which docker 2>/dev/null)
 CONTROLLER_GEN = go tool controller-gen
 GOVULNCHECK = go tool govulncheck
@@ -76,12 +77,19 @@ local-deploy: local-build local-install ## Build images and deploy operator via 
 	@echo "Operator deployed with openvox-operator:$(LOCAL_TAG)"
 
 STACK_NAMESPACE ?= openvox
-STACK_VALUES ?= charts/openvox-stack/ci/single-node-values.yaml
+STACK_VALUES ?= charts/openvox-stack/values.yaml
 
 ##@ Deployment
 
+# When IMAGE_TAG is set (e.g. make install IMAGE_TAG=487ea36), configure
+# helm to pull that specific image from the registry.
+ifdef IMAGE_TAG
+HELM_SET ?= --set image.repository=$(IMAGE_REGISTRY)/openvox-operator --set image.tag=$(IMAGE_TAG) --set image.pullPolicy=Always
+STACK_HELM_SET ?= --set config.image.repository=$(IMAGE_REGISTRY)/openvox-server --set config.image.tag=$(IMAGE_TAG) --set config.image.pullPolicy=Always
+endif
+
 .PHONY: install
-install: manifests ## Install operator via Helm with default images.
+install: manifests ## Install operator via Helm (supports IMAGE_TAG=<tag>).
 	helm upgrade --install openvox-operator charts/openvox-operator \
 		--namespace $(NAMESPACE) --create-namespace $(HELM_SET)
 
@@ -90,7 +98,7 @@ local-install: HELM_SET := --set image.tag=$(LOCAL_TAG) --set image.pullPolicy=N
 local-install: install ## Install operator via Helm with local images (no build).
 
 .PHONY: stack
-stack: ## Deploy openvox-stack via Helm with default images.
+stack: ## Deploy openvox-stack via Helm (supports IMAGE_TAG=<tag>).
 	helm upgrade --install openvox-stack charts/openvox-stack \
 		--namespace $(STACK_NAMESPACE) --create-namespace \
 		--values $(STACK_VALUES) $(STACK_HELM_SET)
@@ -156,7 +164,6 @@ ci: lint vet test check-manifests vulncheck helm-lint ## Run all CI checks local
 
 ##@ E2E
 
-IMAGE_REGISTRY ?= ghcr.io/slauger
 IMAGE_TAG ?= $(LOCAL_TAG)
 
 E2E_CHAINSAW = IMAGE_TAG=$(IMAGE_TAG) IMAGE_REGISTRY=$(IMAGE_REGISTRY) $(CHAINSAW) test --config tests/e2e/chainsaw-config.yaml

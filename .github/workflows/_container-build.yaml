@@ -26,6 +26,11 @@ on:
         required: false
         type: boolean
         default: false
+      image_tag:
+        description: 'Custom image tag (default: short git SHA or version tag)'
+        required: false
+        type: string
+        default: ''
     outputs:
       version:
         description: 'Image version tag'
@@ -44,10 +49,12 @@ jobs:
       - name: Determine version
         id: version
         run: |
-          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+          if [[ -n "${{ inputs.image_tag }}" ]]; then
+            echo "version=${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
           else
+            SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
             echo "version=${SHORT_SHA}" >> $GITHUB_OUTPUT
           fi
 

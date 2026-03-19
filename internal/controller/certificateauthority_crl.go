@@ -29,13 +29,15 @@ func (r *CertificateAuthorityReconciler) reconcileCRLRefresh(ctx context.Context
 		interval = parsed
 	}
 
-	caServiceName := findCAServiceName(ctx, r.Client, ca, ca.Namespace)
-	if caServiceName == "" {
-		logger.Info("CA service not yet available, skipping CRL refresh")
-		return ctrl.Result{RequeueAfter: interval}, nil
+	// Resolve CA base URL: external URL or internal CA Service
+	var caBaseURL string
+	if ca.Spec.External != nil {
+		caBaseURL = ca.Spec.External.URL
+	} else {
+		caBaseURL = fmt.Sprintf("https://%s.%s.svc:8140", caInternalServiceName(ca.Name), ca.Namespace)
 	}
 
-	crlPEM, err := r.fetchCRL(ctx, ca, caServiceName, ca.Namespace)
+	crlPEM, err := r.fetchCRL(ctx, ca, caBaseURL, ca.Namespace)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("fetching CRL: %w", err)
 	}
@@ -65,17 +67,13 @@ func (r *CertificateAuthorityReconciler) getCAPublicCert(ctx context.Context, ca
 }
 
 // fetchCRL retrieves the CRL from the CA HTTP API.
-func (r *CertificateAuthorityReconciler) fetchCRL(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, caServiceName, namespace string) ([]byte, error) {
-	caCertPEM, err := r.getCAPublicCert(ctx, ca, namespace)
-	if err != nil {
-		return nil, fmt.Errorf("loading CA certificate: %w", err)
-	}
-	httpClient, err := caHTTPClient(caCertPEM)
+func (r *CertificateAuthorityReconciler) fetchCRL(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, caBaseURL, namespace string) ([]byte, error) {
+	httpClient, err := r.caHTTPClientForCA(ctx, ca, namespace)
 	if err != nil {
 		return nil, fmt.Errorf("creating CA HTTP client: %w", err)
 	}
 
-	crlURL := fmt.Sprintf("https://%s.%s.svc:8140/puppet-ca/v1/certificate_revocation_list/ca?environment=production", caServiceName, namespace)
+	crlURL := fmt.Sprintf("%s/puppet-ca/v1/certificate_revocation_list/ca?environment=production", caBaseURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, crlURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("building CRL request: %w", err)
@@ -98,6 +96,21 @@ func (r *CertificateAuthorityReconciler) fetchCRL(ctx context.Context, ca *openv
 	}
 
 	return body, nil
+}
+
+// caHTTPClientForCA returns an HTTP client configured for the CA.
+// For external CAs, it builds an mTLS client from the referenced Secrets.
+// For internal CAs, it uses the CA public certificate.
+func (r *CertificateAuthorityReconciler) caHTTPClientForCA(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, namespace string) (*http.Client, error) {
+	if ca.Spec.External != nil {
+		return buildExternalCAHTTPClient(ctx, r.Client, ca.Spec.External, namespace)
+	}
+
+	caCertPEM, err := r.getCAPublicCert(ctx, ca, namespace)
+	if err != nil {
+		return nil, fmt.Errorf("loading CA certificate: %w", err)
+	}
+	return caHTTPClient(caCertPEM)
 }
 
 // updateCRLSecret creates or updates the CRL secret with fresh CRL data.

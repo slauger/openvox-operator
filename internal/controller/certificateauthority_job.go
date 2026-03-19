@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -124,7 +125,16 @@ func (r *CertificateAuthorityReconciler) buildCASetupJob(ctx context.Context, ca
 		if caCert.Spec.Certname != "" {
 			certname = caCert.Spec.Certname
 		}
-		dnsAltNames = strings.Join(caCert.Spec.DNSAltNames, ",")
+		// Append CA Service FQDN to DNS alt names so the CA server cert
+		// is valid for internal operator communication (CSR signing, CRL refresh).
+		// This is done here transparently without modifying the Certificate CR.
+		serviceFQDN := fmt.Sprintf("%s.%s.svc", caInternalServiceName(ca.Name), ca.Namespace)
+		altNames := make([]string, len(caCert.Spec.DNSAltNames))
+		copy(altNames, caCert.Spec.DNSAltNames)
+		if !slices.Contains(altNames, serviceFQDN) {
+			altNames = append(altNames, serviceFQDN)
+		}
+		dnsAltNames = strings.Join(altNames, ",")
 		tlsSecretName = fmt.Sprintf("%s-tls", caCert.Name)
 		certResourceName = caCert.Name
 	}

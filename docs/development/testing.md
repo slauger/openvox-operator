@@ -10,6 +10,8 @@ make test
 
 This runs `go test ./...` with coverage output. Tests include:
 
+- Controller reconciliation: Config, Server, Pool, Certificate, CertificateAuthority, ReportProcessor (`internal/controller/`)
+- Certificate signing and CA HTTP client (`internal/controller/`)
 - Duration parsing (`api/v1alpha1/duration.go`)
 - Volume helpers, hash functions, image resolution (`internal/controller/helpers.go`)
 - Label generation (`internal/controller/labels.go`)
@@ -41,14 +43,18 @@ E2E tests require 5 container images: `openvox-operator`, `openvox-server`, `ope
 
 The E2E agent tests deploy Puppet code via OCI volume mounts (`image` volumes), which require the Kubernetes `ImageVolume` feature gate. This feature is default-enabled since Kubernetes 1.35, but Docker Desktop currently ships Kubernetes 1.34 via its built-in kubeadm provider -- and there is no way to inject custom feature gates into that provider. The workaround is to run a kind cluster inside Docker Desktop, where feature gates can be configured via the kind config (`tests/e2e/kind-config.yaml`). However, kind clusters cannot access locally built images directly -- images must be available in a registry. This is why the `e2e.yaml` workflow pushes all images to ghcr.io before tests can run.
 
-Images are pushed to `ghcr.io/slauger/<image>` with a short SHA tag (e.g. `efac063`) and `:latest`.
-
 #### Building Images via CI
 
 Trigger the **E2E** workflow to build and push all 5 images for the current branch:
 
 ```bash
-gh workflow run e2e.yaml
+gh workflow run e2e.yaml --ref $(git branch --show-current)
+```
+
+By default, images are tagged with the short git SHA of the commit at the branch tip (e.g. `efac063`). You can pass a custom tag via the `image_tag` input:
+
+```bash
+gh workflow run e2e.yaml --ref $(git branch --show-current) -f image_tag=my-feature
 ```
 
 This runs `_container-build.yaml` for each image (multi-arch, hadolint, push to ghcr.io). On `main`, the regular CI workflows (`ci.yaml`, `ci-test-images.yaml`) build the same images automatically.
@@ -76,6 +82,33 @@ This will:
 
 1. Deploy the operator via Helm (pulling from ghcr.io)
 2. Run all Chainsaw test scenarios
+
+Subsets of tests can be run separately:
+
+```bash
+make e2e-stack        # stack deployment tests (single-node, multi-server)
+make e2e-agent        # agent tests (basic, broken, idempotent, concurrent)
+make e2e-integration  # integration tests (enc, report, full)
+```
+
+### Image Tags
+
+The E2E workflow tags all images with the short git SHA of the built commit (e.g. `efac063`) by default. A custom tag can be passed via the `image_tag` workflow input (see [Building Images via CI](#building-images-via-ci)).
+
+The Makefile defaults `IMAGE_TAG` to your local `git describe --always` output, so it matches automatically when your local HEAD is the commit CI built. To use a custom tag, export `IMAGE_TAG` once for the session:
+
+```bash
+export IMAGE_TAG=my-feature
+make e2e
+```
+
+Or pass it inline to a single command:
+
+```bash
+IMAGE_TAG=my-feature make e2e-stack
+```
+
+The `IMAGE_REGISTRY` variable (default: `ghcr.io/slauger`) can be overridden the same way if using a different registry.
 
 ### Test Scenarios
 
@@ -180,7 +213,7 @@ Image builds and E2E tests are managed by three workflows:
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
-| `e2e.yaml` | `workflow_dispatch` | Builds all 5 images and pushes to ghcr.io |
+| `e2e.yaml` | `workflow_dispatch` | Builds all 5 images and pushes to ghcr.io (accepts optional `image_tag` input) |
 | `ci-test-images.yaml` | Push to `main` (path filter) | Builds agent, code, mock on main |
 | `cleanup.yaml` | `workflow_dispatch` | Deletes E2E image versions (short SHA tags) |
 
@@ -188,12 +221,14 @@ The typical workflow for validating a feature branch before merging:
 
 ```bash
 # 1. Build all images for the current branch
-gh workflow run e2e.yaml
+gh workflow run e2e.yaml --ref $(git branch --show-current)
+# Or with a custom tag: gh workflow run e2e.yaml --ref $(git branch --show-current) -f image_tag=my-feature
 
 # 2. Check build status
 gh run list --workflow=e2e.yaml --limit=1
 
 # 3. Run E2E tests locally against a cluster that can pull from ghcr.io
+export IMAGE_TAG=$(git describe --always)  # or: export IMAGE_TAG=my-feature
 make e2e
 
 # 4. Clean up E2E images after merging

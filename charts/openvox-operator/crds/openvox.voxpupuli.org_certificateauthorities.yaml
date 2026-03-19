@@ -87,6 +87,37 @@ spec:
                 description: EnableInfraCRL enables infrastructure CRL for compile
                   server revocation.
                 type: boolean
+              external:
+                description: |-
+                  External configures an external CA running outside the cluster.
+                  When set, the operator skips PVC/Job-based CA setup and delegates
+                  CSR signing and CRL fetching to the external CA URL.
+                  Mutually exclusive with custom storage settings.
+                properties:
+                  caSecretRef:
+                    description: |-
+                      CASecretRef references a Secret containing the CA certificate in key "ca_crt.pem".
+                      Used to verify the external CA's TLS certificate.
+                    type: string
+                  insecureSkipVerify:
+                    description: |-
+                      InsecureSkipVerify disables TLS certificate verification for the external CA.
+                      Only use this for testing or when the CA uses a self-signed certificate
+                      and no CASecretRef is provided.
+                    type: boolean
+                  tlsSecretRef:
+                    description: |-
+                      TLSSecretRef references a Secret containing "tls.crt" and "tls.key" for mTLS
+                      client authentication against the external CA.
+                    type: string
+                  url:
+                    description: URL is the base URL of the external Puppet/OpenVox
+                      CA (e.g. "https://puppet-ca.example.com:8140").
+                    pattern: ^https?://
+                    type: string
+                required:
+                - url
+                type: object
               intermediateCA:
                 description: IntermediateCA configures an intermediate CA setup.
                 properties:
@@ -183,6 +214,10 @@ spec:
                   Plain numbers are interpreted as seconds for backwards compatibility.
                 type: string
             type: object
+            x-kubernetes-validations:
+            - message: external and custom storage are mutually exclusive
+              rule: '!(has(self.external) && has(self.storage) && size(self.storage.size)
+                > 0 && self.storage.size != ''1Gi'')'
           status:
             description: CertificateAuthorityStatus defines the observed state of
               CertificateAuthority.
@@ -259,7 +294,13 @@ spec:
                 - Pending
                 - Initializing
                 - Ready
+                - External
                 - Error
+                type: string
+              serviceName:
+                description: |-
+                  ServiceName is the name of the ClusterIP Service created for internal operator
+                  communication with the CA (CSR signing, CRL refresh).
                 type: string
             type: object
         type: object

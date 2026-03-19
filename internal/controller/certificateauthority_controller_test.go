@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -349,5 +350,305 @@ func TestResolveCAJobResources_Custom(t *testing.T) {
 	}
 	if res.Limits.Memory().Cmp(resource.MustParse("2Gi")) != 0 {
 		t.Errorf("expected memory limit 2Gi, got %s", res.Limits.Memory().String())
+	}
+}
+
+// --- External CA tests ---
+
+func TestCAReconcile_ExternalCA_Basic(t *testing.T) {
+	ca := newCertificateAuthority("ext-ca", withExternal("https://puppet-ca.example.com:8140"))
+	ca.Status.Phase = "" // reset to trigger initial phase
+	c := setupTestClient(ca)
+	r := newCertificateAuthorityReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("ext-ca")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	updated := &openvoxv1alpha1.CertificateAuthority{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "ext-ca", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get CA: %v", err)
+	}
+
+	if updated.Status.Phase != openvoxv1alpha1.CertificateAuthorityPhaseExternal {
+		t.Errorf("expected phase %q, got %q", openvoxv1alpha1.CertificateAuthorityPhaseExternal, updated.Status.Phase)
+	}
+	if updated.Status.CASecretName != "ext-ca-ca" {
+		t.Errorf("expected CASecretName %q, got %q", "ext-ca-ca", updated.Status.CASecretName)
+	}
+
+	// Verify CAReady condition with ExternalCA reason
+	found := false
+	for _, cond := range updated.Status.Conditions {
+		if cond.Type == openvoxv1alpha1.ConditionCAReady {
+			found = true
+			if cond.Status != "True" {
+				t.Errorf("expected condition status True, got %q", cond.Status)
+			}
+			if cond.Reason != "ExternalCA" {
+				t.Errorf("expected condition reason ExternalCA, got %q", cond.Reason)
+			}
+		}
+	}
+	if !found {
+		t.Error("CAReady condition not set")
+	}
+}
+
+func TestCAReconcile_ExternalCA_WithCASecretRef(t *testing.T) {
+	ca := newCertificateAuthority("ext-ca",
+		withExternal("https://puppet-ca.example.com:8140"),
+		withExternalCASecret("my-custom-ca-secret"),
+	)
+	ca.Status.Phase = ""
+	caSecret := newSecret("my-custom-ca-secret", map[string][]byte{
+		"ca_crt.pem": []byte("ca-cert-data"),
+	})
+	c := setupTestClient(ca, caSecret)
+	r := newCertificateAuthorityReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("ext-ca")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	updated := &openvoxv1alpha1.CertificateAuthority{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "ext-ca", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get CA: %v", err)
+	}
+
+	if updated.Status.CASecretName != "my-custom-ca-secret" {
+		t.Errorf("expected CASecretName %q, got %q", "my-custom-ca-secret", updated.Status.CASecretName)
+	}
+}
+
+func TestCAReconcile_ExternalCA_CASecretNotFound(t *testing.T) {
+	ca := newCertificateAuthority("ext-ca",
+		withExternal("https://puppet-ca.example.com:8140"),
+		withExternalCASecret("missing-secret"),
+	)
+	ca.Status.Phase = ""
+	c := setupTestClient(ca)
+	r := newCertificateAuthorityReconciler(c)
+
+	res, err := r.Reconcile(testCtx(), testRequest("ext-ca"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.RequeueAfter != 5*time.Second {
+		t.Errorf("expected requeue after 5s, got %v", res.RequeueAfter)
+	}
+}
+
+func TestCAReconcile_ExternalCA_CASecretMissingKey(t *testing.T) {
+	ca := newCertificateAuthority("ext-ca",
+		withExternal("https://puppet-ca.example.com:8140"),
+		withExternalCASecret("bad-secret"),
+	)
+	ca.Status.Phase = ""
+	// Secret exists but lacks the ca_crt.pem key
+	badSecret := newSecret("bad-secret", map[string][]byte{
+		"wrong-key": []byte("data"),
+	})
+	c := setupTestClient(ca, badSecret)
+	r := newCertificateAuthorityReconciler(c)
+
+	res, err := r.Reconcile(testCtx(), testRequest("ext-ca"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.RequeueAfter != 5*time.Second {
+		t.Errorf("expected requeue after 5s, got %v", res.RequeueAfter)
+	}
+}
+
+// --- CA Service tests ---
+
+func TestCAReconcile_ServiceCreation(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.Phase = ""
+	cfg := caPrereqs("test-ca")
+	c := setupTestClient(ca, cfg)
+	r := newCertificateAuthorityReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-ca")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	svc := &corev1.Service{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca-internal", Namespace: testNamespace}, svc); err != nil {
+		t.Fatalf("Service not created: %v", err)
+	}
+
+	// Verify name
+	if svc.Name != "test-ca-internal" {
+		t.Errorf("expected Service name %q, got %q", "test-ca-internal", svc.Name)
+	}
+
+	// Verify port
+	if len(svc.Spec.Ports) != 1 {
+		t.Fatalf("expected 1 port, got %d", len(svc.Spec.Ports))
+	}
+	if svc.Spec.Ports[0].Port != 8140 {
+		t.Errorf("expected port 8140, got %d", svc.Spec.Ports[0].Port)
+	}
+	if svc.Spec.Ports[0].TargetPort.IntValue() != 8140 {
+		t.Errorf("expected targetPort 8140, got %d", svc.Spec.Ports[0].TargetPort.IntValue())
+	}
+
+	// Verify selector
+	if svc.Spec.Selector[LabelCA] != "true" {
+		t.Errorf("expected selector %s=true, got %v", LabelCA, svc.Spec.Selector)
+	}
+
+	// Verify labels
+	if svc.Labels[LabelCertificateAuthority] != "test-ca" {
+		t.Errorf("expected CA label, got %v", svc.Labels)
+	}
+
+	// Verify owner reference
+	if len(svc.OwnerReferences) == 0 {
+		t.Fatal("expected owner reference on Service")
+	}
+	if svc.OwnerReferences[0].Name != "test-ca" {
+		t.Errorf("expected owner ref name %q, got %q", "test-ca", svc.OwnerReferences[0].Name)
+	}
+}
+
+func TestCAReconcile_JobIncludesServiceFQDN(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.Phase = ""
+	cfg := caPrereqs("test-ca")
+	server := newServer("ca-server", withCA(true), withServerRole(true))
+	server.Spec.ConfigRef = "production"
+	server.Spec.CertificateRef = "ca-cert"
+	cert := newCertificate("ca-cert", "test-ca", openvoxv1alpha1.CertificatePhasePending)
+	cert.Spec.DNSAltNames = []string{"puppet", "ca.example.com"}
+	c := setupTestClient(ca, cfg, server, cert)
+	r := newCertificateAuthorityReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-ca")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	// Verify the Job's DNS_ALT_NAMES env var includes the CA Service FQDN
+	job := &batchv1.Job{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca-ca-setup", Namespace: testNamespace}, job); err != nil {
+		t.Fatalf("Job not created: %v", err)
+	}
+
+	envMap := map[string]string{}
+	for _, e := range job.Spec.Template.Spec.Containers[0].Env {
+		envMap[e.Name] = e.Value
+	}
+
+	dnsAltNames := envMap["DNS_ALT_NAMES"]
+	if dnsAltNames == "" {
+		t.Fatal("DNS_ALT_NAMES env var not set")
+	}
+
+	// Should contain original SANs plus the CA internal Service FQDN
+	expectedFQDN := "test-ca-internal.default.svc"
+	if !strings.Contains(dnsAltNames, expectedFQDN) {
+		t.Errorf("expected DNS_ALT_NAMES to contain %q, got %q", expectedFQDN, dnsAltNames)
+	}
+	if !strings.Contains(dnsAltNames, "puppet") {
+		t.Errorf("expected DNS_ALT_NAMES to contain original SAN 'puppet', got %q", dnsAltNames)
+	}
+
+	// Verify Certificate CR was NOT modified
+	updatedCert := &openvoxv1alpha1.Certificate{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "ca-cert", Namespace: testNamespace}, updatedCert); err != nil {
+		t.Fatalf("failed to get Certificate: %v", err)
+	}
+	for _, san := range updatedCert.Spec.DNSAltNames {
+		if san == expectedFQDN {
+			t.Error("CA Service FQDN should NOT be injected into Certificate CR spec")
+		}
+	}
+}
+
+func TestCAReconcile_StatusServiceName(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.Phase = ""
+	cfg := caPrereqs("test-ca")
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": []byte("ca-cert"),
+	})
+	c := setupTestClient(ca, cfg, caSecret)
+	r := newCertificateAuthorityReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-ca")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	updated := &openvoxv1alpha1.CertificateAuthority{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get CA: %v", err)
+	}
+
+	if updated.Status.ServiceName != "test-ca-internal" {
+		t.Errorf("expected status.serviceName %q, got %q", "test-ca-internal", updated.Status.ServiceName)
+	}
+}
+
+func TestCAReconcile_ExternalCA_NoService(t *testing.T) {
+	ca := newCertificateAuthority("ext-ca", withExternal("https://puppet-ca.example.com:8140"))
+	ca.Status.Phase = ""
+	c := setupTestClient(ca)
+	r := newCertificateAuthorityReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("ext-ca")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	// No Service should be created for external CA
+	svc := &corev1.Service{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "ext-ca-internal", Namespace: testNamespace}, svc); err == nil {
+		t.Error("expected no Service for external CA, but one was created")
+	}
+}
+
+func TestCAReconcile_ExternalCA_SkipsPVCAndJob(t *testing.T) {
+	ca := newCertificateAuthority("ext-ca", withExternal("https://puppet-ca.example.com:8140"))
+	ca.Status.Phase = ""
+	c := setupTestClient(ca)
+	r := newCertificateAuthorityReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("ext-ca")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	// No PVC should be created
+	pvc := &corev1.PersistentVolumeClaim{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "ext-ca-data", Namespace: testNamespace}, pvc); err == nil {
+		t.Error("expected no PVC for external CA, but one was created")
+	}
+
+	// No Job should be created
+	job := &batchv1.Job{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "ext-ca-ca-setup", Namespace: testNamespace}, job); err == nil {
+		t.Error("expected no Job for external CA, but one was created")
+	}
+}
+
+func TestCAReconcile_ExternalCA_NoConfigRequired(t *testing.T) {
+	// External CA should work without any Config object (unlike internal CA which requires it)
+	ca := newCertificateAuthority("ext-ca", withExternal("https://puppet-ca.example.com:8140"))
+	ca.Status.Phase = ""
+	c := setupTestClient(ca) // no Config object
+	r := newCertificateAuthorityReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("ext-ca")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	updated := &openvoxv1alpha1.CertificateAuthority{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "ext-ca", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get CA: %v", err)
+	}
+
+	// Should reach External phase without a Config
+	if updated.Status.Phase != openvoxv1alpha1.CertificateAuthorityPhaseExternal {
+		t.Errorf("expected phase %q, got %q", openvoxv1alpha1.CertificateAuthorityPhaseExternal, updated.Status.Phase)
 	}
 }

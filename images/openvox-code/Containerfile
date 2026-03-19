@@ -8,7 +8,7 @@
 #   podman build -t openvox-code:latest -f images/openvox-code/Containerfile .
 
 # Stage 1: Install modules with r10k
-FROM registry.access.redhat.com/ubi9/ubi:9.7-1773204657 AS builder
+FROM registry.access.redhat.com/ubi9/ubi:9.7-1773895171 AS builder
 
 RUN dnf module enable ruby:3.3 -y \
     && dnf install -y --setopt=install_weak_deps=False ruby ruby-devel rubygem-bundler git gcc make redhat-rpm-config libffi-devel \

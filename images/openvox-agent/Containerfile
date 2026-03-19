@@ -9,7 +9,7 @@
 # renovate: datasource=github-releases depName=OpenVoxProject/openvox-agent versioning=loose
 ARG OPENVOX_AGENT_VERSION=8.25.0
 
-FROM registry.access.redhat.com/ubi9/ubi:9.7-1773204657
+FROM registry.access.redhat.com/ubi9/ubi:9.7-1773895171
 
 ARG OPENVOX_AGENT_VERSION
 

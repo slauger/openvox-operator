@@ -49,6 +49,7 @@ Autosigning is configured via [SigningPolicy](signingpolicy.md) resources that r
 | `phase` | string | Current lifecycle phase |
 | `caSecretName` | string | Name of the Secret containing `ca_crt.pem` (public CA certificate) |
 | `serviceName` | string | Name of the internal ClusterIP Service for operator communication |
+| `signingSecretName` | string | Name of the TLS Secret used for mTLS authentication when signing certificates via the CA HTTP API |
 | `notAfter` | time | Expiry time of the CA certificate |
 | `conditions` | []Condition | `CAReady` |
 

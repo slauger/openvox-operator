@@ -302,6 +302,12 @@ spec:
                   ServiceName is the name of the ClusterIP Service created for internal operator
                   communication with the CA (CSR signing, CRL refresh).
                 type: string
+              signingSecretName:
+                description: |-
+                  SigningSecretName is the name of the TLS Secret used for mTLS authentication
+                  when signing certificates via the CA HTTP API. This Secret contains a certificate
+                  with the pp_cli_auth extension.
+                type: string
             type: object
         type: object
     served: true

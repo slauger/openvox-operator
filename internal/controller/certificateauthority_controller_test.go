@@ -631,6 +631,60 @@ func TestCAReconcile_ExternalCA_SkipsPVCAndJob(t *testing.T) {
 	}
 }
 
+func TestCAReconcile_StatusSigningSecretName(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.Phase = ""
+	cfg := caPrereqs("test-ca")
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": []byte("ca-cert"),
+	})
+	// Create a Server with ca:true and a Certificate for it
+	server := newServer("ca-server", withCA(true), withServerRole(true))
+	server.Spec.ConfigRef = "production"
+	server.Spec.CertificateRef = "ca-cert"
+	cert := newCertificate("ca-cert", "test-ca", openvoxv1alpha1.CertificatePhasePending)
+	c := setupTestClient(ca, cfg, caSecret, server, cert)
+	r := newCertificateAuthorityReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-ca")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	updated := &openvoxv1alpha1.CertificateAuthority{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get CA: %v", err)
+	}
+
+	if updated.Status.SigningSecretName != "ca-cert-tls" {
+		t.Errorf("expected status.signingSecretName %q, got %q", "ca-cert-tls", updated.Status.SigningSecretName)
+	}
+}
+
+func TestCAReconcile_StatusSigningSecretName_NoCert(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.Phase = ""
+	cfg := caPrereqs("test-ca")
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": []byte("ca-cert"),
+	})
+	// No Certificate or Server objects — findCAServerCert returns nil
+	c := setupTestClient(ca, cfg, caSecret)
+	r := newCertificateAuthorityReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-ca")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	updated := &openvoxv1alpha1.CertificateAuthority{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get CA: %v", err)
+	}
+
+	if updated.Status.SigningSecretName != "" {
+		t.Errorf("expected empty status.signingSecretName, got %q", updated.Status.SigningSecretName)
+	}
+}
+
 func TestCAReconcile_ExternalCA_NoConfigRequired(t *testing.T) {
 	// External CA should work without any Config object (unlike internal CA which requires it)
 	ca := newCertificateAuthority("ext-ca", withExternal("https://puppet-ca.example.com:8140"))

@@ -15,6 +15,7 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -108,9 +109,18 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 		return result, nil
 	}
 
+	// Adopt CA secrets created by the setup job (sets ownerReference for GC)
+	caSecretName := fmt.Sprintf("%s-ca", ca.Name)
+	caKeySecretName := fmt.Sprintf("%s-ca-key", ca.Name)
+	caCRLSecretName := fmt.Sprintf("%s-ca-crl", ca.Name)
+	for _, secretName := range []string{caSecretName, caKeySecretName, caCRLSecretName} {
+		if err := r.adoptSecret(ctx, ca, secretName); err != nil {
+			return ctrl.Result{}, fmt.Errorf("adopting Secret %s: %w", secretName, err)
+		}
+	}
+
 	// CA is ready
 	wasReady := ca.Status.Phase == openvoxv1alpha1.CertificateAuthorityPhaseReady
-	caSecretName := fmt.Sprintf("%s-ca", ca.Name)
 	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseReady
 	ca.Status.CASecretName = caSecretName
 	ca.Status.ServiceName = caInternalServiceName(ca.Name)
@@ -253,6 +263,30 @@ func (r *CertificateAuthorityReconciler) reconcileExternalCA(ctx context.Context
 		return ctrl.Result{RequeueAfter: RequeueIntervalCRL}, nil
 	}
 	return crlResult, nil
+}
+
+// adoptSecret sets the controller ownerReference on a Secret so it is garbage-collected
+// when the CertificateAuthority is deleted. This replaces the previous approach of setting
+// ownerReferences inside the CA setup job script.
+func (r *CertificateAuthorityReconciler) adoptSecret(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, secretName string) error {
+	secret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: ca.Namespace}, secret); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	for _, ref := range secret.OwnerReferences {
+		if ref.UID == ca.UID {
+			return nil
+		}
+	}
+
+	if err := controllerutil.SetControllerReference(ca, secret, r.Scheme); err != nil {
+		return err
+	}
+	return r.Update(ctx, secret)
 }
 
 // extractCANotAfter reads the ca_crt.pem from the CA Secret and returns its NotAfter time.

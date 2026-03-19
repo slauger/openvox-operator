@@ -20,6 +20,7 @@ jobs:
       image_name: openvox-agent
       dockerfile: images/openvox-agent/Containerfile
       context: 'images/openvox-agent'
+      sign: false
 
   openvox-code:
     uses: ./.github/workflows/_container-build.yaml
@@ -30,6 +31,7 @@ jobs:
       image_name: openvox-code
       dockerfile: images/openvox-code/Containerfile
       context: '.'
+      sign: false
 
   openvox-mock:
     uses: ./.github/workflows/_container-build.yaml
@@ -40,3 +42,4 @@ jobs:
       image_name: openvox-mock
       dockerfile: images/openvox-mock/Containerfile
       context: '.'
+      sign: false

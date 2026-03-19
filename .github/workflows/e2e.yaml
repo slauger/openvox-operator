@@ -12,6 +12,7 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 jobs:
   openvox-operator:
@@ -19,6 +20,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
     with:
       image_name: openvox-operator
       dockerfile: images/openvox-operator/Containerfile
@@ -31,6 +33,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
     with:
       image_name: openvox-server
       dockerfile: images/openvox-server/Containerfile
@@ -49,6 +52,7 @@ jobs:
       context: '.'
       push: true
       image_tag: ${{ inputs.image_tag }}
+      sign: false
 
   openvox-agent:
     uses: ./.github/workflows/_container-build.yaml
@@ -61,6 +65,7 @@ jobs:
       context: 'images/openvox-agent'
       push: true
       image_tag: ${{ inputs.image_tag }}
+      sign: false
 
   openvox-mock:
     uses: ./.github/workflows/_container-build.yaml
@@ -73,3 +78,4 @@ jobs:
       context: '.'
       push: true
       image_tag: ${{ inputs.image_tag }}
+      sign: false

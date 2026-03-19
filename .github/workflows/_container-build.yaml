@@ -31,6 +31,11 @@ on:
         required: false
         type: string
         default: ''
+      sign:
+        description: 'Sign images with cosign keyless signing'
+        required: false
+        type: boolean
+        default: true
     outputs:
       version:
         description: 'Image version tag'
@@ -141,6 +146,7 @@ jobs:
       image: ${{ steps.result.outputs.image }}
     permissions:
       packages: write
+      id-token: write
     steps:
       - name: Login to ghcr.io
         uses: docker/login-action@v4
@@ -148,6 +154,10 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
+
+      - name: Install cosign
+        if: inputs.sign
+        uses: sigstore/cosign-installer@v3
 
       - name: Create and push manifest
         run: |
@@ -169,6 +179,14 @@ jobs:
             docker manifest create ${IMAGE}:latest ${IMAGES}
             docker manifest push ${IMAGE}:latest
           fi
+
+      - name: Sign image with cosign (keyless)
+        if: inputs.sign
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}"
+          VERSION="${{ needs.prepare.outputs.version }}"
+          DIGEST=$(docker manifest inspect "${IMAGE}:${VERSION}" -v | jq -r 'if type == "array" then .[0].Descriptor.digest else .Descriptor.digest end')
+          cosign sign --yes "${IMAGE}@${DIGEST}"
 
       - name: Set output
         id: result

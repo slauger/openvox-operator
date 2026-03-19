@@ -212,7 +212,10 @@ gh workflow run e2e.yaml --ref $(git branch --show-current)
 # Wait for the workflow to finish
 gh run watch $(gh run list --workflow=e2e.yaml --limit=1 --json databaseId -q '.[0].databaseId')
 
-# Run E2E tests
+# Set the image tag (short git SHA, matches what CI built)
+export IMAGE_TAG=$(git describe --always)
+
+# Run E2E tests (uses IMAGE_TAG automatically)
 make e2e
 ```
 

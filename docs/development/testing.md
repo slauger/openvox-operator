@@ -43,17 +43,15 @@ E2E tests require 5 container images: `openvox-operator`, `openvox-server`, `ope
 
 The E2E agent tests deploy Puppet code via OCI volume mounts (`image` volumes), which require the Kubernetes `ImageVolume` feature gate. This feature is default-enabled since Kubernetes 1.35, but Docker Desktop currently ships Kubernetes 1.34 via its built-in kubeadm provider -- and there is no way to inject custom feature gates into that provider. The workaround is to run a kind cluster inside Docker Desktop, where feature gates can be configured via the kind config (`tests/e2e/kind-config.yaml`). However, kind clusters cannot access locally built images directly -- images must be available in a registry. This is why the `e2e.yaml` workflow pushes all images to ghcr.io before tests can run.
 
-Images are pushed to `ghcr.io/slauger/<image>` with a short SHA tag (e.g. `efac063`) and `:latest`.
-
 #### Building Images via CI
 
 Trigger the **E2E** workflow to build and push all 5 images for the current branch:
 
 ```bash
-gh workflow run e2e.yaml
+gh workflow run e2e.yaml --ref $(git branch --show-current)
 ```
 
-This runs `_container-build.yaml` for each image (multi-arch, hadolint, push to ghcr.io). On `main`, the regular CI workflows (`ci.yaml`, `ci-test-images.yaml`) build the same images automatically.
+Images are tagged with the short git SHA of the commit at the branch tip (e.g. `efac063`). This runs `_container-build.yaml` for each image (multi-arch, hadolint, push to ghcr.io). On `main`, the regular CI workflows (`ci.yaml`, `ci-test-images.yaml`) build the same images automatically.
 
 #### Building Images Locally
 
@@ -86,6 +84,25 @@ make e2e-stack        # stack deployment tests (single-node, multi-server)
 make e2e-agent        # agent tests (basic, broken, idempotent, concurrent)
 make e2e-integration  # integration tests (enc, report, full)
 ```
+
+### Image Tags
+
+The E2E workflow tags all images with the short git SHA of the built commit (e.g. `efac063`). The Makefile defaults `IMAGE_TAG` to your local `git describe --always` output, so it matches automatically when your local HEAD is the commit CI built.
+
+To use a specific tag, export `IMAGE_TAG` once for the session:
+
+```bash
+export IMAGE_TAG=efac063
+make e2e
+```
+
+Or pass it inline to a single command:
+
+```bash
+IMAGE_TAG=efac063 make e2e-stack
+```
+
+The `IMAGE_REGISTRY` variable (default: `ghcr.io/slauger`) can be overridden the same way if using a different registry.
 
 ### Test Scenarios
 

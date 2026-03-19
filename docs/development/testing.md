@@ -10,6 +10,8 @@ make test
 
 This runs `go test ./...` with coverage output. Tests include:
 
+- Controller reconciliation: Config, Server, Pool, Certificate, CertificateAuthority, ReportProcessor (`internal/controller/`)
+- Certificate signing and CA HTTP client (`internal/controller/`)
 - Duration parsing (`api/v1alpha1/duration.go`)
 - Volume helpers, hash functions, image resolution (`internal/controller/helpers.go`)
 - Label generation (`internal/controller/labels.go`)
@@ -76,6 +78,14 @@ This will:
 
 1. Deploy the operator via Helm (pulling from ghcr.io)
 2. Run all Chainsaw test scenarios
+
+Subsets of tests can be run separately:
+
+```bash
+make e2e-stack        # stack deployment tests (single-node, multi-server)
+make e2e-agent        # agent tests (basic, broken, idempotent, concurrent)
+make e2e-integration  # integration tests (enc, report, full)
+```
 
 ### Test Scenarios
 

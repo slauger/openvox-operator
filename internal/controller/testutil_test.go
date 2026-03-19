@@ -279,7 +279,45 @@ func newCertificate(name, authorityRef string, phase openvoxv1alpha1.Certificate
 	return cert
 }
 
-func newCertificateAuthority(name string) *openvoxv1alpha1.CertificateAuthority {
+type caOption func(*openvoxv1alpha1.CertificateAuthority)
+
+func withExternal(url string) caOption {
+	return func(ca *openvoxv1alpha1.CertificateAuthority) {
+		if ca.Spec.External == nil {
+			ca.Spec.External = &openvoxv1alpha1.ExternalCASpec{}
+		}
+		ca.Spec.External.URL = url
+	}
+}
+
+func withExternalCASecret(ref string) caOption {
+	return func(ca *openvoxv1alpha1.CertificateAuthority) {
+		if ca.Spec.External == nil {
+			ca.Spec.External = &openvoxv1alpha1.ExternalCASpec{}
+		}
+		ca.Spec.External.CASecretRef = ref
+	}
+}
+
+func withExternalTLSSecret(ref string) caOption {
+	return func(ca *openvoxv1alpha1.CertificateAuthority) {
+		if ca.Spec.External == nil {
+			ca.Spec.External = &openvoxv1alpha1.ExternalCASpec{}
+		}
+		ca.Spec.External.TLSSecretRef = ref
+	}
+}
+
+func withExternalInsecureSkipVerify(v bool) caOption {
+	return func(ca *openvoxv1alpha1.CertificateAuthority) {
+		if ca.Spec.External == nil {
+			ca.Spec.External = &openvoxv1alpha1.ExternalCASpec{}
+		}
+		ca.Spec.External.InsecureSkipVerify = v
+	}
+}
+
+func newCertificateAuthority(name string, opts ...caOption) *openvoxv1alpha1.CertificateAuthority {
 	ca := &openvoxv1alpha1.CertificateAuthority{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -296,6 +334,9 @@ func newCertificateAuthority(name string) *openvoxv1alpha1.CertificateAuthority 
 	}
 	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseReady
 	ca.Status.CASecretName = name + "-ca"
+	for _, o := range opts {
+		o(ca)
+	}
 	return ca
 }
 

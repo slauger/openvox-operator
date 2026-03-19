@@ -129,3 +129,35 @@ func TestCertReconcile_PhasePending(t *testing.T) {
 		t.Errorf("expected phase %q, got %q", openvoxv1alpha1.CertificatePhasePending, updated.Status.Phase)
 	}
 }
+
+func TestCertReconcile_CAExternalPhase_Accepted(t *testing.T) {
+	cert := newCertificate("my-cert", "ext-ca", "")
+	ca := newCertificateAuthority("ext-ca", withExternal("https://puppet-ca.example.com:8140"))
+	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseExternal
+	// Pre-create the TLS secret so reconcile completes without HTTP calls
+	tlsSecret := newSecret("my-cert-tls", map[string][]byte{
+		"cert.pem": []byte("signed-cert"),
+		"key.pem":  []byte("private-key"),
+	})
+
+	c := setupTestClient(cert, ca, tlsSecret)
+	r := newCertificateReconciler(c)
+
+	res, err := r.Reconcile(testCtx(), testRequest("my-cert"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should NOT requeue with 10s (that would mean CA was treated as not-ready)
+	if res.RequeueAfter == 10*time.Second {
+		t.Error("certificate should not wait for CA when phase is External")
+	}
+
+	updated := &openvoxv1alpha1.Certificate{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "my-cert", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get Certificate: %v", err)
+	}
+	if updated.Status.Phase != openvoxv1alpha1.CertificatePhaseSigned {
+		t.Errorf("expected phase %q, got %q", openvoxv1alpha1.CertificatePhaseSigned, updated.Status.Phase)
+	}
+}

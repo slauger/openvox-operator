@@ -31,6 +31,11 @@ on:
         required: false
         type: string
         default: ''
+      sign:
+        description: 'Sign images with cosign keyless signing'
+        required: false
+        type: boolean
+        default: true
     outputs:
       version:
         description: 'Image version tag'
@@ -151,6 +156,7 @@ jobs:
           password: ${{ github.token }}
 
       - name: Install cosign
+        if: inputs.sign
         uses: sigstore/cosign-installer@v3
 
       - name: Create and push manifest
@@ -175,6 +181,7 @@ jobs:
           fi
 
       - name: Sign image with cosign (keyless)
+        if: inputs.sign
         run: |
           IMAGE="ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}"
           VERSION="${{ needs.prepare.outputs.version }}"

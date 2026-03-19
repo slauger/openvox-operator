@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -513,15 +514,15 @@ func TestCAReconcile_ServiceCreation(t *testing.T) {
 	}
 }
 
-func TestCAReconcile_SANInjection(t *testing.T) {
+func TestCAReconcile_JobIncludesServiceFQDN(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
 	ca.Status.Phase = ""
 	cfg := caPrereqs("test-ca")
-	// Create a Server with ca:true pointing to the cert
 	server := newServer("ca-server", withCA(true), withServerRole(true))
 	server.Spec.ConfigRef = "production"
 	server.Spec.CertificateRef = "ca-cert"
 	cert := newCertificate("ca-cert", "test-ca", openvoxv1alpha1.CertificatePhasePending)
+	cert.Spec.DNSAltNames = []string{"puppet", "ca.example.com"}
 	c := setupTestClient(ca, cfg, server, cert)
 	r := newCertificateAuthorityReconciler(c)
 
@@ -529,56 +530,40 @@ func TestCAReconcile_SANInjection(t *testing.T) {
 		t.Fatalf("reconcile error: %v", err)
 	}
 
-	// Verify the FQDN was injected into the Certificate's DNSAltNames
+	// Verify the Job's DNS_ALT_NAMES env var includes the CA Service FQDN
+	job := &batchv1.Job{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca-ca-setup", Namespace: testNamespace}, job); err != nil {
+		t.Fatalf("Job not created: %v", err)
+	}
+
+	envMap := map[string]string{}
+	for _, e := range job.Spec.Template.Spec.Containers[0].Env {
+		envMap[e.Name] = e.Value
+	}
+
+	dnsAltNames := envMap["DNS_ALT_NAMES"]
+	if dnsAltNames == "" {
+		t.Fatal("DNS_ALT_NAMES env var not set")
+	}
+
+	// Should contain original SANs plus the CA Service FQDN
+	expectedFQDN := "test-ca.default.svc"
+	if !strings.Contains(dnsAltNames, expectedFQDN) {
+		t.Errorf("expected DNS_ALT_NAMES to contain %q, got %q", expectedFQDN, dnsAltNames)
+	}
+	if !strings.Contains(dnsAltNames, "puppet") {
+		t.Errorf("expected DNS_ALT_NAMES to contain original SAN 'puppet', got %q", dnsAltNames)
+	}
+
+	// Verify Certificate CR was NOT modified
 	updatedCert := &openvoxv1alpha1.Certificate{}
 	if err := c.Get(testCtx(), types.NamespacedName{Name: "ca-cert", Namespace: testNamespace}, updatedCert); err != nil {
 		t.Fatalf("failed to get Certificate: %v", err)
 	}
-
-	expectedFQDN := "test-ca.default.svc"
-	found := false
 	for _, san := range updatedCert.Spec.DNSAltNames {
 		if san == expectedFQDN {
-			found = true
-			break
+			t.Error("CA Service FQDN should NOT be injected into Certificate CR spec")
 		}
-	}
-	if !found {
-		t.Errorf("expected FQDN %q in DNSAltNames, got %v", expectedFQDN, updatedCert.Spec.DNSAltNames)
-	}
-}
-
-func TestCAReconcile_SANInjectionIdempotent(t *testing.T) {
-	ca := newCertificateAuthority("test-ca")
-	ca.Status.Phase = ""
-	cfg := caPrereqs("test-ca")
-	server := newServer("ca-server", withCA(true), withServerRole(true))
-	server.Spec.ConfigRef = "production"
-	server.Spec.CertificateRef = "ca-cert"
-	cert := newCertificate("ca-cert", "test-ca", openvoxv1alpha1.CertificatePhasePending)
-	// Pre-inject the FQDN
-	cert.Spec.DNSAltNames = []string{"test-ca.default.svc"}
-	c := setupTestClient(ca, cfg, server, cert)
-	r := newCertificateAuthorityReconciler(c)
-
-	if _, err := r.Reconcile(testCtx(), testRequest("test-ca")); err != nil {
-		t.Fatalf("reconcile error: %v", err)
-	}
-
-	// Verify no duplicate was added
-	updatedCert := &openvoxv1alpha1.Certificate{}
-	if err := c.Get(testCtx(), types.NamespacedName{Name: "ca-cert", Namespace: testNamespace}, updatedCert); err != nil {
-		t.Fatalf("failed to get Certificate: %v", err)
-	}
-
-	count := 0
-	for _, san := range updatedCert.Spec.DNSAltNames {
-		if san == "test-ca.default.svc" {
-			count++
-		}
-	}
-	if count != 1 {
-		t.Errorf("expected FQDN once in DNSAltNames, found %d times: %v", count, updatedCert.Spec.DNSAltNames)
 	}
 }
 

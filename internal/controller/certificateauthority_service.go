@@ -2,8 +2,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
-	"slices"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -70,40 +68,4 @@ func (r *CertificateAuthorityReconciler) reconcileCAService(ctx context.Context,
 	svc.Spec.Ports[0].TargetPort = intstr.FromInt32(8140)
 	svc.Spec.Ports[0].Protocol = corev1.ProtocolTCP
 	return r.Update(ctx, svc)
-}
-
-// ensureCAServiceDNSAltName injects the CA Service FQDN into the CA server Certificate's
-// DNSAltNames so that TLS connections from the operator to the CA service succeed.
-func (r *CertificateAuthorityReconciler) ensureCAServiceDNSAltName(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, certs []openvoxv1alpha1.Certificate) error {
-	logger := log.FromContext(ctx)
-
-	serviceFQDN := fmt.Sprintf("%s.%s.svc", ca.Name, ca.Namespace)
-
-	caCert := r.findCAServerCert(ctx, ca, certs)
-	if caCert == nil {
-		return nil
-	}
-
-	if slices.Contains(caCert.Spec.DNSAltNames, serviceFQDN) {
-		return nil
-	}
-
-	logger.Info("injecting CA Service FQDN into Certificate DNSAltNames",
-		"certificate", caCert.Name, "fqdn", serviceFQDN)
-	caCert.Spec.DNSAltNames = append(caCert.Spec.DNSAltNames, serviceFQDN)
-	if err := r.Update(ctx, caCert); err != nil {
-		return fmt.Errorf("updating Certificate %s with CA Service FQDN: %w", caCert.Name, err)
-	}
-
-	// Reset certificate phase to trigger re-signing with the new alt name
-	if caCert.Status.Phase == openvoxv1alpha1.CertificatePhaseSigned {
-		caCert.Status.Phase = openvoxv1alpha1.CertificatePhasePending
-		if err := r.Status().Update(ctx, caCert); err != nil {
-			return fmt.Errorf("resetting Certificate %s phase: %w", caCert.Name, err)
-		}
-		logger.Info("reset Certificate phase to Pending for re-signing",
-			"certificate", caCert.Name)
-	}
-
-	return nil
 }

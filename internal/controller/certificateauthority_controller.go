@@ -94,11 +94,6 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, fmt.Errorf("reconciling CA Service: %w", err)
 	}
 
-	// Step 2b: Inject CA Service FQDN into CA server Certificate SANs
-	if err := r.ensureCAServiceDNSAltName(ctx, ca, certs); err != nil {
-		return ctrl.Result{}, fmt.Errorf("ensuring CA Service DNS alt name: %w", err)
-	}
-
 	// Step 3: Ensure RBAC for CA setup job
 	if err := r.reconcileCASetupRBAC(ctx, ca, certs); err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconciling CA setup RBAC: %w", err)

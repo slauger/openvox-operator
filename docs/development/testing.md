@@ -51,7 +51,13 @@ Trigger the **E2E** workflow to build and push all 5 images for the current bran
 gh workflow run e2e.yaml --ref $(git branch --show-current)
 ```
 
-Images are tagged with the short git SHA of the commit at the branch tip (e.g. `efac063`). This runs `_container-build.yaml` for each image (multi-arch, hadolint, push to ghcr.io). On `main`, the regular CI workflows (`ci.yaml`, `ci-test-images.yaml`) build the same images automatically.
+By default, images are tagged with the short git SHA of the commit at the branch tip (e.g. `efac063`). You can pass a custom tag via the `image_tag` input:
+
+```bash
+gh workflow run e2e.yaml --ref $(git branch --show-current) -f image_tag=my-feature
+```
+
+This runs `_container-build.yaml` for each image (multi-arch, hadolint, push to ghcr.io). On `main`, the regular CI workflows (`ci.yaml`, `ci-test-images.yaml`) build the same images automatically.
 
 #### Building Images Locally
 
@@ -87,19 +93,19 @@ make e2e-integration  # integration tests (enc, report, full)
 
 ### Image Tags
 
-The E2E workflow tags all images with the short git SHA of the built commit (e.g. `efac063`). The Makefile defaults `IMAGE_TAG` to your local `git describe --always` output, so it matches automatically when your local HEAD is the commit CI built.
+The E2E workflow tags all images with the short git SHA of the built commit (e.g. `efac063`) by default. A custom tag can be passed via the `image_tag` workflow input (see [Building Images via CI](#building-images-via-ci)).
 
-To use a specific tag, export `IMAGE_TAG` once for the session:
+The Makefile defaults `IMAGE_TAG` to your local `git describe --always` output, so it matches automatically when your local HEAD is the commit CI built. To use a custom tag, export `IMAGE_TAG` once for the session:
 
 ```bash
-export IMAGE_TAG=efac063
+export IMAGE_TAG=my-feature
 make e2e
 ```
 
 Or pass it inline to a single command:
 
 ```bash
-IMAGE_TAG=efac063 make e2e-stack
+IMAGE_TAG=my-feature make e2e-stack
 ```
 
 The `IMAGE_REGISTRY` variable (default: `ghcr.io/slauger`) can be overridden the same way if using a different registry.
@@ -207,7 +213,7 @@ Image builds and E2E tests are managed by three workflows:
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
-| `e2e.yaml` | `workflow_dispatch` | Builds all 5 images and pushes to ghcr.io |
+| `e2e.yaml` | `workflow_dispatch` | Builds all 5 images and pushes to ghcr.io (accepts optional `image_tag` input) |
 | `ci-test-images.yaml` | Push to `main` (path filter) | Builds agent, code, mock on main |
 | `cleanup.yaml` | `workflow_dispatch` | Deletes E2E image versions (short SHA tags) |
 
@@ -215,12 +221,14 @@ The typical workflow for validating a feature branch before merging:
 
 ```bash
 # 1. Build all images for the current branch
-gh workflow run e2e.yaml
+gh workflow run e2e.yaml --ref $(git branch --show-current)
+# Or with a custom tag: gh workflow run e2e.yaml --ref $(git branch --show-current) -f image_tag=my-feature
 
 # 2. Check build status
 gh run list --workflow=e2e.yaml --limit=1
 
 # 3. Run E2E tests locally against a cluster that can pull from ghcr.io
+export IMAGE_TAG=$(git describe --always)  # or: export IMAGE_TAG=my-feature
 make e2e
 
 # 4. Clean up E2E images after merging

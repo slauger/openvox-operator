@@ -75,6 +75,20 @@ servers:
         memory: 1Gi
       limits:
         memory: 2Gi
+  - name: server
+    ca: false
+    server: true
+    poolRefs: [server]
+    certificate:
+      certname: server
+      dnsAltNames: []
+    replicas: 2
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        memory: 2Gi
 
 gateway:
   name: ""              # shared Gateway resource name

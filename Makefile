@@ -77,7 +77,7 @@ local-deploy: local-build local-install ## Build images and deploy operator via 
 	@echo "Operator deployed with openvox-operator:$(LOCAL_TAG)"
 
 STACK_NAMESPACE ?= openvox
-STACK_VALUES ?= charts/openvox-stack/ci/single-node-values.yaml
+STACK_VALUES ?= charts/openvox-stack/values.yaml
 
 ##@ Deployment
 

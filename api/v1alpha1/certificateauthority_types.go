@@ -145,6 +145,11 @@ type CertificateAuthorityStatus struct {
 	// +optional
 	CASecretName string `json:"caSecretName,omitempty"`
 
+	// ServiceName is the name of the ClusterIP Service created for internal operator
+	// communication with the CA (CSR signing, CRL refresh).
+	// +optional
+	ServiceName string `json:"serviceName,omitempty"`
+
 	// NotAfter is the expiration time of the CA certificate.
 	// +optional
 	NotAfter *metav1.Time `json:"notAfter,omitempty"`

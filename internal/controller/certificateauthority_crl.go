@@ -29,17 +29,12 @@ func (r *CertificateAuthorityReconciler) reconcileCRLRefresh(ctx context.Context
 		interval = parsed
 	}
 
-	// Resolve CA base URL: external URL or internal service discovery
+	// Resolve CA base URL: external URL or internal CA Service
 	var caBaseURL string
 	if ca.Spec.External != nil {
 		caBaseURL = ca.Spec.External.URL
 	} else {
-		caServiceName := findCAServiceName(ctx, r.Client, ca, ca.Namespace)
-		if caServiceName == "" {
-			logger.Info("CA service not yet available, skipping CRL refresh")
-			return ctrl.Result{RequeueAfter: interval}, nil
-		}
-		caBaseURL = fmt.Sprintf("https://%s.%s.svc:8140", caServiceName, ca.Namespace)
+		caBaseURL = fmt.Sprintf("https://%s.%s.svc:8140", ca.Name, ca.Namespace)
 	}
 
 	crlPEM, err := r.fetchCRL(ctx, ca, caBaseURL, ca.Namespace)

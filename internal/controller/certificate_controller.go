@@ -36,9 +36,6 @@ const (
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificates/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificates/finalizers,verbs=update
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificateauthorities,verbs=get;list;watch
-// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=configs,verbs=get;list;watch
-// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=servers,verbs=get;list;watch
-// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=pools,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 
 func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -126,17 +123,12 @@ func (r *CertificateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *CertificateReconciler) reconcileCertSigning(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	// Resolve CA base URL: external URL or internal service discovery
+	// Resolve CA base URL: external URL or internal CA Service
 	var caBaseURL string
 	if ca.Spec.External != nil {
 		caBaseURL = ca.Spec.External.URL
 	} else {
-		caServiceName := findCAServiceName(ctx, r.Client, ca, cert.Namespace)
-		if caServiceName == "" {
-			logger.Info("waiting for CA server to become available")
-			return ctrl.Result{RequeueAfter: RequeueIntervalMedium}, nil
-		}
-		caBaseURL = fmt.Sprintf("https://%s.%s.svc:8140", caServiceName, cert.Namespace)
+		caBaseURL = fmt.Sprintf("https://%s.%s.svc:8140", ca.Name, cert.Namespace)
 	}
 
 	cert.Status.Phase = openvoxv1alpha1.CertificatePhaseRequesting

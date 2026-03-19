@@ -76,48 +76,6 @@ func hashStringMap(data map[string]string) string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
-// findCAServiceName discovers the CA service endpoint by:
-// 1. Building the set of Config names that reference this CA
-// 2. Finding a running Server with ca:true in one of those Configs
-// 3. Finding a Pool referenced by the CA server's poolRefs
-// 4. Returning the first matching Pool name as service name
-func findCAServiceName(ctx context.Context, reader client.Reader, ca *openvoxv1alpha1.CertificateAuthority, namespace string) string {
-	logger := log.FromContext(ctx)
-
-	// Build set of Config names referencing this CA
-	cfgList := &openvoxv1alpha1.ConfigList{}
-	if err := reader.List(ctx, cfgList, client.InNamespace(namespace)); err != nil {
-		logger.Error(err, "failed to list Configs for CA service discovery", "namespace", namespace)
-		return ""
-	}
-	configNames := map[string]bool{}
-	for _, cfg := range cfgList.Items {
-		if cfg.Spec.AuthorityRef == ca.Name {
-			configNames[cfg.Name] = true
-		}
-	}
-
-	serverList := &openvoxv1alpha1.ServerList{}
-	if err := reader.List(ctx, serverList, client.InNamespace(namespace)); err != nil {
-		logger.Error(err, "failed to list Servers for CA service discovery", "namespace", namespace)
-		return ""
-	}
-
-	for _, server := range serverList.Items {
-		if configNames[server.Spec.ConfigRef] && server.Spec.CA {
-			if server.Status.Phase == openvoxv1alpha1.ServerPhaseRunning {
-				// Return the first poolRef as the CA service name
-				if len(server.Spec.PoolRefs) > 0 {
-					return server.Spec.PoolRefs[0]
-				}
-				return ""
-			}
-		}
-	}
-
-	return ""
-}
-
 // parseCertNotAfter extracts the NotAfter time from a PEM-encoded certificate.
 func parseCertNotAfter(ctx context.Context, certPEM []byte) *metav1.Time {
 	logger := log.FromContext(ctx)

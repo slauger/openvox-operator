@@ -297,6 +297,11 @@ spec:
                 - External
                 - Error
                 type: string
+              serviceName:
+                description: |-
+                  ServiceName is the name of the ClusterIP Service created for internal operator
+                  communication with the CA (CSR signing, CRL refresh).
+                type: string
             type: object
         type: object
     served: true

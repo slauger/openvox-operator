@@ -42,7 +42,7 @@ const (
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificates,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=configs,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=servers,verbs=get;list;watch
-// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=pools,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims;secrets;serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
@@ -89,6 +89,16 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, fmt.Errorf("finding certificates for CA: %w", err)
 	}
 
+	// Step 2a: Reconcile CA Service for internal operator communication
+	if err := r.reconcileCAService(ctx, ca); err != nil {
+		return ctrl.Result{}, fmt.Errorf("reconciling CA Service: %w", err)
+	}
+
+	// Step 2b: Inject CA Service FQDN into CA server Certificate SANs
+	if err := r.ensureCAServiceDNSAltName(ctx, ca, certs); err != nil {
+		return ctrl.Result{}, fmt.Errorf("ensuring CA Service DNS alt name: %w", err)
+	}
+
 	// Step 3: Ensure RBAC for CA setup job
 	if err := r.reconcileCASetupRBAC(ctx, ca, certs); err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconciling CA setup RBAC: %w", err)
@@ -108,6 +118,7 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 	caSecretName := fmt.Sprintf("%s-ca", ca.Name)
 	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseReady
 	ca.Status.CASecretName = caSecretName
+	ca.Status.ServiceName = ca.Name
 	ca.Status.NotAfter = r.extractCANotAfter(ctx, caSecretName, ca.Namespace)
 	meta.SetStatusCondition(&ca.Status.Conditions, metav1.Condition{
 		Type:               openvoxv1alpha1.ConditionCAReady,
@@ -161,6 +172,7 @@ func (r *CertificateAuthorityReconciler) SetupWithManager(mgr ctrl.Manager) erro
 		For(&openvoxv1alpha1.CertificateAuthority{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
 		Owns(&batchv1.Job{}).
+		Owns(&corev1.Service{}).
 		Owns(&corev1.ServiceAccount{}).
 		Watches(&openvoxv1alpha1.Certificate{}, handler.EnqueueRequestsFromMapFunc(
 			func(ctx context.Context, obj client.Object) []ctrl.Request {

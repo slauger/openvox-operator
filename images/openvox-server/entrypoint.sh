@@ -22,7 +22,7 @@ exec "${JAVA_BIN}" ${JAVA_ARGS} \
     --add-opens java.base/sun.nio.ch=ALL-UNNAMED \
     --add-opens java.base/java.io=ALL-UNNAMED \
     -Dlogappender=STDOUT \
-    -cp "${INSTALL_DIR}/puppet-server-release.jar" \
+    -cp "${INSTALL_DIR}/jvm-ssl-utils-patch.jar:${INSTALL_DIR}/puppet-server-release.jar" \
     clojure.main -m puppetlabs.trapperkeeper.main \
     --config "${CONFIG}" \
     --bootstrap-config "${BOOTSTRAP_CONFIG}"

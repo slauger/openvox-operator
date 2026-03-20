@@ -1,3 +1,4 @@
 ignored:
+  - DL3008  # apt-get version pinning -- transient build stage, not runtime
   - DL3041  # dnf version pinning -- versions come from UBI9 repos
   - DL3003  # WORKDIR vs cd -- tarball extraction requires cd

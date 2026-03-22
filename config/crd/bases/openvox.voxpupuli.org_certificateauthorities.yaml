@@ -22,7 +22,7 @@ spec:
       type: string
     - jsonPath: .status.notAfter
       name: NotAfter
-      type: date
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date

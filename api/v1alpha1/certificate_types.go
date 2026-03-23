@@ -10,7 +10,7 @@ import (
 // +kubebuilder:printcolumn:name="Authority",type=string,JSONPath=`.spec.authorityRef`
 // +kubebuilder:printcolumn:name="Certname",type=string,JSONPath=`.spec.certname`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
-// +kubebuilder:printcolumn:name="NotAfter",type=date,JSONPath=`.status.notAfter`
+// +kubebuilder:printcolumn:name="NotAfter",type=string,JSONPath=`.status.notAfter`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // Certificate is the Schema for the certificates API.

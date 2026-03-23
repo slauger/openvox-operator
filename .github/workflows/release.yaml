@@ -1,0 +1,132 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  semantic-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      new-release-published: ${{ steps.semantic.outputs.new_release_published }}
+      new-release-version: ${{ steps.semantic.outputs.new_release_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Create baseline tag for initial release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! git tag -l 'v*' | grep -q .; then
+            FIRST_COMMIT=$(git rev-list --max-parents=0 HEAD)
+            gh api repos/${{ github.repository }}/git/refs \
+              -f ref="refs/tags/v0.0.0" \
+              -f sha="${FIRST_COMMIT}"
+            git tag v0.0.0 "${FIRST_COMMIT}"
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run semantic-release
+        id: semantic
+        uses: cycjimmy/semantic-release-action@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  openvox-operator:
+    needs: semantic-release
+    if: needs.semantic-release.outputs.new-release-published == 'true'
+    uses: ./.github/workflows/_container-build.yaml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    with:
+      image_name: openvox-operator
+      dockerfile: images/openvox-operator/Containerfile
+      context: '.'
+      push: true
+      image_tag: ${{ needs.semantic-release.outputs.new-release-version }}
+
+  openvox-server:
+    needs: semantic-release
+    if: needs.semantic-release.outputs.new-release-published == 'true'
+    uses: ./.github/workflows/_container-build.yaml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    with:
+      image_name: openvox-server
+      dockerfile: images/openvox-server/Containerfile
+      context: '.'
+      push: true
+      image_tag: ${{ needs.semantic-release.outputs.new-release-version }}
+
+  helm-charts:
+    needs: [semantic-release, openvox-operator, openvox-server]
+    if: needs.semantic-release.outputs.new-release-published == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Login to ghcr.io
+        run: echo "${{ github.token }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Inject version into Chart.yaml
+        run: |
+          VERSION="${{ needs.semantic-release.outputs.new-release-version }}"
+          for chart in openvox-operator openvox-stack; do
+            sed -i "s/^version:.*/version: ${VERSION}/" charts/${chart}/Chart.yaml
+            sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" charts/${chart}/Chart.yaml
+          done
+
+      - name: Package and push charts
+        run: |
+          for chart in openvox-operator openvox-stack; do
+            helm package charts/${chart}
+            helm push ${chart}-*.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
+          done
+
+      - name: Upload chart artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-charts
+          path: '*.tgz'
+
+  release-assets:
+    needs: [semantic-release, helm-charts]
+    if: needs.semantic-release.outputs.new-release-published == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download chart artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: helm-charts
+
+      - name: Upload assets to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          VERSION="${{ needs.semantic-release.outputs.new-release-version }}"
+          gh release upload "v${VERSION}" *.tgz

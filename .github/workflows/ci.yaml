@@ -11,13 +11,13 @@ jobs:
     uses: ./.github/workflows/_unicode-lint.yaml
 
   go:
-    uses: ./.github/workflows/go.yaml
+    uses: ./.github/workflows/_go.yaml
 
   helm:
-    uses: ./.github/workflows/helm.yaml
+    uses: ./.github/workflows/_helm.yaml
 
   shellcheck:
-    uses: ./.github/workflows/shellcheck.yaml
+    uses: ./.github/workflows/_shellcheck.yaml
 
   openvox-operator:
     needs: go

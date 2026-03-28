@@ -40,6 +40,13 @@ const (
 	DefaultCAJobMemoryLimit   = "1Gi"
 )
 
+// Database defaults.
+const (
+	DatabaseRunAsUser  = int64(1001)
+	DatabaseRunAsGroup = int64(0)
+	DatabaseHTTPSPort  = int32(8081)
+)
+
 // HPA and PDB defaults for Server resources.
 const (
 	DefaultHPAMaxReplicas  = int32(5)

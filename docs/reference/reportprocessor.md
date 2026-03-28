@@ -6,7 +6,7 @@ ReportProcessor references a Config via `configRef`. Multiple ReportProcessors c
 
 ## Examples
 
-### PuppetDB (mTLS)
+### OpenVox DB (mTLS)
 
 ```yaml
 apiVersion: openvox.voxpupuli.org/v1alpha1
@@ -182,7 +182,7 @@ When `processor` is empty, the report is forwarded as-is in Puppet's `to_data_ha
 
 ### PuppetDB
 
-When `processor: puppetdb`, the binary transforms the report to [PuppetDB Wire Format v8](https://www.puppet.com/docs/puppetdb/latest/api/wire_format/report_format_v8.html) and POSTs it to `<url>/pdb/cmd/v1`. The `/pdb/cmd/v1` path is appended automatically -- configure `url` as the PuppetDB base URL only.
+When `processor: puppetdb`, the binary transforms the report to [PuppetDB Wire Format v8](https://www.puppet.com/docs/puppetdb/latest/api/wire_format/report_format_v8.html) and POSTs it to `<url>/pdb/cmd/v1`. The `/pdb/cmd/v1` path is appended automatically -- configure `url` as the OpenVox DB base URL only.
 
 ## How It Works
 

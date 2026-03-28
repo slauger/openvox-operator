@@ -1,4 +1,4 @@
-// Package main implements a mock ENC / report / PuppetDB receiver for E2E tests.
+// Package main implements a mock ENC / report / OpenVox DB receiver for E2E tests.
 // It is a simple HTTP server using only the Go standard library (plus gopkg.in/yaml.v3).
 package main
 

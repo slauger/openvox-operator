@@ -60,6 +60,31 @@ nodeClassifier:
     enabled: false
     directory: /var/cache/openvox-enc
 
+database:
+  enabled: false
+  name: ""              # REQUIRED when enabled (no auto-default)
+  image:
+    repository: ghcr.io/slauger/openvox-db
+    tag: latest
+    pullPolicy: IfNotPresent
+  certificate:
+    certname: ""        # REQUIRED when enabled
+    dnsAltNames: []
+  postgres:
+    host: ""            # REQUIRED when enabled
+    port: 5432
+    database: openvoxdb
+    credentialsSecretRef: ""  # REQUIRED when enabled
+    sslMode: require
+  replicas: 1
+  javaArgs: ""
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+
 servers:
   - name: ca
     ca: true

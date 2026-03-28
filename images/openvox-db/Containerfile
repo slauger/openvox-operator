@@ -1,15 +1,128 @@
+# Rootless OpenVox DB on UBI9 for Kubernetes/OpenShift
+# K8s-first: no entrypoint.d scripts, no Docker ENV config.
+# The operator manages all configuration via ConfigMaps and Secrets.
+#
+# Build (from repo root):
+#   podman build -t openvox-db:latest -f images/openvox-db/Containerfile .
+#
+# Run:
+#   podman run --rm openvox-db:latest
+
 # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
 ARG OPENVOXDB_VERSION=8.12.1
 
-FROM registry.access.redhat.com/ubi9/ubi:9.7-1774415752
+################################################################################
+# Stage: base — JRE + minimal runtime deps
+################################################################################
+FROM registry.access.redhat.com/ubi9/ubi:9.7-1774415752 AS base
+
+ARG JDK_VERSION=17
+
+RUN dnf install -y --allowerasing --setopt=install_weak_deps=False \
+        java-${JDK_VERSION}-openjdk-headless \
+        bash \
+        curl \
+        openssl \
+    && dnf clean all
+
+################################################################################
+# Stage: build — install OpenVox DB tarball
+################################################################################
+FROM base AS build
+
+ARG OPENVOXDB_VERSION
+
+ADD https://artifacts.voxpupuli.org/openvoxdb/${OPENVOXDB_VERSION}/openvoxdb-${OPENVOXDB_VERSION}.tar.gz /
+
+ENV app_logdir=/var/log/puppetlabs \
+    apps_dir=/opt/puppetlabs/server/apps \
+    data_dir=/opt/puppetlabs/server/data \
+    etc_dir=/etc/puppetlabs \
+    run_dir=/var/run/puppetlabs \
+    bindir=/opt/puppetlabs/server/apps/puppetdb/bin \
+    symbindir=/opt/puppetlabs/server/bin \
+    uxbindir=/opt/puppetlabs/bin
+
+RUN tar -xzf /openvoxdb-${OPENVOXDB_VERSION}.tar.gz \
+    && cd /puppetdb-${OPENVOXDB_VERSION} \
+    # --- directory structure ---
+    && install -d -m 0755 "${app_logdir}/puppetdb" \
+    && install -d -m 0755 "${data_dir}/puppetdb" \
+    && install -d -m 0755 "${etc_dir}/puppetdb/conf.d" \
+    && install -d -m 0755 "${apps_dir}/puppetdb" \
+    && install -d -m 0755 "${apps_dir}/puppetdb/cli" \
+    && install -d -m 0755 "${apps_dir}/puppetdb/cli/apps" \
+    && install -d -m 0755 "${bindir}" \
+    && install -d -m 0755 "${run_dir}/puppetdb" \
+    && install -d -m 0755 "${symbindir}" \
+    && install -d -m 0755 "${uxbindir}" \
+    # --- config files from tarball ---
+    && install -m 0644 ext/config/conf.d/config.ini    "${etc_dir}/puppetdb/conf.d/config.ini" \
+    && install -m 0644 ext/config/conf.d/database.ini  "${etc_dir}/puppetdb/conf.d/database.ini" \
+    && install -m 0644 ext/config/conf.d/repl.ini      "${etc_dir}/puppetdb/conf.d/repl.ini" \
+    && install -m 0644 ext/config/logback.xml           "${etc_dir}/puppetdb/logback.xml" \
+    && install -m 0644 ext/config/conf.d/jetty.ini     "${etc_dir}/puppetdb/conf.d/jetty.ini" \
+    # --- jar + CLI tools ---
+    && install -m 0644 puppet-db.jar                    "${apps_dir}/puppetdb/" \
+    && install -m 0755 ext/bin/puppetdb                 "${bindir}/puppetdb" \
+    && install -m 0755 ext/cli_defaults/cli-defaults.sh "${apps_dir}/puppetdb/cli/" \
+    && install -m 0755 ext/cli/foreground               "${apps_dir}/puppetdb/cli/apps/foreground" \
+    # --- symlinks ---
+    && ln -s "../apps/puppetdb/bin/puppetdb"           "${symbindir}/puppetdb" \
+    && ln -s "../server/apps/puppetdb/bin/puppetdb"    "${uxbindir}/puppetdb" \
+    # --- cleanup ---
+    && rm -rf /openvoxdb-*.tar.gz /puppetdb-*
+
+################################################################################
+# Stage: final — rootless runtime image
+################################################################################
+FROM base AS final
+
+ARG OPENVOXDB_VERSION
 
 LABEL org.opencontainers.image.title="OpenVox DB" \
-      org.opencontainers.image.description="OpenVox DB for Kubernetes/OpenShift" \
+      org.opencontainers.image.description="Rootless OpenVox DB for Kubernetes/OpenShift" \
       org.opencontainers.image.vendor="slauger" \
       org.opencontainers.image.url="https://github.com/slauger/openvox-operator" \
       org.opencontainers.image.source="https://github.com/slauger/openvox-operator" \
+      org.opencontainers.image.version="${OPENVOXDB_VERSION}" \
       org.opencontainers.image.licenses="Apache-2.0"
+
+ENV JAVA_ARGS="-Xms256m -Xmx256m" \
+    PATH=$PATH:/opt/puppetlabs/server/bin:/opt/puppetlabs/bin
+
+# Copy built artifacts from build stage
+COPY --from=build /opt/puppetlabs /opt/puppetlabs
+COPY --from=build /etc/puppetlabs /etc/puppetlabs
+COPY --from=build /var/log/puppetlabs /var/log/puppetlabs
+COPY --from=build /var/run/puppetlabs /var/run/puppetlabs
+
+COPY images/openvox-db/entrypoint.sh /entrypoint.sh
+COPY images/openvox-db/healthcheck.sh /healthcheck.sh
+
+RUN chmod +x /entrypoint.sh /healthcheck.sh
+
+# Set HOME explicitly: random UIDs (OpenShift) default HOME to "/"
+ENV HOME=/opt/puppetlabs/server/data/puppetdb
+
+# OpenShift random-UID pattern:
+#   group=root(0), mirror user perms to group, set SGID on directories
+RUN for d in \
+        /etc/puppetlabs \
+        /var/log/puppetlabs \
+        /var/run/puppetlabs \
+        /opt/puppetlabs \
+    ; do \
+        chgrp -R 0 "$d"; \
+        chmod -R g=u "$d"; \
+        find "$d" -type d -exec chmod g+s {} +; \
+    done
 
 USER 1001:0
 
-CMD ["/bin/bash"]
+# k8s uses livenessProbe/readinessProbe/startupProbe — HEALTHCHECK is for Docker/Podman
+HEALTHCHECK --interval=20s --timeout=15s --retries=12 --start-period=3m CMD ["/healthcheck.sh"]
+
+EXPOSE 8081
+
+ENTRYPOINT ["/entrypoint.sh"]

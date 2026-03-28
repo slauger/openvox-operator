@@ -14,7 +14,7 @@ import (
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // Config is the Schema for the configs API.
-// It manages shared configuration (puppet.conf, auth.conf) and PuppetDB connection.
+// It manages shared configuration (puppet.conf, auth.conf) and OpenVox DB connection.
 type Config struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -41,7 +41,7 @@ type ConfigSpec struct {
 	// +optional
 	AuthorityRef string `json:"authorityRef,omitempty"`
 
-	// PuppetDB defines the PuppetDB connection settings.
+	// PuppetDB defines the OpenVox DB connection settings.
 	// +optional
 	PuppetDB PuppetDBSpec `json:"puppetdb,omitempty"`
 
@@ -360,9 +360,9 @@ type PuppetSpec struct {
 	ExtraConfig map[string]string `json:"extraConfig,omitempty"`
 }
 
-// PuppetDBSpec defines the PuppetDB connection.
+// PuppetDBSpec defines the OpenVox DB connection.
 type PuppetDBSpec struct {
-	// ServerURLs is a list of PuppetDB server URLs.
+	// ServerURLs is a list of OpenVox DB server URLs.
 	// +optional
 	ServerURLs []string `json:"serverUrls,omitempty"`
 }

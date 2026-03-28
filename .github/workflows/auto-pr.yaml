@@ -48,20 +48,76 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+      - name: Predict semantic-release version
+        if: steps.check-pr.outputs.count == '0' || steps.check-pr.outputs.is_auto == 'true'
+        id: version
+        run: |
+          git fetch origin main:main 2>/dev/null || true
+
+          COMMITS=$(git log main..HEAD --pretty=format:"%s" --no-merges)
+
+          BUMP="none"
+          FEAT_COUNT=0
+          FIX_COUNT=0
+          BREAKING=false
+
+          while IFS= read -r MSG; do
+            if echo "$MSG" | grep -qiE 'BREAKING[ -]CHANGE|^[a-z]+(\(.+\))?!:'; then
+              BREAKING=true
+            fi
+            if echo "$MSG" | grep -qE '^feat(\(.+\))?:'; then
+              FEAT_COUNT=$((FEAT_COUNT + 1))
+            fi
+            if echo "$MSG" | grep -qE '^fix(\(.+\))?:'; then
+              FIX_COUNT=$((FIX_COUNT + 1))
+            fi
+          done <<< "$COMMITS"
+
+          if [ "$BREAKING" = true ]; then
+            BUMP="major"
+          elif [ "$FEAT_COUNT" -gt 0 ]; then
+            BUMP="minor"
+          elif [ "$FIX_COUNT" -gt 0 ]; then
+            BUMP="patch"
+          fi
+
+          # Get current latest tag
+          CURRENT=$(git describe --tags --abbrev=0 main 2>/dev/null || echo "v0.0.0")
+          CURRENT="${CURRENT#v}"
+          IFS='.' read -r CUR_MAJOR CUR_MINOR CUR_PATCH <<< "$CURRENT"
+
+          case "$BUMP" in
+            major) NEXT="$((CUR_MAJOR + 1)).0.0" ;;
+            minor) NEXT="${CUR_MAJOR}.$((CUR_MINOR + 1)).0" ;;
+            patch) NEXT="${CUR_MAJOR}.${CUR_MINOR}.$((CUR_PATCH + 1))" ;;
+            none)  NEXT="" ;;
+          esac
+
+          echo "bump=$BUMP" >> $GITHUB_OUTPUT
+          echo "current=v${CURRENT}" >> $GITHUB_OUTPUT
+          echo "next=${NEXT:+v$NEXT}" >> $GITHUB_OUTPUT
+          echo "feat_count=$FEAT_COUNT" >> $GITHUB_OUTPUT
+          echo "fix_count=$FIX_COUNT" >> $GITHUB_OUTPUT
+          echo "breaking=$BREAKING" >> $GITHUB_OUTPUT
+
       - name: Analyze changes with AI
         if: steps.check-pr.outputs.count == '0' || steps.check-pr.outputs.is_auto == 'true'
         id: analyze
         run: |
-          git fetch origin main:main 2>/dev/null || true
-
           COMMITS=$(git log main..HEAD --pretty=format:"- %s (%h)" --no-merges | head -20)
           FILES_CHANGED=$(git diff main..HEAD --stat | tail -30)
           DIFF=$(git diff main..HEAD -- '*.go' '*.yaml' '*.yml' '*.md' '*.json' | head -c 8000)
 
+          BUMP="${{ steps.version.outputs.bump }}"
+          CURRENT="${{ steps.version.outputs.current }}"
+          NEXT="${{ steps.version.outputs.next }}"
+
           cat > /tmp/prompt.txt <<PROMPT
-          Create a pull request description for merging develop into main.
+          Create a pull request title and description for merging develop into main.
 
           Project: OpenVox Operator - a Kubernetes Operator for deploying and managing OpenVox (Puppet) environments on Kubernetes/OpenShift using rootless containers.
+
+          Predicted release: ${CURRENT} -> ${NEXT} (${BUMP} bump)
 
           Commits:
           $COMMITS
@@ -74,19 +130,21 @@ jobs:
           $DIFF
           \`\`\`
 
-          Format the description as follows:
+          IMPORTANT: The FIRST line of your response must be a concise PR title (max 60 chars, no markdown, no prefix like "Title:"). It should summarize the most important changes. Examples: "Add Database CRD and update CI workflows", "Fix auth handling and bump dependencies".
+
+          Then leave one blank line and write the description:
           ## Summary
           - 3-5 bullet points explaining WHAT changed and WHY
 
           ## Changes
-          - Categorized list of changes (features, fixes, chore, docs, etc.)
+          - Categorized list (features, fixes, chore, docs, etc.)
 
           ## Testing
           - How to verify these changes
           PROMPT
 
           REQUEST_JSON=$(jq -n \
-            --arg system "You are a technical writer creating concise PR descriptions for a Kubernetes Operator project written in Go with Helm charts. Focus on WHY changes were made, not just WHAT changed. Be professional and concise." \
+            --arg system "You are a technical writer creating concise PR descriptions for a Kubernetes Operator project written in Go with Helm charts. Focus on WHY changes were made, not just WHAT changed. Be professional and concise. The very first line of your response MUST be a short PR title without any markdown formatting." \
             --arg user "$(cat /tmp/prompt.txt)" \
             '{
               "messages": [
@@ -108,7 +166,9 @@ jobs:
 
           if [ -z "$ANALYSIS" ]; then
             echo "::warning::AI analysis failed, using fallback description"
-            ANALYSIS="## Changes: develop -> main
+            ANALYSIS="Release ${NEXT:-develop -> main}
+
+          ## Changes
 
           $COMMITS
 
@@ -121,24 +181,47 @@ jobs:
           echo "$ANALYSIS" > /tmp/pr_description.txt
           echo "description_file=/tmp/pr_description.txt" >> $GITHUB_OUTPUT
 
-      - name: Extract PR title
+      - name: Build PR title and body
         if: steps.check-pr.outputs.count == '0' || steps.check-pr.outputs.is_auto == 'true'
-        id: title
+        id: pr-content
         run: |
-          TITLE=$(head -1 /tmp/pr_description.txt | sed 's/^#* //' | sed 's/^\*\*//' | sed 's/\*\*$//')
+          BUMP="${{ steps.version.outputs.bump }}"
+          CURRENT="${{ steps.version.outputs.current }}"
+          NEXT="${{ steps.version.outputs.next }}"
+          FEAT_COUNT="${{ steps.version.outputs.feat_count }}"
+          FIX_COUNT="${{ steps.version.outputs.fix_count }}"
+          BREAKING="${{ steps.version.outputs.breaking }}"
 
-          if [ -z "$TITLE" ]; then
-            TITLE="Release: develop -> main"
+          # Extract title from first non-empty line
+          TITLE=$(sed -n '/\S/{ s/^#* //; s/^\*\*//; s/\*\*$//; p; q; }' /tmp/pr_description.txt)
+          if [ -z "$TITLE" ] || echo "$TITLE" | grep -qiE '^(summary|changes|##)'; then
+            TITLE="Release develop -> main"
           fi
-
-          # Truncate to 70 chars
           TITLE=$(echo "$TITLE" | cut -c1-70)
           echo "title=$TITLE" >> $GITHUB_OUTPUT
 
-      - name: Build PR body
-        if: steps.check-pr.outputs.count == '0' || steps.check-pr.outputs.is_auto == 'true'
-        id: body
-        run: |
+          # Build version badge
+          if [ "$BUMP" = "none" ]; then
+            VERSION_INFO="No release-triggering commits detected (chore/ci/docs only)."
+          else
+            VERSION_INFO="**Predicted release:** \`${CURRENT}\` -> \`${NEXT}\` (**${BUMP}**)"
+            DETAILS=""
+            if [ "$BREAKING" = "true" ]; then
+              DETAILS="${DETAILS}  BREAKING CHANGE detected"
+            fi
+            if [ "$FEAT_COUNT" -gt 0 ]; then
+              DETAILS="${DETAILS}  ${FEAT_COUNT} feature(s)"
+            fi
+            if [ "$FIX_COUNT" -gt 0 ]; then
+              DETAILS="${DETAILS}  ${FIX_COUNT} fix(es)"
+            fi
+            if [ -n "$DETAILS" ]; then
+              VERSION_INFO="${VERSION_INFO}
+          ${DETAILS}"
+            fi
+          fi
+
+          # Build body: skip first line (title) from AI output
           AI_DESCRIPTION=$(tail -n +2 /tmp/pr_description.txt)
 
           cat > /tmp/pr_body.txt <<EOF
@@ -146,9 +229,13 @@ jobs:
 
           ---
 
-          **Source:** \`develop\`
-          **Target:** \`main\`
-          **Trigger:** Successful CI on develop
+          ### Release prediction
+
+          $VERSION_INFO
+
+          ---
+
+          **Source:** \`develop\` | **Target:** \`main\` | **Trigger:** Successful CI on develop
 
           > Auto-generated by GitHub Actions & AI - updated automatically on new commits.
           EOF
@@ -157,7 +244,7 @@ jobs:
         if: steps.check-pr.outputs.count != '0' && steps.check-pr.outputs.is_auto == 'true'
         run: |
           gh pr edit ${{ steps.check-pr.outputs.number }} \
-            --title "${{ steps.title.outputs.title }}" \
+            --title "${{ steps.pr-content.outputs.title }}" \
             --body-file /tmp/pr_body.txt
           echo "::notice::Updated PR #${{ steps.check-pr.outputs.number }}"
         env:
@@ -167,7 +254,7 @@ jobs:
         if: steps.check-pr.outputs.count == '0'
         run: |
           gh pr create \
-            --title "${{ steps.title.outputs.title }}" \
+            --title "${{ steps.pr-content.outputs.title }}" \
             --body-file /tmp/pr_body.txt \
             --base main \
             --head develop

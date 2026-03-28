@@ -20,7 +20,7 @@ ARG JVM_SSL_UTILS_VERSION=ad7d28f8c3413c199242a318fb85d10a1fea4b70
 ################################################################################
 # Stage: base — JRE + minimal runtime deps (no Ruby)
 ################################################################################
-FROM registry.access.redhat.com/ubi9/ubi:9.7-1774227732 AS base
+FROM registry.access.redhat.com/ubi9/ubi:9.7-1774415752 AS base
 
 ARG JDK_VERSION=17
 

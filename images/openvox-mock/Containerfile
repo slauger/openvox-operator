@@ -1,4 +1,4 @@
-# Mock ENC / report / PuppetDB receiver for E2E tests
+# Mock ENC / report / OpenVox DB receiver for E2E tests
 #
 # Build (from repo root):
 #   podman build -t openvox-mock:latest -f images/openvox-mock/Containerfile .
@@ -14,7 +14,7 @@ RUN CGO_ENABLED=0 go build -o /openvox-mock ./cmd/mock/
 FROM registry.access.redhat.com/ubi9/ubi-minimal:9.7-1773939694
 
 LABEL org.opencontainers.image.title="OpenVox Mock" \
-      org.opencontainers.image.description="Mock ENC/Report/PuppetDB receiver for E2E tests" \
+      org.opencontainers.image.description="Mock ENC/Report/OpenVox DB receiver for E2E tests" \
       org.opencontainers.image.vendor="slauger" \
       org.opencontainers.image.url="https://github.com/slauger/openvox-operator" \
       org.opencontainers.image.source="https://github.com/slauger/openvox-operator" \

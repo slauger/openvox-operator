@@ -34,7 +34,7 @@ spec:
       openAPIV3Schema:
         description: |-
           Config is the Schema for the configs API.
-          It manages shared configuration (puppet.conf, auth.conf) and PuppetDB connection.
+          It manages shared configuration (puppet.conf, auth.conf) and OpenVox DB connection.
         properties:
           apiVersion:
             description: |-
@@ -228,10 +228,10 @@ spec:
                     type: boolean
                 type: object
               puppetdb:
-                description: PuppetDB defines the PuppetDB connection settings.
+                description: PuppetDB defines the OpenVox DB connection settings.
                 properties:
                   serverUrls:
-                    description: ServerURLs is a list of PuppetDB server URLs.
+                    description: ServerURLs is a list of OpenVox DB server URLs.
                     items:
                       type: string
                     type: array

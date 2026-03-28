@@ -38,6 +38,7 @@ func setupTestClient(objs ...client.Object) client.Client {
 		WithStatusSubresource(
 			&openvoxv1alpha1.Config{},
 			&openvoxv1alpha1.Server{},
+			&openvoxv1alpha1.Database{},
 			&openvoxv1alpha1.Pool{},
 			&openvoxv1alpha1.Certificate{},
 			&openvoxv1alpha1.CertificateAuthority{},
@@ -455,6 +456,52 @@ func newCertificateAuthorityReconciler(c client.Client) *CertificateAuthorityRec
 
 func newReportProcessorReconciler(c client.Client) *ReportProcessorReconciler {
 	return &ReportProcessorReconciler{
+		Client:   c,
+		Scheme:   testScheme(),
+		Recorder: testRecorder(),
+	}
+}
+
+type databaseOption func(*openvoxv1alpha1.Database)
+
+func newDatabase(name string, opts ...databaseOption) *openvoxv1alpha1.Database {
+	replicas := int32(1)
+	db := &openvoxv1alpha1.Database{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: testNamespace,
+		},
+		Spec: openvoxv1alpha1.DatabaseSpec{
+			CertificateRef: "production-db-cert",
+			Image: openvoxv1alpha1.ImageSpec{
+				Repository: "ghcr.io/slauger/openvox-db",
+				Tag:        "latest",
+				PullPolicy: corev1.PullIfNotPresent,
+			},
+			Postgres: openvoxv1alpha1.PostgresSpec{
+				Host:                 "pg-rw.openvox.svc",
+				Port:                 5432,
+				Database:             "openvoxdb",
+				CredentialsSecretRef: "pg-credentials",
+				SSLMode:              "require",
+			},
+			Replicas: &replicas,
+		},
+	}
+	for _, o := range opts {
+		o(db)
+	}
+	return db
+}
+
+func withDatabaseReplicas(r int32) databaseOption {
+	return func(db *openvoxv1alpha1.Database) {
+		db.Spec.Replicas = &r
+	}
+}
+
+func newDatabaseReconciler(c client.Client) *DatabaseReconciler {
+	return &DatabaseReconciler{
 		Client:   c,
 		Scheme:   testScheme(),
 		Recorder: testRecorder(),

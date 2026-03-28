@@ -1,4 +1,4 @@
-# PuppetDB Report Processor (mTLS)
+# OpenVox DB Report Processor (mTLS)
 apiVersion: openvox.voxpupuli.org/v1alpha1
 kind: ReportProcessor
 metadata:

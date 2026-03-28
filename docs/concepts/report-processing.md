@@ -1,6 +1,6 @@
 # Report Processing
 
-The openvox-operator supports forwarding Puppet reports to external endpoints via the `ReportProcessor` CRD. Reports can be sent to PuppetDB, Splunk, Elasticsearch, or any generic HTTP webhook.
+The openvox-operator supports forwarding Puppet reports to external endpoints via the `ReportProcessor` CRD. Reports can be sent to OpenVox DB (PuppetDB), Splunk, Elasticsearch, or any generic HTTP webhook.
 
 ## How It Works
 
@@ -10,7 +10,7 @@ flowchart LR
     PS -->|"webhook.rb"| Shim["Ruby Shim"]
     Shim -->|"stdin (JSON)"| Binary["openvox-report binary"]
     Binary -->|"reads"| Secret["report-webhook.yaml<br/>(from Secret)"]
-    Binary -->|"HTTP POST"| EP1["PuppetDB"]
+    Binary -->|"HTTP POST"| EP1["OpenVox DB"]
     Binary -->|"HTTP POST"| EP2["Splunk / Elasticsearch / Webhook"]
 ```
 
@@ -53,7 +53,7 @@ The Go binary handles transformation, authentication, and HTTP delivery:
 
 When `processor` is empty (or omitted), the report JSON from `to_data_hash` is forwarded as-is. This works for any endpoint that accepts Puppet report JSON, such as Splunk HEC, Elasticsearch, or custom webhooks.
 
-### PuppetDB
+### OpenVox DB
 
 When `processor: puppetdb` is set, the binary transforms the report from Puppet's `to_data_hash` format to [PuppetDB Wire Format v8](https://www.puppet.com/docs/puppetdb/latest/api/wire_format/report_format_v8.html). Key transformations include:
 
@@ -83,7 +83,7 @@ The transformed report is wrapped in a command envelope and POSTed to `<url>/pdb
 
 | Method | Description | Use Case |
 |---|---|---|
-| `mtls` | Mutual TLS using Puppet SSL certificates | PuppetDB with Puppet CA trust |
+| `mtls` | Mutual TLS using Puppet SSL certificates | OpenVox DB with Puppet CA trust |
 | `token` | Custom HTTP header with token value | Services with custom auth headers |
 | `bearer` | Authorization: Bearer header | Generic API services |
 | `basic` | HTTP Basic Authentication | Elasticsearch, legacy services |

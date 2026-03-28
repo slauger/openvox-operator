@@ -1,6 +1,6 @@
 # openvox-mock
 
-`openvox-mock` is a lightweight mock server for E2E testing. It provides ENC, report, and PuppetDB endpoints in a single binary with no external dependencies.
+`openvox-mock` is a lightweight mock server for E2E testing. It provides ENC, report, and OpenVox DB endpoints in a single binary with no external dependencies.
 
 ## Endpoints
 

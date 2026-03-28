@@ -2,7 +2,7 @@ name: CI (Test Images)
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths:
       - 'images/openvox-agent/**'
       - 'images/openvox-code/**'

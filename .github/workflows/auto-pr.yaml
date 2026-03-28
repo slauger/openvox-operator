@@ -17,7 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     if: >
       github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'develop'
+      github.event.workflow_run.head_branch == 'develop' &&
+      github.event.workflow_run.event == 'push'
 
     steps:
       - name: Checkout repository
@@ -192,12 +193,12 @@ jobs:
           FIX_COUNT="${{ steps.version.outputs.fix_count }}"
           BREAKING="${{ steps.version.outputs.breaking }}"
 
-          # Extract title from first non-empty line
-          TITLE=$(sed -n '/\S/{ s/^#* //; s/^\*\*//; s/\*\*$//; p; q; }' /tmp/pr_description.txt)
-          if [ -z "$TITLE" ] || echo "$TITLE" | grep -qiE '^(summary|changes|##)'; then
-            TITLE="Release develop -> main"
+          # Build title from release prediction
+          if [ "$BUMP" = "none" ]; then
+            TITLE="Release develop -> main (no release)"
+          else
+            TITLE="Release ${NEXT} (${BUMP})"
           fi
-          TITLE=$(echo "$TITLE" | cut -c1-70)
           echo "title=$TITLE" >> $GITHUB_OUTPUT
 
           # Build version badge

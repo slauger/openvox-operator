@@ -31,6 +31,14 @@ resources:
     cpu: 10m
     memory: 64Mi
 
+# Admission webhook configuration (requires cert-manager)
+webhook:
+  enabled: false
+  port: 9443
+  certManager:
+    duration: 8760h    # 1 year
+    renewBefore: 720h  # 30 days
+
 nodeSelector: {}
 tolerations: []
 affinity: {}

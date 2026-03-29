@@ -1,0 +1,66 @@
+{{- if .Values.webhook.enabled }}
+---
+# Self-signed issuer for bootstrapping
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "openvox-operator.fullname" . }}-selfsigned
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openvox-operator.labels" . | nindent 4 }}
+spec:
+  selfSigned: {}
+---
+# CA certificate signed by the self-signed issuer
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "openvox-operator.fullname" . }}-ca
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openvox-operator.labels" . | nindent 4 }}
+spec:
+  isCA: true
+  commonName: {{ include "openvox-operator.fullname" . }}-ca
+  secretName: {{ include "openvox-operator.fullname" . }}-ca-cert
+  duration: 87600h # 10 years
+  renewBefore: 720h # 30 days
+  issuerRef:
+    name: {{ include "openvox-operator.fullname" . }}-selfsigned
+    kind: Issuer
+    group: cert-manager.io
+---
+# CA issuer using the CA certificate
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "openvox-operator.fullname" . }}-ca-issuer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openvox-operator.labels" . | nindent 4 }}
+spec:
+  ca:
+    secretName: {{ include "openvox-operator.fullname" . }}-ca-cert
+---
+# Webhook serving certificate signed by the CA issuer
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "openvox-operator.fullname" . }}-webhook
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openvox-operator.labels" . | nindent 4 }}
+spec:
+  secretName: {{ include "openvox-operator.fullname" . }}-webhook-cert
+  duration: {{ .Values.webhook.certManager.duration | default "8760h" }}
+  renewBefore: {{ .Values.webhook.certManager.renewBefore | default "720h" }}
+  dnsNames:
+    - {{ include "openvox-operator.fullname" . }}-webhook
+    - {{ include "openvox-operator.fullname" . }}-webhook.{{ .Release.Namespace }}
+    - {{ include "openvox-operator.fullname" . }}-webhook.{{ .Release.Namespace }}.svc
+    - {{ include "openvox-operator.fullname" . }}-webhook.{{ .Release.Namespace }}.svc.cluster.local
+  issuerRef:
+    name: {{ include "openvox-operator.fullname" . }}-ca-issuer
+    kind: Issuer
+    group: cert-manager.io
+{{- end }}

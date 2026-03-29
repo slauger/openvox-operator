@@ -17,7 +17,7 @@ all: build
 
 .PHONY: manifests
 manifests: ## Generate CRD manifests.
-	$(CONTROLLER_GEN) crd paths="./api/..." output:crd:dir=config/crd/bases
+	$(CONTROLLER_GEN) crd webhook paths="./..." output:crd:dir=config/crd/bases output:webhook:dir=config/webhook
 	cp config/crd/bases/*.yaml charts/openvox-operator/crds/
 
 .PHONY: generate

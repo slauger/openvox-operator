@@ -13,10 +13,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	ctrlwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 	"github.com/slauger/openvox-operator/internal/controller"
+	"github.com/slauger/openvox-operator/internal/webhook"
 )
 
 var (
@@ -34,6 +36,7 @@ func main() {
 	var metricsAddr string
 	var probeAddr string
 	var enableLeaderElection bool
+	var enableWebhooks bool
 	var watchNamespace string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -41,6 +44,7 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.BoolVar(&enableWebhooks, "enable-webhooks", false, "Enable admission webhooks.")
 	flag.StringVar(&watchNamespace, "watch-namespace", "",
 		"Namespace to restrict the operator to. If empty, the operator watches all namespaces (cluster-wide).")
 
@@ -56,6 +60,10 @@ func main() {
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "openvox-operator.voxpupuli.org",
+	}
+
+	if enableWebhooks {
+		mgrOptions.WebhookServer = ctrlwebhook.NewServer(ctrlwebhook.Options{Port: 9443})
 	}
 
 	if watchNamespace != "" {
@@ -147,6 +155,13 @@ func main() {
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ReportProcessor")
 		os.Exit(1)
+	}
+
+	if enableWebhooks {
+		if err := webhook.SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to set up webhooks")
+			os.Exit(1)
+		}
 	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

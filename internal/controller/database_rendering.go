@@ -64,3 +64,53 @@ vardir = /opt/puppetlabs/server/data/puppetdb
 logging-config = /etc/puppetlabs/puppetdb/logback.xml
 `
 }
+
+// renderAuthConf renders the auth.conf for the PuppetDB TK authorization service.
+// Based on the upstream OpenVoxDB default configuration.
+func renderAuthConf() string {
+	return `authorization: {
+    version: 1
+    rules: [
+        {
+            match-request: {
+                path: "/status/v1/services"
+                type: path
+                method: get
+            }
+            allow-unauthenticated: true
+            sort-order: 500
+            name: "puppetlabs status service - full"
+        },
+        {
+            match-request: {
+                path: "/status/v1/simple"
+                type: path
+                method: get
+            }
+            allow-unauthenticated: true
+            sort-order: 500
+            name: "puppetlabs status service - simple"
+        },
+        {
+            match-request: {
+                path: "/metrics"
+                type: path
+                method: [get, post]
+            }
+            allow: "*"
+            sort-order: 500
+            name: "puppetlabs puppetdb metrics"
+        },
+        {
+            match-request: {
+                path: "/"
+                type: path
+            }
+            deny: "*"
+            sort-order: 999
+            name: "puppetlabs deny all"
+        }
+    ]
+}
+`
+}

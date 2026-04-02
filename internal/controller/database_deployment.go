@@ -125,6 +125,7 @@ func (r *DatabaseReconciler) buildPodSpec(db *openvoxv1alpha1.Database, cert *op
 		{Name: "ssl", MountPath: "/etc/puppetlabs/puppetdb/ssl"},
 		{Name: "config", MountPath: "/etc/puppetlabs/puppetdb/conf.d/config.ini", SubPath: "config.ini", ReadOnly: true},
 		{Name: "config", MountPath: "/etc/puppetlabs/puppetdb/conf.d/jetty.ini", SubPath: "jetty.ini", ReadOnly: true},
+		{Name: "config", MountPath: "/etc/puppetlabs/puppetdb/conf.d/auth.conf", SubPath: "auth.conf", ReadOnly: true},
 		{Name: "db-config", MountPath: "/etc/puppetlabs/puppetdb/conf.d/database.ini", SubPath: "database.ini", ReadOnly: true},
 		{Name: "tmp", MountPath: "/tmp"},
 		{Name: "var-log", MountPath: "/var/log/puppetlabs"},

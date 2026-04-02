@@ -43,10 +43,18 @@ spec:
             {{- if eq .Values.scope.mode "namespace" }}
             - --watch-namespace={{ .Values.scope.watchNamespace | default .Release.Namespace }}
             {{- end }}
+            {{- if .Values.webhook.enabled }}
+            - --enable-webhooks
+            {{- end }}
           ports:
             - name: health
               containerPort: 8081
               protocol: TCP
+            {{- if .Values.webhook.enabled }}
+            - name: webhook
+              containerPort: {{ .Values.webhook.port | default 9443 }}
+              protocol: TCP
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /healthz
@@ -69,6 +77,18 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- if .Values.webhook.enabled }}
+          volumeMounts:
+            - name: webhook-certs
+              mountPath: /tmp/k8s-webhook-server/serving-certs
+              readOnly: true
+          {{- end }}
+      {{- if .Values.webhook.enabled }}
+      volumes:
+        - name: webhook-certs
+          secret:
+            secretName: {{ include "openvox-operator.fullname" . }}-webhook-cert
+      {{- end }}
       terminationGracePeriodSeconds: 10
       {{- with .Values.nodeSelector }}
       nodeSelector:

@@ -1,0 +1,6 @@
+webhook:
+  enabled: true
+  port: 9443
+  certManager:
+    duration: 8760h
+    renewBefore: 720h

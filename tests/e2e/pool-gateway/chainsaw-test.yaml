@@ -1,0 +1,127 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: pool-gateway
+spec:
+  namespace: e2e-pool-gateway
+  steps:
+    - name: Create Gateway resources
+      try:
+        - apply:
+            resource:
+              apiVersion: gateway.networking.k8s.io/v1
+              kind: GatewayClass
+              metadata:
+                name: eg
+              spec:
+                controllerName: gateway.envoyproxy.io/gatewayclass-controller
+        - apply:
+            resource:
+              apiVersion: gateway.networking.k8s.io/v1
+              kind: Gateway
+              metadata:
+                name: e2e-puppet-gateway
+              spec:
+                gatewayClassName: eg
+                listeners:
+                  - name: puppet-tls
+                    protocol: TLS
+                    port: 8140
+                    tls:
+                      mode: Passthrough
+      catch:
+        - events: {}
+
+    - name: Install openvox-stack (pool-gateway)
+      try:
+        - script:
+            timeout: 2m
+            content: |
+              REPO_ROOT=$(git rev-parse --show-toplevel)
+              IMAGE_TAG=${IMAGE_TAG:-$(git describe --always)}
+              IMAGE_REGISTRY=${IMAGE_REGISTRY:-ghcr.io/slauger}
+              helm upgrade --install openvox-stack-gw "${REPO_ROOT}/charts/openvox-stack" \
+                --namespace e2e-pool-gateway --create-namespace \
+                --values "${REPO_ROOT}/charts/openvox-stack/ci/pool-gateway-values.yaml" \
+                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server \
+                --set config.image.tag="${IMAGE_TAG}" \
+                --set config.image.pullPolicy=Always
+      catch:
+        - events: {}
+
+    - name: Assert Server is Running
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: openvox-stack-gw-ca
+              status:
+                phase: Running
+                ready: 1
+                desired: 1
+
+    - name: Assert TLSRoute created for server pool
+      try:
+        - assert:
+            resource:
+              apiVersion: gateway.networking.k8s.io/v1alpha2
+              kind: TLSRoute
+              metadata:
+                name: openvox-stack-gw-server
+              spec:
+                hostnames:
+                  - puppet.e2e.example.com
+                parentRefs:
+                  - name: e2e-puppet-gateway
+                rules:
+                  - backendRefs:
+                      - name: openvox-stack-gw-server
+
+    - name: Verify DNS alt name injected into Certificate
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Certificate
+              metadata:
+                name: openvox-stack-gw-ca
+              spec:
+                dnsAltNames:
+                  - puppet.e2e.example.com
+
+    - name: Verify no TLSRoute for CA pool
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              if kubectl get tlsroute openvox-stack-gw-ca -n e2e-pool-gateway 2>/dev/null; then
+                echo "ERROR: TLSRoute should not exist for the CA pool"
+                exit 1
+              fi
+              echo "Confirmed: no TLSRoute for CA pool."
+
+    - name: Check operator logs for errors
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              OPERATOR_POD=$(kubectl get pods -n openvox-system \
+                -l app.kubernetes.io/name=openvox-operator \
+                -o jsonpath='{.items[0].metadata.name}')
+              ERROR_LINES=$(kubectl logs -n openvox-system "${OPERATOR_POD}" \
+                | grep '"level":"error"' || true)
+              if [ -n "${ERROR_LINES}" ]; then
+                echo "Found error-level log entries in operator:"
+                echo "${ERROR_LINES}"
+                exit 1
+              fi
+              echo "No error-level log entries found."
+      finally:
+        - script:
+            timeout: 2m
+            content: |
+              helm uninstall openvox-stack-gw --namespace e2e-pool-gateway --wait 2>/dev/null || true
+              kubectl delete gateway e2e-puppet-gateway --namespace e2e-pool-gateway --ignore-not-found 2>/dev/null || true
+              kubectl delete namespace e2e-pool-gateway --ignore-not-found 2>/dev/null || true

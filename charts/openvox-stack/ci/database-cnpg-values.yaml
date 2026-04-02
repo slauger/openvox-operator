@@ -1,0 +1,46 @@
+signingPolicies:
+  - name: autosign-any
+    any: true
+
+database:
+  enabled: true
+  name: openvox-stack-db-puppetdb
+  certificate:
+    certname: puppetdb
+  postgres:
+    host: pg-cluster-rw
+    credentialsSecretRef: pg-cluster-app
+    sslMode: disable
+
+config:
+  puppetdb:
+    serverUrls:
+      - https://openvox-stack-db-puppetdb:8081
+  puppet:
+    storeconfigs: true
+    reports: store,puppetdb
+
+servers:
+  - name: ca
+    ca: true
+    server: true
+    poolRefs: [ca, server]
+    certificate:
+      certname: puppet
+    replicas: 1
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+
+pools:
+  - name: ca
+    service:
+      type: ClusterIP
+      port: 8140
+  - name: server
+    service:
+      type: ClusterIP
+      port: 8140

@@ -1,0 +1,8 @@
+# name: ""  # default: Release name
+instances: 1
+storage:
+  size: 1Gi
+  storageClass: ""
+database: openvoxdb
+# Extra SQL statements to run after database creation (pg_trgm is always included)
+postInitSQL: []

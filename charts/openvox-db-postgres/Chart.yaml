@@ -1,0 +1,13 @@
+apiVersion: v2
+name: openvox-db-postgres
+description: CloudNative PG cluster for OpenVox DB (PuppetDB)
+type: application
+version: 0.0.0
+appVersion: "0.0.0"
+home: https://github.com/slauger/openvox-operator
+sources:
+  - https://github.com/slauger/openvox-operator
+maintainers:
+  - name: Simon Lauger
+    email: simon@lauger.de
+    url: https://lauger.de

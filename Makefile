@@ -133,6 +133,8 @@ undeploy: ## Undeploy operator from the cluster.
 .PHONY: helm-lint
 helm-lint: ## Lint the Helm chart.
 	helm lint charts/openvox-operator
+	helm lint charts/openvox-stack
+	helm lint charts/openvox-db-postgres
 
 .PHONY: helm-template
 helm-template: ## Render Helm chart templates locally.

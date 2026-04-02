@@ -1,0 +1,20 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ include "openvox-db-postgres.name" . }}
+spec:
+  instances: {{ .Values.instances }}
+  storage:
+    size: {{ .Values.storage.size }}
+    {{- if .Values.storage.storageClass }}
+    storageClassName: {{ .Values.storage.storageClass }}
+    {{- end }}
+  bootstrap:
+    initdb:
+      database: {{ .Values.database }}
+      owner: app
+      postInitApplicationSQL:
+        - CREATE EXTENSION IF NOT EXISTS pg_trgm
+        {{- range .Values.postInitSQL }}
+        - {{ . }}
+        {{- end }}

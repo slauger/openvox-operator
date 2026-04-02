@@ -5,13 +5,13 @@ metadata:
 rules:
   # CRDs
   - apiGroups: ["openvox.voxpupuli.org"]
-    resources: ["configs", "pools", "servers", "certificateauthorities", "certificates", "signingpolicies", "nodeclassifiers", "reportprocessors"]
+    resources: ["configs", "pools", "servers", "certificateauthorities", "certificates", "signingpolicies", "nodeclassifiers", "reportprocessors", "databases"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["openvox.voxpupuli.org"]
-    resources: ["configs/status", "pools/status", "servers/status", "certificateauthorities/status", "certificates/status", "signingpolicies/status", "nodeclassifiers/status", "reportprocessors/status"]
+    resources: ["configs/status", "pools/status", "servers/status", "certificateauthorities/status", "certificates/status", "signingpolicies/status", "nodeclassifiers/status", "reportprocessors/status", "databases/status"]
     verbs: ["get", "update", "patch"]
   - apiGroups: ["openvox.voxpupuli.org"]
-    resources: ["configs/finalizers", "pools/finalizers", "servers/finalizers", "certificateauthorities/finalizers", "certificates/finalizers"]
+    resources: ["configs/finalizers", "pools/finalizers", "servers/finalizers", "certificateauthorities/finalizers", "certificates/finalizers", "databases/finalizers"]
     verbs: ["update"]
   # Core resources
   - apiGroups: [""]

@@ -129,12 +129,14 @@ func (r *DatabaseReconciler) buildPodSpec(db *openvoxv1alpha1.Database, cert *op
 		{Name: "db-config", MountPath: "/etc/puppetlabs/puppetdb/conf.d/database.ini", SubPath: "database.ini", ReadOnly: true},
 		{Name: "tmp", MountPath: "/tmp"},
 		{Name: "var-log", MountPath: "/var/log/puppetlabs"},
+		{Name: "var-data", MountPath: "/opt/puppetlabs/server/data/puppetdb"},
 	}
 
 	volumes := []corev1.Volume{
 		{Name: "ssl", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 		{Name: "tmp", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 		{Name: "var-log", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+		{Name: "var-data", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 		{
 			Name: "ssl-cert",
 			VolumeSource: corev1.VolumeSource{

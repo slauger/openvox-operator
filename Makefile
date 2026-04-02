@@ -165,9 +165,24 @@ ci: lint vet test check-manifests vulncheck helm-lint ## Run all CI checks local
 ##@ E2E
 
 IMAGE_TAG ?= $(LOCAL_TAG)
+CNPG_VERSION ?= 1.26.2
+ENVOY_GATEWAY_VERSION ?= v1.7.1
 
 E2E_CHAINSAW = IMAGE_TAG=$(IMAGE_TAG) IMAGE_REGISTRY=$(IMAGE_REGISTRY) $(CHAINSAW) test --config tests/e2e/chainsaw-config.yaml
 E2E_SKIP_CLEANUP ?= false
+
+.PHONY: e2e-cnpg
+e2e-cnpg: ## Install CNPG operator for E2E tests.
+	kubectl apply --server-side -f https://github.com/cloudnative-pg/cloudnative-pg/releases/download/v$(CNPG_VERSION)/cnpg-$(CNPG_VERSION).yaml
+	kubectl wait --for=condition=Available deployment/cnpg-controller-manager -n cnpg-system --timeout=3m
+
+.PHONY: e2e-envoy-gateway
+e2e-envoy-gateway: ## Install Envoy Gateway (incl. Gateway API CRDs) for E2E tests.
+	kubectl apply --server-side -f https://github.com/envoyproxy/gateway/releases/download/$(ENVOY_GATEWAY_VERSION)/install.yaml
+	kubectl wait --for=condition=Available deployment/envoy-gateway -n envoy-gateway-system --timeout=3m
+
+.PHONY: e2e-deps
+e2e-deps: e2e-cnpg e2e-envoy-gateway ## Install all E2E external dependencies.
 
 .PHONY: e2e-operator
 e2e-operator: ## Deploy operator for E2E tests.
@@ -189,7 +204,7 @@ e2e-cleanup: ## Remove operator after E2E tests.
 	fi
 
 .PHONY: e2e
-e2e: e2e-operator ## Run all E2E tests.
+e2e: e2e-deps e2e-operator ## Run all E2E tests (including CNPG and Gateway API).
 	$(E2E_CHAINSAW) tests/e2e/; EXIT=$$?; $(MAKE) e2e-cleanup; exit $$EXIT
 
 .PHONY: e2e-stack
@@ -203,6 +218,14 @@ e2e-agent: e2e-operator ## Run agent tests (basic, broken, idempotent, concurren
 .PHONY: e2e-integration
 e2e-integration: e2e-operator ## Run integration tests (enc, report, full).
 	$(E2E_CHAINSAW) tests/e2e/agent-enc tests/e2e/agent-report tests/e2e/agent-full; EXIT=$$?; $(MAKE) e2e-cleanup; exit $$EXIT
+
+.PHONY: e2e-database
+e2e-database: e2e-operator ## Run Database with CNPG tests.
+	$(E2E_CHAINSAW) tests/e2e/database-cnpg; EXIT=$$?; $(MAKE) e2e-cleanup; exit $$EXIT
+
+.PHONY: e2e-gateway
+e2e-gateway: e2e-operator ## Run Envoy Gateway TLSRoute tests.
+	$(E2E_CHAINSAW) tests/e2e/pool-gateway; EXIT=$$?; $(MAKE) e2e-cleanup; exit $$EXIT
 
 ##@ Help
 

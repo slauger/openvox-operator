@@ -1,6 +1,8 @@
 name: E2E
 
 on:
+  push:
+    branches: [develop]
   workflow_dispatch:
     inputs:
       image_tag:

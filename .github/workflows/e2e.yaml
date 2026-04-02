@@ -1,6 +1,8 @@
 name: E2E
 
 on:
+  push:
+    branches: [develop]
   workflow_dispatch:
     inputs:
       image_tag:
@@ -26,7 +28,7 @@ jobs:
       dockerfile: images/openvox-operator/Containerfile
       context: '.'
       push: true
-      image_tag: ${{ inputs.image_tag }}
+      image_tag: ${{ inputs.image_tag || github.ref_name }}
 
   openvox-server:
     uses: ./.github/workflows/_container-build.yaml
@@ -39,7 +41,7 @@ jobs:
       dockerfile: images/openvox-server/Containerfile
       context: '.'
       push: true
-      image_tag: ${{ inputs.image_tag }}
+      image_tag: ${{ inputs.image_tag || github.ref_name }}
 
   openvox-code:
     uses: ./.github/workflows/_container-build.yaml
@@ -52,7 +54,7 @@ jobs:
       dockerfile: images/openvox-code/Containerfile
       context: '.'
       push: true
-      image_tag: ${{ inputs.image_tag }}
+      image_tag: ${{ inputs.image_tag || github.ref_name }}
       sign: false
 
   openvox-agent:
@@ -66,7 +68,7 @@ jobs:
       dockerfile: images/openvox-agent/Containerfile
       context: 'images/openvox-agent'
       push: true
-      image_tag: ${{ inputs.image_tag }}
+      image_tag: ${{ inputs.image_tag || github.ref_name }}
       sign: false
 
   openvox-db:
@@ -80,7 +82,7 @@ jobs:
       dockerfile: images/openvox-db/Containerfile
       context: '.'
       push: true
-      image_tag: ${{ inputs.image_tag }}
+      image_tag: ${{ inputs.image_tag || github.ref_name }}
 
   openvox-mock:
     uses: ./.github/workflows/_container-build.yaml
@@ -93,5 +95,5 @@ jobs:
       dockerfile: images/openvox-mock/Containerfile
       context: '.'
       push: true
-      image_tag: ${{ inputs.image_tag }}
+      image_tag: ${{ inputs.image_tag || github.ref_name }}
       sign: false

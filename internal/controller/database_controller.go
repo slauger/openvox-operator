@@ -172,6 +172,7 @@ func (r *DatabaseReconciler) reconcileConfigMap(ctx context.Context, db *openvox
 	data := map[string]string{
 		"jetty.ini":  renderJettyIni(cert.Spec.Certname),
 		"config.ini": renderConfigIni(),
+		"auth.conf":  renderAuthConf(),
 	}
 
 	existing := &corev1.ConfigMap{}

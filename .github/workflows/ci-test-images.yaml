@@ -6,6 +6,7 @@ on:
     paths:
       - 'images/openvox-agent/**'
       - 'images/openvox-code/**'
+      - 'images/openvox-db/**'
       - 'images/openvox-mock/**'
       - 'cmd/mock/**'
   workflow_dispatch:
@@ -32,6 +33,18 @@ jobs:
     with:
       image_name: openvox-code
       dockerfile: images/openvox-code/Containerfile
+      context: '.'
+      sign: false
+
+  openvox-db:
+    uses: ./.github/workflows/_container-build.yaml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    with:
+      image_name: openvox-db
+      dockerfile: images/openvox-db/Containerfile
       context: '.'
       sign: false
 

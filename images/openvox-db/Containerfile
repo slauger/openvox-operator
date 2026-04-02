@@ -61,6 +61,8 @@ RUN tar -xzf /openvoxdb-${OPENVOXDB_VERSION}.tar.gz \
     && install -m 0644 ext/config/conf.d/database.ini  "${etc_dir}/puppetdb/conf.d/database.ini" \
     && install -m 0644 ext/config/conf.d/repl.ini      "${etc_dir}/puppetdb/conf.d/repl.ini" \
     && install -m 0644 ext/config/logback.xml           "${etc_dir}/puppetdb/logback.xml" \
+    && install -m 0644 ext/config/bootstrap.cfg        "${etc_dir}/puppetdb/bootstrap.cfg" \
+    && install -m 0644 ext/config/request-logging.xml  "${etc_dir}/puppetdb/request-logging.xml" \
     && install -m 0644 ext/config/conf.d/jetty.ini     "${etc_dir}/puppetdb/conf.d/jetty.ini" \
     && install -m 0644 ext/config/conf.d/auth.conf    "${etc_dir}/puppetdb/conf.d/auth.conf" \
     # --- jar + CLI tools ---

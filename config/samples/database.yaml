@@ -1,0 +1,28 @@
+# Example Database CR for OpenVox DB.
+# Requires:
+#   - A Certificate CR (referenced by certificateRef)
+#   - An external PostgreSQL instance (e.g. CloudNativePG)
+#   - A Secret with PostgreSQL credentials (username + password keys)
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: Database
+metadata:
+  name: production-db
+spec:
+  certificateRef: production-db-cert
+  image:
+    repository: ghcr.io/slauger/openvox-db
+    tag: latest
+    pullPolicy: IfNotPresent
+  postgres:
+    host: pg-rw.openvox.svc
+    port: 5432
+    database: openvoxdb
+    credentialsSecretRef: pg-credentials
+    sslMode: require
+  replicas: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 1Gi

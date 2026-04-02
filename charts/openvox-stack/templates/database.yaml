@@ -1,0 +1,51 @@
+{{- if .Values.database.enabled }}
+{{- if not .Values.database.name }}
+{{- fail "database.name is required when database.enabled is true" }}
+{{- end }}
+{{- if not .Values.database.certificate.certname }}
+{{- fail "database.certificate.certname is required when database.enabled is true" }}
+{{- end }}
+{{- if not .Values.database.postgres.host }}
+{{- fail "database.postgres.host is required when database.enabled is true" }}
+{{- end }}
+{{- if not .Values.database.postgres.credentialsSecretRef }}
+{{- fail "database.postgres.credentialsSecretRef is required when database.enabled is true" }}
+{{- end }}
+---
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: Certificate
+metadata:
+  name: {{ .Values.database.name }}
+spec:
+  authorityRef: {{ include "openvox-stack.caName" . }}
+  certname: {{ .Values.database.certificate.certname }}
+  {{- with .Values.database.certificate.dnsAltNames }}
+  dnsAltNames:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+---
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: Database
+metadata:
+  name: {{ .Values.database.name }}
+spec:
+  certificateRef: {{ .Values.database.name }}
+  image:
+    repository: {{ .Values.database.image.repository }}
+    tag: {{ .Values.database.image.tag | quote }}
+    pullPolicy: {{ .Values.database.image.pullPolicy }}
+  postgres:
+    host: {{ .Values.database.postgres.host }}
+    port: {{ .Values.database.postgres.port }}
+    database: {{ .Values.database.postgres.database }}
+    credentialsSecretRef: {{ .Values.database.postgres.credentialsSecretRef }}
+    sslMode: {{ .Values.database.postgres.sslMode }}
+  replicas: {{ .Values.database.replicas | default 1 }}
+  {{- with .Values.database.javaArgs }}
+  javaArgs: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.database.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

@@ -117,7 +117,7 @@ Server pods can optionally use `readOnlyRootFilesystem: true` for security harde
 | `ssl-ca` | Secret | `/ssl-ca` (init container only) | Yes | CA certificate from CertificateAuthority CRD |
 | `ssl-ca-crl` | Secret | `/etc/puppetlabs/puppet/crl` | Yes | CRL data (non-CA pods only, auto-synced by kubelet) |
 | `puppet-conf` | ConfigMap | `.../puppet/puppet.conf` | Yes | Puppet agent/server configuration |
-| `puppetdb-conf` | ConfigMap | `.../puppet/puppetdb.conf` | Yes | PuppetDB connection settings |
+| `puppetdb-conf` | ConfigMap | `.../puppet/puppetdb.conf` | Yes | OpenVox DB connection settings |
 | `puppetserver-conf` | ConfigMap | `.../conf.d/puppetserver.conf` | Yes | JRuby, HTTP client, and profiler settings |
 | `webserver-conf` | ConfigMap | `.../conf.d/webserver.conf` | Yes | Jetty webserver and TLS configuration |
 | `auth-conf` | ConfigMap | `.../conf.d/auth.conf` | Yes | Puppet Server authorization rules (HOCON) |
@@ -231,7 +231,7 @@ The operator uses a minimal container image:
 
 - UBI9 + JDK 17
 - Tarball installation (puppet-server-release.jar, CLI tools, vendored JRuby gems)
-- PuppetDB termini
+- OpenVox DB termini
 - OpenShift random-UID pattern (chgrp 0, chmod g=u)
 - Direct `java` entrypoint (no wrapper scripts)
 

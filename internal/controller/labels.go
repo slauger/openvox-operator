@@ -6,6 +6,7 @@ const (
 	LabelCertificateAuthority = "openvox.voxpupuli.org/certificateauthority"
 	LabelPoolPrefix           = "openvox.voxpupuli.org/pool-"
 	LabelServer               = "openvox.voxpupuli.org/server"
+	LabelDatabase             = "openvox.voxpupuli.org/database"
 	LabelRole                 = "openvox.voxpupuli.org/role"
 	LabelCA                   = "openvox.voxpupuli.org/ca"
 
@@ -47,6 +48,15 @@ func serverLabels(cfgName, serverName, role string) map[string]string {
 // poolLabel returns the label key for a specific Pool.
 func poolLabel(poolName string) string {
 	return LabelPoolPrefix + poolName
+}
+
+// databaseLabels returns labels for resources owned by a Database.
+func databaseLabels(dbName string) map[string]string {
+	return map[string]string{
+		"app.kubernetes.io/name":       "openvox",
+		"app.kubernetes.io/managed-by": "openvox-operator",
+		LabelDatabase:                  dbName,
+	}
 }
 
 func int64Ptr(i int64) *int64 { return &i }

@@ -145,7 +145,7 @@ They require additional test images:
 
 - **openvox-agent** -- Puppet agent based on UBI9
 - **openvox-code** -- OCI image with Puppet environments (production, staging, broken)
-- **openvox-mock** -- Mock server for ENC, report webhook, and PuppetDB endpoints
+- **openvox-mock** -- Mock server for ENC, report webhook, and OpenVox DB endpoints
 
 ##### Agent Basic (`tests/e2e/agent-basic/`)
 
@@ -190,18 +190,18 @@ Puppet agent with External Node Classification via mock server:
 
 Puppet agent with report forwarding to mock server:
 
-- ReportProcessors configured for generic webhook and PuppetDB
+- ReportProcessors configured for generic webhook and OpenVox DB
 - Agent completes successfully
 - Mock received report via webhook endpoint
-- Mock received PuppetDB command
+- Mock received OpenVox DB command
 
 ##### Agent Full (`tests/e2e/agent-full/`)
 
-Full integration test combining ENC, reports, and PuppetDB:
+Full integration test combining ENC, reports, and OpenVox DB:
 
 - NodeClassifier + ReportProcessors all pointing to mock server
 - Agent completes successfully
-- Mock received classification, report, and PuppetDB command
+- Mock received classification, report, and OpenVox DB command
 
 ### Cleanup
 

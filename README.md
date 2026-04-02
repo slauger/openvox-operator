@@ -19,6 +19,7 @@ A Kubernetes Operator that maps [OpenVox Server](https://github.com/OpenVoxProje
 - 🧠 **Auto-tuned JVM** - Heap size calculated from memory limits (90%) - no manual `-Xmx` tuning needed
 - 📦 **OCI Image Volumes** - Package Puppet code as OCI images, deploy immutably with automatic rollout (K8s 1.35+)
 - 🌐 **Gateway API** - SNI-based TLSRoute support - share a single LoadBalancer across environments via TLS passthrough
+- 🗄️ **Managed OpenVox DB** - Deploy OpenVox DB (PuppetDB) with external PostgreSQL - TLS, config, and credentials managed by the operator
 - 🔃 **Automatic Config Rollout** - Config and certificate changes trigger rolling restarts automatically
 - ☸️ **Kubernetes-Native** - All config via ConfigMaps/Secrets - no entrypoint scripts, no ENV translation
 
@@ -51,7 +52,7 @@ graph TD
     CN_D -->|mounts| Code
 ```
 
-A **Config** is the root resource - it holds shared configuration (puppet.conf, PuppetDB connection), manages code deployment, and references a **CertificateAuthority** via `authorityRef`. A **CertificateAuthority** initializes the CA infrastructure and periodically refreshes the CRL. Each **Certificate** is signed by the CA and stored as a Kubernetes Secret. A **Server** references a Certificate and creates a Deployment - it can run as CA, catalog server, or both. Servers declare pool membership via `poolRefs`. **Pools** are pure networking resources that create Services selecting Server pods by pool label, with optional Gateway API TLSRoute for SNI-based routing.
+A **Config** is the root resource - it holds shared configuration (puppet.conf, PuppetDB connection), manages code deployment, and references a **CertificateAuthority** via `authorityRef`. A **CertificateAuthority** initializes the CA infrastructure and periodically refreshes the CRL. Each **Certificate** is signed by the CA and stored as a Kubernetes Secret. A **Server** references a Certificate and creates a Deployment - it can run as CA, catalog server, or both. Servers declare pool membership via `poolRefs`. **Pools** are pure networking resources that create Services selecting Server pods by pool label, with optional Gateway API TLSRoute for SNI-based routing. A **Database** deploys OpenVox DB (PuppetDB) as a Deployment with a Service, connecting to an external PostgreSQL instance.
 
 Puppet code is mounted into Server pods via **OCI image volumes** (immutable, automatic rollout on image change, K8s 1.35+) or a **PVC** (mutable, externally managed). See [Code Deployment](docs/concepts/code-deployment.md) for details.
 
@@ -106,20 +107,15 @@ All resources use the API group `openvox.voxpupuli.org/v1alpha1`.
 
 | Kind | Purpose | Creates |
 |---|---|---|
-| **`Config`** | Shared config (puppet.conf, auth.conf, etc.), PuppetDB connection | ConfigMaps, Secrets, ServiceAccount |
+| **`Config`** | Shared config (puppet.conf, auth.conf, etc.), OpenVox DB connection | ConfigMaps, Secrets, ServiceAccount |
 | **`CertificateAuthority`** | CA infrastructure: keys, signing, split Secrets (cert, key, CRL) | PVC, Job, ServiceAccount, Role, RoleBinding, 3 Secrets |
 | **`SigningPolicy`** | Declarative CSR signing policy (any, pattern, DNS SANs, CSR attributes) | *(rendered into Config's autosign Secret)* |
 | **`NodeClassifier`** | External Node Classifier (ENC) endpoint (Foreman, PE, custom HTTP) | *(rendered into Config's ENC Secret)* |
 | **`ReportProcessor`** | Report forwarding endpoint (generic webhook or PuppetDB Wire Format v8) | *(rendered into Config's report-webhook Secret)* |
 | **`Certificate`** | Lifecycle of a single certificate (request, sign) | TLS Secret |
 | **`Server`** | OpenVox Server instance pool (CA and/or server role), declares pool membership via `poolRefs` | Deployment |
+| **`Database`** | OpenVox DB with external PostgreSQL | Deployment, Service, ConfigMap, Secret |
 | **`Pool`** | Networking resource: Service + optional Gateway API TLSRoute for Servers that reference this Pool | Service, TLSRoute (optional) |
-
-### Planned (not yet implemented)
-
-| Kind | Purpose |
-|---|---|
-| *`Database`* | *OpenVox DB (StatefulSet, Service)* |
 
 ## Differences to VM-based Installations
 

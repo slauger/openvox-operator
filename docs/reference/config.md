@@ -1,6 +1,6 @@
 # Config
 
-A Config holds shared configuration for all Servers: the default container image, puppet.conf settings, and PuppetDB connection. It is the root resource in the CRD hierarchy. The `authorityRef` field references a CertificateAuthority; CA settings (`ca_ttl`, `autosign`) are automatically pulled from it.
+A Config holds shared configuration for all Servers: the default container image, puppet.conf settings, and OpenVox DB (PuppetDB) connection. It is the root resource in the CRD hierarchy. The `authorityRef` field references a CertificateAuthority; CA settings (`ca_ttl`, `autosign`) are automatically pulled from it.
 
 ## Example
 
@@ -20,7 +20,7 @@ spec:
     reports: puppetdb
   puppetdb:
     serverUrls:
-      - "https://puppetdb.example.com:8081"
+      - "https://openvoxdb.example.com:8081"
 ```
 
 ## Spec
@@ -31,7 +31,7 @@ spec:
 | `authorityRef` | string | - | Reference to the CertificateAuthority used by this Config |
 | `nodeClassifierRef` | string | - | Reference to a [NodeClassifier](nodeclassifier.md) for ENC support |
 | `puppet` | [PuppetSpec](#puppetspec) | - | Shared puppet.conf settings |
-| `puppetdb` | [PuppetDBSpec](#puppetdbspec) | - | PuppetDB connection settings |
+| `puppetdb` | [PuppetDBSpec](#puppetdbspec) | - | OpenVox DB (PuppetDB) connection settings |
 | `puppetserver` | [PuppetServerSpec](#puppetserverspec) | - | puppetserver.conf, webserver.conf, and auth.conf settings |
 | `logging` | [LoggingSpec](#loggingspec) | - | Logback.xml log level configuration |
 | `metrics` | [MetricsSpec](#metricsspec) | - | Puppet Server metrics (JMX, Graphite) |
@@ -54,7 +54,7 @@ spec:
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `serverUrls` | []string | - | PuppetDB server URLs |
+| `serverUrls` | []string | - | OpenVox DB server URLs |
 
 ### PuppetServerSpec
 

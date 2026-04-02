@@ -1,0 +1,13 @@
+CloudNative PG cluster "{{ include "openvox-db-postgres.name" . }}" has been created.
+
+Connection details:
+  RW Service:        {{ include "openvox-db-postgres.name" . }}-rw:5432
+  Credentials Secret: {{ include "openvox-db-postgres.name" . }}-app
+  Database:          {{ .Values.database }}
+
+Example openvox-stack values:
+
+  database:
+    backend: cnpg
+    cnpg:
+      clusterName: {{ include "openvox-db-postgres.name" . }}

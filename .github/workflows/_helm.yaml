@@ -11,6 +11,7 @@ jobs:
         chart:
           - openvox-operator
           - openvox-stack
+          - openvox-db-postgres
     steps:
       - name: Checkout
         uses: actions/checkout@v6

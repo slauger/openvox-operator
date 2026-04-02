@@ -5,37 +5,21 @@ metadata:
 spec:
   namespace: e2e-database-cnpg
   steps:
-    - name: Create CNPG PostgreSQL cluster
+    - name: Install CNPG PostgreSQL cluster
       try:
-        - apply:
-            resource:
-              apiVersion: postgresql.cnpg.io/v1
-              kind: Cluster
-              metadata:
-                name: pg-cluster
-              spec:
-                instances: 1
-                storage:
-                  size: 1Gi
-                bootstrap:
-                  initdb:
-                    database: openvoxdb
-                    owner: app
-                    postInitSQL:
-                      - CREATE EXTENSION IF NOT EXISTS pg_trgm
+        - script:
+            timeout: 5m
+            content: |
+              REPO_ROOT=$(git rev-parse --show-toplevel)
+              helm upgrade --install pg-cluster "${REPO_ROOT}/charts/openvox-db-postgres" \
+                --namespace e2e-database-cnpg --create-namespace
+              kubectl wait --for=jsonpath='{.status.phase}'='Cluster in healthy state' \
+                cluster/pg-cluster -n e2e-database-cnpg --timeout=5m
       catch:
         - events: {}
 
-    - name: Wait for CNPG cluster ready
+    - name: Assert CNPG credentials secret exists
       try:
-        - assert:
-            resource:
-              apiVersion: postgresql.cnpg.io/v1
-              kind: Cluster
-              metadata:
-                name: pg-cluster
-              status:
-                phase: Cluster in healthy state
         - assert:
             resource:
               apiVersion: v1
@@ -128,5 +112,5 @@ spec:
             timeout: 2m
             content: |
               helm uninstall openvox-stack-db --namespace e2e-database-cnpg --wait 2>/dev/null || true
-              kubectl delete cluster pg-cluster --namespace e2e-database-cnpg --ignore-not-found 2>/dev/null || true
+              helm uninstall pg-cluster --namespace e2e-database-cnpg --wait 2>/dev/null || true
               kubectl delete namespace e2e-database-cnpg --ignore-not-found 2>/dev/null || true

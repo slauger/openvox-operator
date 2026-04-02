@@ -42,3 +42,15 @@ jobs:
       image_name: openvox-server
       dockerfile: images/openvox-server/Containerfile
       context: '.'
+
+  openvox-db:
+    needs: shellcheck
+    uses: ./.github/workflows/_container-build.yaml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    with:
+      image_name: openvox-db
+      dockerfile: images/openvox-db/Containerfile
+      context: '.'

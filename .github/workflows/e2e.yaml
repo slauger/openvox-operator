@@ -69,6 +69,19 @@ jobs:
       image_tag: ${{ inputs.image_tag }}
       sign: false
 
+  openvox-db:
+    uses: ./.github/workflows/_container-build.yaml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    with:
+      image_name: openvox-db
+      dockerfile: images/openvox-db/Containerfile
+      context: '.'
+      push: true
+      image_tag: ${{ inputs.image_tag }}
+
   openvox-mock:
     uses: ./.github/workflows/_container-build.yaml
     permissions:

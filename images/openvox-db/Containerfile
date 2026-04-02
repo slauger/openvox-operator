@@ -63,7 +63,7 @@ RUN tar -xzf /openvoxdb-${OPENVOXDB_VERSION}.tar.gz \
     && install -m 0644 ext/config/logback.xml           "${etc_dir}/puppetdb/logback.xml" \
     && install -m 0644 ext/config/conf.d/jetty.ini     "${etc_dir}/puppetdb/conf.d/jetty.ini" \
     # --- jar + CLI tools ---
-    && install -m 0644 puppet-db.jar                    "${apps_dir}/puppetdb/" \
+    && install -m 0644 puppetdb.jar                      "${apps_dir}/puppetdb/" \
     && install -m 0755 ext/bin/puppetdb                 "${bindir}/puppetdb" \
     && install -m 0755 ext/cli_defaults/cli-defaults.sh "${apps_dir}/puppetdb/cli/" \
     && install -m 0755 ext/cli/foreground               "${apps_dir}/puppetdb/cli/apps/foreground" \

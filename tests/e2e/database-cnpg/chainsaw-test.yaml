@@ -21,6 +21,8 @@ spec:
                   initdb:
                     database: openvoxdb
                     owner: app
+                    postInitSQL:
+                      - CREATE EXTENSION IF NOT EXISTS pg_trgm
       catch:
         - events: {}
 

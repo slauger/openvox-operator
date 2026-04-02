@@ -7,7 +7,7 @@ set -o pipefail
 set -o nounset
 
 JAVA_BIN="/usr/bin/java"
-JAVA_ARGS="${JAVA_ARGS:--Xms256m -Xmx256m}"
+JAVA_ARGS="${JAVA_ARGS:--Xms256m -Xmx256m} -Dlogappender=STDOUT"
 INSTALL_DIR="/opt/puppetlabs/server/apps/puppetdb"
 CONFIG="/etc/puppetlabs/puppetdb/conf.d"
 BOOTSTRAP_CONFIG="/etc/puppetlabs/puppetdb/bootstrap.cfg"

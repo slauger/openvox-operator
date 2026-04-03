@@ -158,6 +158,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
       - name: Install cosign
         if: inputs.sign
         uses: sigstore/cosign-installer@v3
@@ -168,19 +171,16 @@ jobs:
           VERSION="${{ needs.prepare.outputs.version }}"
           PLATFORMS="${{ inputs.platforms }}"
 
-          IMAGES=""
+          SOURCES=""
           for PLATFORM in ${PLATFORMS//,/ }; do
             SUFFIX="${PLATFORM//\//-}"
-            IMAGES="${IMAGES} ${IMAGE}:${VERSION}-${SUFFIX}"
+            SOURCES="${SOURCES} ${IMAGE}:${VERSION}-${SUFFIX}"
           done
-          IMAGES=$(echo ${IMAGES} | xargs)
 
-          docker manifest create ${IMAGE}:${VERSION} ${IMAGES}
-          docker manifest push ${IMAGE}:${VERSION}
+          docker buildx imagetools create -t "${IMAGE}:${VERSION}" ${SOURCES}
 
           if [[ "${{ inputs.push }}" == "true" ]] || [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            docker manifest create ${IMAGE}:latest ${IMAGES}
-            docker manifest push ${IMAGE}:latest
+            docker buildx imagetools create -t "${IMAGE}:latest" ${SOURCES}
           fi
 
       - name: Sign image with cosign (keyless)
@@ -188,7 +188,7 @@ jobs:
         run: |
           IMAGE="ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}"
           VERSION="${{ needs.prepare.outputs.version }}"
-          DIGEST=$(docker manifest inspect "${IMAGE}:${VERSION}" -v | jq -r 'if type == "array" then .[0].Descriptor.digest else .Descriptor.digest end')
+          DIGEST=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{json .Manifest}}' | jq -r '.digest')
           cosign sign --yes "${IMAGE}@${DIGEST}"
 
       - name: Set output

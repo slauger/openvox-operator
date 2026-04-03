@@ -45,6 +45,7 @@ const (
 	DatabaseRunAsUser  = int64(1001)
 	DatabaseRunAsGroup = int64(0)
 	DatabaseHTTPSPort  = int32(8081)
+	DatabaseHTTPPort   = int32(8080)
 )
 
 // HPA and PDB defaults for Server resources.

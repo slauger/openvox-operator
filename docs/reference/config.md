@@ -1,6 +1,6 @@
 # Config
 
-A Config holds shared configuration for all Servers: the default container image, puppet.conf settings, and OpenVox DB (PuppetDB) connection. It is the root resource in the CRD hierarchy. The `authorityRef` field references a CertificateAuthority; CA settings (`ca_ttl`, `autosign`) are automatically pulled from it.
+A Config holds shared configuration for all Servers: the default container image, puppet.conf settings, and OpenVox DB (PuppetDB) connection. It is the root resource in the CRD hierarchy. The `authorityRef` field references a CertificateAuthority; CA settings (`ca_ttl`, `autosign`) are automatically pulled from it. The `databaseRef` field can reference a [Database](database.md) resource to automatically wire the PuppetDB connection URL from its status.
 
 ## Example
 
@@ -29,9 +29,10 @@ spec:
 |---|---|---|---|
 | `image` | [ImageSpec](index.md#imagespec) | **required** | Default container image for all Servers |
 | `authorityRef` | string | - | Reference to the CertificateAuthority used by this Config |
+| `databaseRef` | string | - | Reference to a [Database](database.md) whose `status.url` is used for `puppetdb.conf` (mutually exclusive with `puppetdb`) |
 | `nodeClassifierRef` | string | - | Reference to a [NodeClassifier](nodeclassifier.md) for ENC support |
 | `puppet` | [PuppetSpec](#puppetspec) | - | Shared puppet.conf settings |
-| `puppetdb` | [PuppetDBSpec](#puppetdbspec) | - | OpenVox DB (PuppetDB) connection settings |
+| `puppetdb` | [PuppetDBSpec](#puppetdbspec) | - | OpenVox DB (PuppetDB) connection settings (mutually exclusive with `databaseRef`) |
 | `puppetserver` | [PuppetServerSpec](#puppetserverspec) | - | puppetserver.conf, webserver.conf, and auth.conf settings |
 | `logging` | [LoggingSpec](#loggingspec) | - | Logback.xml log level configuration |
 | `metrics` | [MetricsSpec](#metricsspec) | - | Puppet Server metrics (JMX, Graphite) |

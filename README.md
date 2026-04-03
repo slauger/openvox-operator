@@ -126,8 +126,8 @@ All resources use the API group `openvox.voxpupuli.org/v1alpha1`.
 | **`NodeClassifier`** | External Node Classifier (ENC) endpoint (custom HTTP) | *(rendered into Config's ENC Secret)* |
 | **`ReportProcessor`** | Report forwarding endpoint (generic webhook or PuppetDB Wire Format v8) | *(rendered into Config's report-webhook Secret)* |
 | **`Certificate`** | Lifecycle of a single certificate (request, sign) | TLS Secret |
-| **`Server`** | OpenVox Server instance pool (CA and/or server role), declares pool membership via `poolRefs` | Deployment |
-| **`Database`** | OpenVox DB with external PostgreSQL | Deployment, Service, ConfigMap, Secret |
+| **`Server`** | OpenVox Server instance pool (CA and/or server role), declares pool membership via `poolRefs` | Deployment, HPA, PDB, NetworkPolicy |
+| **`Database`** | OpenVox DB with external PostgreSQL | Deployment, Service, ConfigMap, Secret, PDB, NetworkPolicy |
 | **`Pool`** | Networking resource: Service + optional Gateway API TLSRoute for Servers that reference this Pool | Service, TLSRoute (optional) |
 
 ## Differences to VM-based Installations
@@ -166,7 +166,7 @@ helm install openvox-operator \
 
 ### 2. Deploy a Stack
 
-The `openvox-stack` chart deploys a complete OpenVox stack (Config, CertificateAuthority, SigningPolicy, Certificate, Server, Pool) with a single Helm release:
+The `openvox-stack` chart deploys a complete OpenVox stack (Config, CertificateAuthority, SigningPolicy, Certificate, Server, Pool, and optionally Database) with a single Helm release:
 
 ```bash
 helm install production \
@@ -279,6 +279,22 @@ See [Testing](docs/development/testing.md) for details.
 | `e2e-gateway` | Run Envoy Gateway TLSRoute tests |
 | `e2e-deps` | Install CNPG + Envoy Gateway for E2E tests |
 | `ci` | Run all CI checks locally (lint, vet, test, manifests, vulncheck, helm-lint) |
+
+## Supply Chain Security
+
+All container images are:
+
+- **Signed** with [cosign](https://docs.sigstore.dev/cosign/) keyless signing (Sigstore OIDC)
+- **Attested** with [SLSA provenance](https://slsa.dev/) via `docker/build-push-action`
+- **SBOM** generated and attached to each image
+
+Verify image signatures:
+
+```bash
+cosign verify ghcr.io/slauger/openvox-operator:latest \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp 'github\.com/slauger/openvox-operator'
+```
 
 ## Documentation
 

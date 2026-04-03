@@ -447,6 +447,7 @@ func newPoolReconciler(c client.Client, gatewayAPI bool) *PoolReconciler {
 	return &PoolReconciler{
 		Client:              c,
 		Scheme:              testScheme(),
+		Recorder:            testRecorder(),
 		GatewayAPIAvailable: gatewayAPI,
 	}
 }

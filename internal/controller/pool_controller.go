@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -26,8 +27,20 @@ import (
 type PoolReconciler struct {
 	client.Client
 	Scheme              *runtime.Scheme
+	Recorder            events.EventRecorder
 	GatewayAPIAvailable bool
 }
+
+// Event reasons for Pool.
+const (
+	EventReasonPoolError          = "PoolError"
+	EventReasonServiceSynced      = "ServiceSynced"
+	EventReasonTLSRouteCreated    = "TLSRouteCreated"
+	EventReasonTLSRouteUpdated    = "TLSRouteUpdated"
+	EventReasonTLSRouteDeleted    = "TLSRouteDeleted"
+	EventReasonHostnameConflict   = "HostnameConflict"
+	EventReasonDNSAltNameInjected = "DNSAltNameInjected"
+)
 
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=pools,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=pools/status,verbs=get;update;patch
@@ -37,6 +50,7 @@ type PoolReconciler struct {
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=tlsroutes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificates,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=servers,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -51,6 +65,7 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	// Reconcile Service
 	if err := r.reconcileService(ctx, pool); err != nil {
+		r.Recorder.Eventf(pool, nil, corev1.EventTypeWarning, EventReasonPoolError, "Reconcile", "Failed to reconcile Service: %v", err)
 		return ctrl.Result{}, fmt.Errorf("reconciling Service: %w", err)
 	}
 
@@ -79,6 +94,7 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			}
 
 			if hasConflict {
+				r.Recorder.Eventf(pool, nil, corev1.EventTypeWarning, EventReasonHostnameConflict, "Reconcile", "Hostname %q is already used by another Pool", pool.Spec.Route.Hostname)
 				return ctrl.Result{}, fmt.Errorf("hostname conflict: %q is already used by another Pool", pool.Spec.Route.Hostname)
 			}
 
@@ -101,6 +117,7 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 				if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
 					return ctrl.Result{}, fmt.Errorf("deleting orphaned TLSRoute: %w", err)
 				}
+				r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonTLSRouteDeleted, "Reconcile", "TLSRoute %s deleted", pool.Name)
 			}
 		}
 	}
@@ -217,7 +234,11 @@ func (r *PoolReconciler) reconcileService(ctx context.Context, pool *openvoxv1al
 		if err := controllerutil.SetControllerReference(pool, svc, r.Scheme); err != nil {
 			return err
 		}
-		return r.Create(ctx, svc)
+		if err := r.Create(ctx, svc); err != nil {
+			return err
+		}
+		r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonServiceSynced, "Reconcile", "Service %s created", svcName)
+		return nil
 	} else if err != nil {
 		return err
 	}
@@ -257,7 +278,11 @@ func (r *PoolReconciler) reconcileService(ctx context.Context, pool *openvoxv1al
 		svc.Spec.Ports[0].NodePort = pool.Spec.Service.NodePort
 	}
 	svc.Spec.ExternalIPs = pool.Spec.Service.ExternalIPs
-	return r.Update(ctx, svc)
+	if err := r.Update(ctx, svc); err != nil {
+		return err
+	}
+	r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonServiceSynced, "Reconcile", "Service %s updated", svcName)
+	return nil
 }
 
 func (r *PoolReconciler) countEndpoints(ctx context.Context, pool *openvoxv1alpha1.Pool) int32 {
@@ -327,14 +352,22 @@ func (r *PoolReconciler) reconcileTLSRoute(ctx context.Context, pool *openvoxv1a
 		if err := controllerutil.SetControllerReference(pool, desired, r.Scheme); err != nil {
 			return err
 		}
-		return r.Create(ctx, desired)
+		if err := r.Create(ctx, desired); err != nil {
+			return err
+		}
+		r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonTLSRouteCreated, "Reconcile", "TLSRoute %s created for hostname %s", pool.Name, pool.Spec.Route.Hostname)
+		return nil
 	} else if err != nil {
 		return err
 	}
 
 	// Update existing TLSRoute
 	existing.Spec = desired.Spec
-	return r.Update(ctx, existing)
+	if err := r.Update(ctx, existing); err != nil {
+		return err
+	}
+	r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonTLSRouteUpdated, "Reconcile", "TLSRoute %s updated", pool.Name)
+	return nil
 }
 
 func (r *PoolReconciler) injectDNSAltNames(ctx context.Context, pool *openvoxv1alpha1.Pool) error {
@@ -375,6 +408,7 @@ func (r *PoolReconciler) injectDNSAltNames(ctx context.Context, pool *openvoxv1a
 
 		logger.Info("injecting DNS alt name into Certificate",
 			"certificate", cert.Name, "hostname", hostname)
+		r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonDNSAltNameInjected, "Reconcile", "Injected DNS alt name %s into Certificate %s (triggers re-signing)", hostname, cert.Name)
 		cert.Spec.DNSAltNames = append(cert.Spec.DNSAltNames, hostname)
 		if err := r.Update(ctx, cert); err != nil {
 			return fmt.Errorf("updating Certificate %s: %w", cert.Name, err)

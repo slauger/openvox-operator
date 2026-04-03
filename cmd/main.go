@@ -124,6 +124,7 @@ func main() {
 	if err = (&controller.PoolReconciler{
 		Client:              mgr.GetClient(),
 		Scheme:              mgr.GetScheme(),
+		Recorder:            mgr.GetEventRecorder("pool-controller"),
 		GatewayAPIAvailable: gatewayAPIAvailable,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Pool")

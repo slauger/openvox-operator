@@ -10,7 +10,7 @@ metadata:
 webhooks:
   {{- $fullname := include "openvox-operator.fullname" . }}
   {{- $ns := .Release.Namespace }}
-  {{- range $kind := list "server" "certificate" "config" "signingpolicy" "reportprocessor" "nodeclassifier" "certificateauthority" "pool" "database" }}
+  {{- range $kind := list "server" "certificate" "config" "signingpolicy" "reportprocessor" "nodeclassifier" "certificateauthority" "pool" }}
   - name: v{{ $kind }}.kb.io
     admissionReviewVersions:
       - v1
@@ -46,8 +46,6 @@ webhooks:
           - certificateauthorities
           {{- else if eq $kind "pool" }}
           - pools
-          {{- else if eq $kind "database" }}
-          - databases
           {{- end }}
   {{- end }}
 {{- end }}

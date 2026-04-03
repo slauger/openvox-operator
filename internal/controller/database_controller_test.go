@@ -210,7 +210,7 @@ func TestDatabaseReconcile_StatusURL(t *testing.T) {
 		t.Fatalf("failed to get Database: %v", err)
 	}
 
-	expected := "https://test-db:8081"
+	expected := fmt.Sprintf("https://test-db.%s.svc.cluster.local:8081", testNamespace)
 	if updated.Status.URL != expected {
 		t.Errorf("expected URL %q, got %q", expected, updated.Status.URL)
 	}

@@ -163,24 +163,39 @@ helm install production \
 
 This creates a single CA+Server with autosign enabled.
 
+### 3. Deploy OpenVox DB with CNPG (Optional)
+
+If you want to run OpenVox DB (PuppetDB) backed by CloudNative PG, first install the [CNPG operator](https://cloudnative-pg.io/), then deploy a PostgreSQL cluster using the `openvox-db-postgres` chart:
+
+```bash
+helm install pg-cluster \
+  oci://ghcr.io/slauger/charts/openvox-db-postgres \
+  --namespace openvox \
+  --set database=openvoxdb
+```
+
+Then deploy the stack with database enabled, referencing the CNPG-generated service and credentials secret:
+
+```bash
+helm install production \
+  oci://ghcr.io/slauger/charts/openvox-stack \
+  --namespace openvox \
+  --set database.enabled=true \
+  --set database.postgres.host=pg-cluster-rw \
+  --set database.postgres.credentialsSecretRef=pg-cluster-app
+```
+
 ## Local Development
 
-Build all container images locally and deploy the operator to Docker Desktop Kubernetes:
+The `local-build` and `local-deploy` targets build all container images locally and deploy the operator via Helm with `pullPolicy: Never`. This works with clusters that have direct access to the local image store (e.g. Docker Desktop Kubernetes via kubeadm).
+
+> **Note:** OCI image volumes require Kubernetes 1.35+ (`ImageVolume` feature gate). Docker Desktop's built-in kubeadm currently ships Kubernetes 1.34, so agent tests that use OCI code mounts won't work with local images. Use [kind](https://kind.sigs.k8s.io/) with the `ImageVolume` feature gate enabled (see `tests/e2e/kind-config.yaml`) and CI-built images from ghcr.io instead.
 
 ```bash
-make local-deploy
-```
-
-Deploy the openvox-stack (single-node by default):
-
-```bash
-make local-stack
-```
-
-Remove everything:
-
-```bash
-make uninstall
+make local-build                  # Build all images
+make local-deploy                 # Build + install operator via Helm
+make local-stack                  # Deploy openvox-stack with local images
+make uninstall                    # Remove everything
 ```
 
 Override the image tag or use a different scenario:
@@ -198,22 +213,17 @@ Run unit tests:
 make test
 ```
 
-Run E2E tests against the current cluster. E2E tests require container images in ghcr.io because they run on a kind cluster with the `ImageVolume` feature gate. Build and push images for the current branch via the E2E workflow, then run the tests locally:
+E2E tests require container images in ghcr.io because they run on a kind cluster with the `ImageVolume` feature gate. Images are automatically built and pushed on every push to `develop`. For feature branches, trigger the E2E workflow manually:
 
 ```bash
-# Build and push images for the current branch (tagged with short git SHA)
+# Images are auto-built on push to develop (tagged as "develop")
+export IMAGE_TAG=develop
+make e2e
+
+# For feature branches: build and push images manually
 gh workflow run e2e.yaml --ref $(git branch --show-current)
-
-# Or use a custom image tag
-gh workflow run e2e.yaml --ref $(git branch --show-current) -f image_tag=my-feature
-
-# Wait for the workflow to finish
 gh run watch $(gh run list --workflow=e2e.yaml --limit=1 --json databaseId -q '.[0].databaseId')
-
-# Set the image tag to match what CI built
-export IMAGE_TAG=$(git describe --always)  # or: export IMAGE_TAG=my-feature
-
-# Run E2E tests (uses IMAGE_TAG automatically)
+export IMAGE_TAG=$(git branch --show-current)  # branch name is used as tag
 make e2e
 ```
 
@@ -223,6 +233,14 @@ Subsets of E2E tests can be run separately:
 make e2e-stack        # stack deployment tests (single-node, multi-server)
 make e2e-agent        # agent tests (basic, broken, idempotent, concurrent)
 make e2e-integration  # integration tests (enc, report, full)
+make e2e-database     # Database with CNPG PostgreSQL tests
+make e2e-gateway      # Envoy Gateway TLSRoute tests
+```
+
+Some tests require external dependencies (CNPG operator, Envoy Gateway). Install them all at once:
+
+```bash
+make e2e-deps         # Install CNPG + Envoy Gateway
 ```
 
 See [Testing](docs/development/testing.md) for details.
@@ -231,15 +249,21 @@ See [Testing](docs/development/testing.md) for details.
 
 | Target | Description |
 |---|---|
-| `install` | Install operator via Helm with default images |
-| `stack` | Deploy openvox-stack via Helm with default images |
+| `install` | Install operator via Helm (supports `IMAGE_TAG=<tag>`) |
+| `stack` | Deploy openvox-stack via Helm (supports `IMAGE_TAG=<tag>`) |
 | `uninstall` | Remove stack, operator, and CRDs from the cluster |
 | `unstack` | Remove only the openvox-stack |
 | `local-build` | Build all container images with the current git commit as tag |
-| `local-deploy` | Build images and deploy the operator via Helm |
+| `local-deploy` | Build images and deploy the operator via Helm (`pullPolicy: Never`) |
 | `local-install` | Deploy operator via Helm with local images (no build) |
 | `local-stack` | Deploy openvox-stack via Helm with local images |
-| `e2e` | Run E2E tests with Chainsaw against the current cluster |
+| `e2e` | Run all E2E tests (installs CNPG + Envoy Gateway dependencies) |
+| `e2e-stack` | Run stack deployment tests (single-node, multi-server) |
+| `e2e-agent` | Run agent tests (basic, broken, idempotent, concurrent) |
+| `e2e-integration` | Run integration tests (enc, report, full) |
+| `e2e-database` | Run Database with CNPG PostgreSQL tests |
+| `e2e-gateway` | Run Envoy Gateway TLSRoute tests |
+| `e2e-deps` | Install CNPG + Envoy Gateway for E2E tests |
 | `ci` | Run all CI checks locally (lint, vet, test, manifests, vulncheck, helm-lint) |
 
 ## Documentation

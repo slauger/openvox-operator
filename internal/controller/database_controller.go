@@ -157,7 +157,7 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if port == 0 {
 		port = DatabaseHTTPSPort
 	}
-	db.Status.URL = fmt.Sprintf("https://%s:%d", db.Name, port)
+	db.Status.URL = fmt.Sprintf("https://%s.%s.svc.cluster.local:%d", db.Name, db.Namespace, port)
 
 	if ready > 0 {
 		db.Status.Phase = openvoxv1alpha1.DatabasePhaseRunning

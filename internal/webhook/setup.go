@@ -58,5 +58,11 @@ func SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
+	if err := ctrl.NewWebhookManagedBy(mgr, &openvoxv1alpha1.Database{}).
+		WithValidator(&DatabaseValidator{Client: c}).
+		Complete(); err != nil {
+		return err
+	}
+
 	return nil
 }

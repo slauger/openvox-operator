@@ -76,6 +76,60 @@ func TestConfigValidator(t *testing.T) {
 		}
 	})
 
+	t.Run("valid databaseRef", func(t *testing.T) {
+		db := &openvoxv1alpha1.Database{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-db", Namespace: "default"},
+		}
+		c := setupTestClient(db)
+		v := &ConfigValidator{Client: c}
+		cfg := &openvoxv1alpha1.Config{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			Spec: openvoxv1alpha1.ConfigSpec{
+				DatabaseRef: "my-db",
+			},
+		}
+		_, err := v.ValidateCreate(context.Background(), cfg)
+		if err != nil {
+			t.Errorf("expected no error, got %v", err)
+		}
+	})
+
+	t.Run("missing databaseRef", func(t *testing.T) {
+		c := setupTestClient()
+		v := &ConfigValidator{Client: c}
+		cfg := &openvoxv1alpha1.Config{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			Spec: openvoxv1alpha1.ConfigSpec{
+				DatabaseRef: "missing-db",
+			},
+		}
+		_, err := v.ValidateCreate(context.Background(), cfg)
+		if err == nil {
+			t.Error("expected error for missing databaseRef")
+		}
+	})
+
+	t.Run("databaseRef and serverUrls mutually exclusive", func(t *testing.T) {
+		db := &openvoxv1alpha1.Database{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-db", Namespace: "default"},
+		}
+		c := setupTestClient(db)
+		v := &ConfigValidator{Client: c}
+		cfg := &openvoxv1alpha1.Config{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			Spec: openvoxv1alpha1.ConfigSpec{
+				DatabaseRef: "my-db",
+				PuppetDB: openvoxv1alpha1.PuppetDBSpec{
+					ServerURLs: []string{"https://external:8081"},
+				},
+			},
+		}
+		_, err := v.ValidateCreate(context.Background(), cfg)
+		if err == nil {
+			t.Error("expected error for databaseRef + serverUrls")
+		}
+	})
+
 	t.Run("delete always succeeds", func(t *testing.T) {
 		v := &ConfigValidator{Client: setupTestClient()}
 		_, err := v.ValidateDelete(context.Background(), &openvoxv1alpha1.Config{})

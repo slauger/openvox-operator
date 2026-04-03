@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
@@ -34,6 +35,7 @@ type ConfigReconciler struct {
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=signingpolicies/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=nodeclassifiers,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=nodeclassifiers/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=databases,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=reportprocessors,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=reportprocessors/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=configmaps;serviceaccounts;secrets,verbs=get;list;watch;create;update;patch;delete
@@ -115,6 +117,9 @@ func (r *ConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&openvoxv1alpha1.ReportProcessor{}, handler.EnqueueRequestsFromMapFunc(
 			r.enqueueConfigsForReportProcessor(mgr.GetClient()),
 		)).
+		Watches(&openvoxv1alpha1.Database{}, handler.EnqueueRequestsFromMapFunc(
+			r.enqueueConfigsForDatabase(mgr.GetClient()),
+		)).
 		Complete(r)
 }
 
@@ -129,11 +134,16 @@ func (r *ConfigReconciler) reconcileConfigMap(ctx context.Context, cfg *openvoxv
 		return fmt.Errorf("rendering puppet.conf: %w", err)
 	}
 
+	puppetDBConf, err := r.renderPuppetDBConf(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("rendering puppetdb.conf: %w", err)
+	}
+
 	ca := r.findCertificateAuthority(ctx, cfg)
 
 	data := map[string]string{
 		"puppet.conf":       puppetConf,
-		"puppetdb.conf":     r.renderPuppetDBConf(cfg),
+		"puppetdb.conf":     puppetDBConf,
 		"webserver.conf":    r.renderWebserverConf(cfg),
 		"webserver-ca.conf": r.renderWebserverConfCA(cfg),
 		"puppetserver.conf": r.renderPuppetserverConf(cfg),
@@ -206,4 +216,29 @@ func (r *ConfigReconciler) findCertificateAuthority(ctx context.Context, cfg *op
 		return nil
 	}
 	return ca
+}
+
+func (r *ConfigReconciler) enqueueConfigsForDatabase(c client.Reader) handler.MapFunc {
+	return func(ctx context.Context, obj client.Object) []reconcile.Request {
+		db, ok := obj.(*openvoxv1alpha1.Database)
+		if !ok {
+			return nil
+		}
+
+		cfgList := &openvoxv1alpha1.ConfigList{}
+		if err := c.List(ctx, cfgList, client.InNamespace(db.Namespace)); err != nil {
+			log.FromContext(ctx).Error(err, "failed to list Configs in watcher")
+			return nil
+		}
+
+		var requests []reconcile.Request
+		for _, cfg := range cfgList.Items {
+			if cfg.Spec.DatabaseRef == db.Name {
+				requests = append(requests, reconcile.Request{
+					NamespacedName: types.NamespacedName{Name: cfg.Name, Namespace: cfg.Namespace},
+				})
+			}
+		}
+		return requests
+	}
 }

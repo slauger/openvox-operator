@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/types"
+
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
 
@@ -94,12 +96,23 @@ func (r *ConfigReconciler) renderPuppetConf(ctx context.Context, cfg *openvoxv1a
 	return sb.String(), nil
 }
 
-func (r *ConfigReconciler) renderPuppetDBConf(cfg *openvoxv1alpha1.Config) string {
+func (r *ConfigReconciler) renderPuppetDBConf(ctx context.Context, cfg *openvoxv1alpha1.Config) (string, error) {
+	if cfg.Spec.DatabaseRef != "" {
+		db := &openvoxv1alpha1.Database{}
+		key := types.NamespacedName{Name: cfg.Spec.DatabaseRef, Namespace: cfg.Namespace}
+		if err := r.Get(ctx, key, db); err != nil {
+			return "", fmt.Errorf("looking up Database %q: %w", cfg.Spec.DatabaseRef, err)
+		}
+		if db.Status.URL == "" {
+			return "", fmt.Errorf("Database %q has no status.URL yet", cfg.Spec.DatabaseRef)
+		}
+		return fmt.Sprintf("[main]\nserver_urls = %s\nsoft_write_failure = true\n", db.Status.URL), nil
+	}
 	if len(cfg.Spec.PuppetDB.ServerURLs) == 0 {
-		return "[main]\nserver_urls = https://openvoxdb:8081\nsoft_write_failure = true\n"
+		return "[main]\nserver_urls = https://openvoxdb:8081\nsoft_write_failure = true\n", nil
 	}
 	return fmt.Sprintf("[main]\nserver_urls = %s\nsoft_write_failure = true\n",
-		strings.Join(cfg.Spec.PuppetDB.ServerURLs, ","))
+		strings.Join(cfg.Spec.PuppetDB.ServerURLs, ",")), nil
 }
 
 // renderWebserverConf returns the webserver.conf for non-CA servers.

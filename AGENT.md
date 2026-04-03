@@ -15,6 +15,11 @@ git checkout -b feat/my-feature origin/develop
 gh pr create --base develop
 ```
 
+## Merge Strategy
+
+- **Feature/fix PRs into `develop`:** Use standard merge by default. Use squash only when the branch has many noisy commits that logically belong together (e.g. lots of trial-and-error or CI fix-ups).
+- **`develop` into `main`:** Always rebase, so that `develop` and `main` stay identical after merge.
+
 ## Commit Messages
 
 Follow [Conventional Commits](https://www.conventionalcommits.org/). Semantic-release on `main` uses these to determine version bumps.
@@ -36,7 +41,7 @@ test: add unit tests for helpers
 
 ## Pull Requests
 
-- Title follows the same conventional commit format as the squash-merge commit
+- Title follows conventional commit format
 - Keep the title short (under 72 chars)
 - Body should include a `## Summary` with bullet points and a `## Test plan`
 - Reference related issues with `Closes #<number>`

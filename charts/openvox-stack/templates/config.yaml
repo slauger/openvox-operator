@@ -20,6 +20,9 @@ spec:
       - https://{{ .Values.database.name }}:8081
       {{- end }}
   {{- end }}
+  {{- if .Values.config.readOnlyRootFilesystem }}
+  readOnlyRootFilesystem: true
+  {{- end }}
   puppet:
     environmentTimeout: {{ .Values.config.puppet.environmentTimeout }}
     storeconfigs: {{ ternary true .Values.config.puppet.storeconfigs .Values.database.enabled }}

@@ -3,6 +3,7 @@
 
 config:
   name: ""             # default: Release name
+  readOnlyRootFilesystem: false
   image:
     repository: ghcr.io/slauger/openvox-server
     tag: latest

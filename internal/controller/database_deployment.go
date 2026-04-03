@@ -9,7 +9,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -191,10 +190,8 @@ func (r *DatabaseReconciler) buildPodSpec(db *openvoxv1alpha1.Database, cert *op
 		VolumeMounts: volumeMounts,
 		StartupProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Path:   "/status/v1/simple",
-					Port:   intstr.FromInt32(DatabaseHTTPSPort),
-					Scheme: corev1.URISchemeHTTPS,
+				Exec: &corev1.ExecAction{
+					Command: []string{"curl", "-sf", fmt.Sprintf("http://127.0.0.1:%d/status/v1/simple", DatabaseHTTPPort)},
 				},
 			},
 			PeriodSeconds:    5,
@@ -202,20 +199,16 @@ func (r *DatabaseReconciler) buildPodSpec(db *openvoxv1alpha1.Database, cert *op
 		},
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Path:   "/status/v1/simple",
-					Port:   intstr.FromInt32(DatabaseHTTPSPort),
-					Scheme: corev1.URISchemeHTTPS,
+				Exec: &corev1.ExecAction{
+					Command: []string{"curl", "-sf", fmt.Sprintf("http://127.0.0.1:%d/status/v1/simple", DatabaseHTTPPort)},
 				},
 			},
 			PeriodSeconds: 10,
 		},
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Path:   "/status/v1/simple",
-					Port:   intstr.FromInt32(DatabaseHTTPSPort),
-					Scheme: corev1.URISchemeHTTPS,
+				Exec: &corev1.ExecAction{
+					Command: []string{"curl", "-sf", fmt.Sprintf("http://127.0.0.1:%d/status/v1/simple", DatabaseHTTPPort)},
 				},
 			},
 			PeriodSeconds: 30,

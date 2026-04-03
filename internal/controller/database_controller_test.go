@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -239,6 +240,49 @@ func TestDatabaseReconcile_AnnotationHashes(t *testing.T) {
 	} {
 		if v, ok := annotations[key]; !ok || v == "" {
 			t.Errorf("annotation %q missing or empty", key)
+		}
+	}
+}
+
+func TestDatabaseReconcile_ExecProbes(t *testing.T) {
+	objs := append(databasePrereqs(), newDatabase("test-db"))
+	c := setupTestClient(objs...)
+	r := newDatabaseReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-db")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	deploy := &appsv1.Deployment{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-db", Namespace: testNamespace}, deploy); err != nil {
+		t.Fatalf("Deployment not created: %v", err)
+	}
+
+	container := deploy.Spec.Template.Spec.Containers[0]
+	expectedCmd := []string{"curl", "-sf", fmt.Sprintf("http://127.0.0.1:%d/status/v1/simple", DatabaseHTTPPort)}
+
+	probes := map[string]*corev1.Probe{
+		"startup":   container.StartupProbe,
+		"readiness": container.ReadinessProbe,
+		"liveness":  container.LivenessProbe,
+	}
+	for name, probe := range probes {
+		if probe == nil {
+			t.Errorf("%s probe is nil", name)
+			continue
+		}
+		if probe.Exec == nil {
+			t.Errorf("%s probe: expected Exec handler, got nil", name)
+			continue
+		}
+		if len(probe.Exec.Command) != len(expectedCmd) {
+			t.Errorf("%s probe: expected command %v, got %v", name, expectedCmd, probe.Exec.Command)
+			continue
+		}
+		for i, arg := range expectedCmd {
+			if probe.Exec.Command[i] != arg {
+				t.Errorf("%s probe: command[%d] expected %q, got %q", name, i, arg, probe.Exec.Command[i])
+			}
 		}
 	}
 }

@@ -26,7 +26,7 @@ make build
 make test          # Unit tests
 make lint          # Linting
 make helm-lint     # Helm chart linting
-make ci            # All CI checks
+make ci            # All CI checks (lint, test, vet, helm-lint, check-manifests)
 ```
 
 ### Local Development
@@ -54,21 +54,32 @@ make e2e
 ## Development Workflow
 
 1. Fork the repository
-2. Create a feature branch (`feature/my-feature` or `fix/my-fix`)
+2. Create a feature branch from `develop` (`feat/my-feature` or `fix/my-fix`)
 3. Make your changes
 4. Run `make ci` to verify everything passes
-5. Run `make check-manifests` to ensure generated files are up to date
-6. Commit with a descriptive message following [Conventional Commits](https://www.conventionalcommits.org/)
-7. Open a pull request against `main`
+5. Commit with a descriptive message following [Conventional Commits](https://www.conventionalcommits.org/)
+6. Open a pull request against `develop`
+
+### Branching
+
+- `develop` is the main development branch — all PRs target `develop`
+- `main` is the release branch — only receives merges from `develop`
+- Branch naming: `feat/<topic>`, `fix/<topic>`, `ci/<topic>`, `docs/<topic>`
+
+```bash
+git fetch origin develop
+git checkout -b feat/my-feature origin/develop
+```
 
 ### Commit Messages
 
-We follow Conventional Commits:
+We follow [Conventional Commits](https://www.conventionalcommits.org/). Semantic-release uses these to determine version bumps automatically.
 
 ```
-feat: add new feature
-fix: resolve bug in controller
+feat: add new feature           # minor version bump
+fix: resolve bug in controller  # patch version bump
 docs: update README
+ci: add workflow for E2E tests
 chore: update dependencies
 refactor: simplify reconcile loop
 test: add unit tests for helpers
@@ -79,22 +90,22 @@ test: add unit tests for helpers
 After modifying CRD types in `api/v1alpha1/`:
 
 ```bash
-make manifests generate
+make generate manifests
 ```
 
-This regenerates CRD manifests and deepcopy methods. Always commit the generated files.
+This regenerates CRD manifests, deepcopy methods, and copies CRDs into the Helm chart. Always commit the generated files. Run `make check-manifests` before opening a PR to verify nothing is out of date.
 
 ## Project Structure
 
 ```
-api/v1alpha1/          # CRD type definitions
-cmd/                   # Entrypoints (operator, ENC, autosign, report, mock)
-internal/controller/   # Reconcilers
-charts/                # Helm charts (openvox-operator, openvox-stack)
-config/crd/bases/      # Generated CRD manifests
-tests/e2e/             # Chainsaw E2E tests
-images/                # Containerfiles
-docs/                  # Documentation
+api/v1alpha1/              CRD type definitions
+cmd/                       Entrypoints (operator, ENC, autosign, report, mock)
+internal/controller/       Reconcilers
+charts/                    Helm charts (openvox-operator, openvox-stack)
+config/crd/bases/          Generated CRD manifests
+tests/e2e/                 Chainsaw E2E tests
+images/                    Containerfiles
+docs/                      Documentation
 ```
 
 ## Reporting Issues

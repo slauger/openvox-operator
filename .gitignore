@@ -2,7 +2,6 @@
 *.jar
 *.swp
 .env
-AGENT.md
 bin/
 cover.out
 node_modules/

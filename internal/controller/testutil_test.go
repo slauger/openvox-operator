@@ -149,6 +149,12 @@ func withPuppetServerSpec(ps openvoxv1alpha1.PuppetServerSpec) configOption {
 	}
 }
 
+func withDatabaseRef(ref string) configOption {
+	return func(c *openvoxv1alpha1.Config) {
+		c.Spec.DatabaseRef = ref
+	}
+}
+
 func withPuppetSpec(p openvoxv1alpha1.PuppetSpec) configOption {
 	return func(c *openvoxv1alpha1.Config) {
 		c.Spec.Puppet = p
@@ -497,6 +503,12 @@ func newDatabase(name string, opts ...databaseOption) *openvoxv1alpha1.Database 
 func withDatabaseReplicas(r int32) databaseOption {
 	return func(db *openvoxv1alpha1.Database) {
 		db.Spec.Replicas = &r
+	}
+}
+
+func withDatabaseStatusURL(url string) databaseOption {
+	return func(db *openvoxv1alpha1.Database) {
+		db.Status.URL = url
 	}
 }
 

@@ -41,7 +41,13 @@ type ConfigSpec struct {
 	// +optional
 	AuthorityRef string `json:"authorityRef,omitempty"`
 
+	// DatabaseRef references a Database whose status.URL is used for puppetdb.conf.
+	// Mutually exclusive with PuppetDB.ServerURLs.
+	// +optional
+	DatabaseRef string `json:"databaseRef,omitempty"`
+
 	// PuppetDB defines the OpenVox DB connection settings.
+	// Mutually exclusive with DatabaseRef.
 	// +optional
 	PuppetDB PuppetDBSpec `json:"puppetdb,omitempty"`
 

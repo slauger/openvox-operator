@@ -43,6 +43,16 @@ func (v *ConfigValidator) validate(ctx context.Context, c *openvoxv1alpha1.Confi
 		}
 	}
 
+	if c.Spec.DatabaseRef != "" && len(c.Spec.PuppetDB.ServerURLs) > 0 {
+		errs = append(errs, field.Invalid(specPath.Child("databaseRef"), c.Spec.DatabaseRef, "databaseRef and puppetdb.serverUrls are mutually exclusive"))
+	}
+
+	if c.Spec.DatabaseRef != "" {
+		if err := refExists(ctx, v.Client, c.Namespace, c.Spec.DatabaseRef, &openvoxv1alpha1.Database{}); err != nil {
+			errs = append(errs, field.Invalid(specPath.Child("databaseRef"), c.Spec.DatabaseRef, err.Error()))
+		}
+	}
+
 	if len(errs) > 0 {
 		return nil, errs.ToAggregate()
 	}

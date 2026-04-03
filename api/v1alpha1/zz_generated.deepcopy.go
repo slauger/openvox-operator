@@ -568,6 +568,11 @@ func (in *DatabaseSpec) DeepCopyInto(out *DatabaseSpec) {
 		*out = new(int32)
 		**out = **in
 	}
+	if in.PDB != nil {
+		in, out := &in.PDB, &out.PDB
+		*out = new(PDBSpec)
+		(*in).DeepCopyInto(*out)
+	}
 	in.Service.DeepCopyInto(&out.Service)
 }
 

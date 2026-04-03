@@ -47,14 +47,16 @@ password = %s
 // renderJettyIni renders the jetty.ini configuration file for OpenVox DB.
 // It configures the HTTPS listener with TLS certificate paths.
 func renderJettyIni(certname string) string {
-	port := DatabaseHTTPSPort
 	return fmt.Sprintf(`[jetty]
+host = 127.0.0.1
+port = %d
 ssl-host = 0.0.0.0
 ssl-port = %d
 ssl-key = /etc/puppetlabs/puppetdb/ssl/private_keys/%s.pem
 ssl-cert = /etc/puppetlabs/puppetdb/ssl/certs/%s.pem
 ssl-ca-cert = /etc/puppetlabs/puppetdb/ssl/certs/ca.pem
-`, port, certname, certname)
+client-auth = need
+`, DatabaseHTTPPort, DatabaseHTTPSPort, certname, certname)
 }
 
 // renderConfigIni renders the config.ini configuration file for OpenVox DB.

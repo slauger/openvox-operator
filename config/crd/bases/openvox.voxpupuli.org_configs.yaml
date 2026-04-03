@@ -92,6 +92,11 @@ spec:
                 - message: either image or claimName must be set
                   rule: (has(self.image) && size(self.image) > 0) || (has(self.claimName)
                     && size(self.claimName) > 0)
+              databaseRef:
+                description: |-
+                  DatabaseRef references a Database whose status.URL is used for puppetdb.conf.
+                  Mutually exclusive with PuppetDB.ServerURLs.
+                type: string
               image:
                 description: Image defines the default container image for all Servers
                   in this Config.
@@ -228,7 +233,9 @@ spec:
                     type: boolean
                 type: object
               puppetdb:
-                description: PuppetDB defines the OpenVox DB connection settings.
+                description: |-
+                  PuppetDB defines the OpenVox DB connection settings.
+                  Mutually exclusive with DatabaseRef.
                 properties:
                   serverUrls:
                     description: ServerURLs is a list of OpenVox DB server URLs.

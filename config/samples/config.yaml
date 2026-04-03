@@ -9,6 +9,9 @@ spec:
   image:
     repository: ghcr.io/slauger/openvox-server
     tag: "8.12.1"
+  # Use databaseRef to auto-resolve the PuppetDB URL from a Database CR.
+  # Mutually exclusive with puppetdb.serverUrls.
+  # databaseRef: production-db
   puppetdb:
     serverUrls:
       - https://openvoxdb:8081

@@ -7,6 +7,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,7 +40,10 @@ const (
 	EventReasonHPACreated       = "HPACreated"
 	EventReasonHPAUpdated       = "HPAUpdated"
 	EventReasonHPADeleted       = "HPADeleted"
-	EventReasonDeploymentSynced = "DeploymentSynced"
+	EventReasonDeploymentSynced        = "DeploymentSynced"
+	EventReasonNetworkPolicyCreated    = "NetworkPolicyCreated"
+	EventReasonNetworkPolicyUpdated    = "NetworkPolicyUpdated"
+	EventReasonNetworkPolicyDeleted    = "NetworkPolicyDeleted"
 )
 
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=servers,verbs=get;list;watch;create;update;patch;delete
@@ -51,6 +55,7 @@ const (
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
@@ -126,6 +131,11 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	// Reconcile HorizontalPodAutoscaler
 	if err := r.reconcileHPA(ctx, server); err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconciling HPA: %w", err)
+	}
+
+	// Reconcile NetworkPolicy
+	if err := r.reconcileNetworkPolicy(ctx, server); err != nil {
+		return ctrl.Result{}, fmt.Errorf("reconciling NetworkPolicy: %w", err)
 	}
 
 	// Re-fetch server to avoid conflict errors from concurrent reconciliations
@@ -326,12 +336,100 @@ func (r *ServerReconciler) buildHPA(server *openvoxv1alpha1.Server) (*autoscalin
 	return hpa, nil
 }
 
+func (r *ServerReconciler) reconcileNetworkPolicy(ctx context.Context, server *openvoxv1alpha1.Server) error {
+	logger := log.FromContext(ctx)
+	npName := server.Name + "-netpol"
+	existing := &networkingv1.NetworkPolicy{}
+	err := r.Get(ctx, types.NamespacedName{Name: npName, Namespace: server.Namespace}, existing)
+
+	// If NetworkPolicy is disabled or not configured, delete if exists
+	if server.Spec.NetworkPolicy == nil || !server.Spec.NetworkPolicy.Enabled {
+		if err == nil {
+			logger.Info("deleting NetworkPolicy (disabled)", "name", npName)
+			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
+				return err
+			}
+			r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonNetworkPolicyDeleted, "Reconcile", "NetworkPolicy %s deleted", npName)
+		}
+		return nil
+	}
+
+	desired, buildErr := r.buildNetworkPolicy(server)
+	if buildErr != nil {
+		return buildErr
+	}
+	if errors.IsNotFound(err) {
+		logger.Info("creating NetworkPolicy", "name", npName)
+		if err := r.Create(ctx, desired); err != nil {
+			return err
+		}
+		r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonNetworkPolicyCreated, "Reconcile", "NetworkPolicy %s created", npName)
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	// Update existing
+	existing.Spec = desired.Spec
+	if err := r.Update(ctx, existing); err != nil {
+		return err
+	}
+	r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonNetworkPolicyUpdated, "Reconcile", "NetworkPolicy %s updated", npName)
+	return nil
+}
+
+func (r *ServerReconciler) buildNetworkPolicy(server *openvoxv1alpha1.Server) (*networkingv1.NetworkPolicy, error) {
+	port8140 := intstr.FromInt32(8140)
+	tcp := corev1.ProtocolTCP
+
+	ingress := []networkingv1.NetworkPolicyIngressRule{
+		{
+			Ports: []networkingv1.NetworkPolicyPort{
+				{
+					Protocol: &tcp,
+					Port:     &port8140,
+				},
+			},
+		},
+	}
+
+	if server.Spec.NetworkPolicy.AdditionalIngress != nil {
+		ingress = append(ingress, server.Spec.NetworkPolicy.AdditionalIngress...)
+	}
+
+	np := &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      server.Name + "-netpol",
+			Namespace: server.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "openvox-operator",
+				LabelServer:                    server.Name,
+			},
+		},
+		Spec: networkingv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					LabelServer: server.Name,
+				},
+			},
+			Ingress:     ingress,
+			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress},
+		},
+	}
+	if err := controllerutil.SetControllerReference(server, np, r.Scheme); err != nil {
+		return nil, fmt.Errorf("setting controller reference on NetworkPolicy: %w", err)
+	}
+	return np, nil
+}
+
 func (r *ServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&openvoxv1alpha1.Server{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&policyv1.PodDisruptionBudget{}).
 		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).
+		Owns(&networkingv1.NetworkPolicy{}).
 		Watches(&corev1.Secret{}, enqueueServersForSecret(mgr.GetClient())).
 		Complete(r)
 }

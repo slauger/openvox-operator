@@ -6,6 +6,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,7 +37,10 @@ const (
 	EventReasonDatabaseServiceSync    = "DatabaseServiceSynced"
 	EventReasonDatabasePDBCreated     = "DatabasePDBCreated"
 	EventReasonDatabasePDBUpdated     = "DatabasePDBUpdated"
-	EventReasonDatabasePDBDeleted     = "DatabasePDBDeleted"
+	EventReasonDatabasePDBDeleted             = "DatabasePDBDeleted"
+	EventReasonDatabaseNetworkPolicyCreated   = "DatabaseNetworkPolicyCreated"
+	EventReasonDatabaseNetworkPolicyUpdated   = "DatabaseNetworkPolicyUpdated"
+	EventReasonDatabaseNetworkPolicyDeleted   = "DatabaseNetworkPolicyDeleted"
 )
 
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=databases,verbs=get;list;watch;create;update;patch;delete
@@ -49,6 +53,7 @@ const (
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -137,6 +142,12 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if err := r.reconcilePDB(ctx, db); err != nil {
 		r.Recorder.Eventf(db, nil, corev1.EventTypeWarning, EventReasonDatabaseError, "Reconcile", "Failed to reconcile PDB: %v", err)
 		return ctrl.Result{}, fmt.Errorf("reconciling PDB: %w", err)
+	}
+
+	// Reconcile NetworkPolicy
+	if err := r.reconcileNetworkPolicy(ctx, db); err != nil {
+		r.Recorder.Eventf(db, nil, corev1.EventTypeWarning, EventReasonDatabaseError, "Reconcile", "Failed to reconcile NetworkPolicy: %v", err)
+		return ctrl.Result{}, fmt.Errorf("reconciling NetworkPolicy: %w", err)
 	}
 
 	// Re-fetch to avoid conflict errors from concurrent reconciliations
@@ -370,6 +381,99 @@ func (r *DatabaseReconciler) buildPDB(db *openvoxv1alpha1.Database) (*policyv1.P
 	return pdb, nil
 }
 
+func (r *DatabaseReconciler) reconcileNetworkPolicy(ctx context.Context, db *openvoxv1alpha1.Database) error {
+	logger := log.FromContext(ctx)
+	npName := db.Name + "-netpol"
+	existing := &networkingv1.NetworkPolicy{}
+	err := r.Get(ctx, types.NamespacedName{Name: npName, Namespace: db.Namespace}, existing)
+
+	// If NetworkPolicy is disabled or not configured, delete if exists
+	if db.Spec.NetworkPolicy == nil || !db.Spec.NetworkPolicy.Enabled {
+		if err == nil {
+			logger.Info("deleting NetworkPolicy (disabled)", "name", npName)
+			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
+				return err
+			}
+			r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabaseNetworkPolicyDeleted, "Reconcile", "NetworkPolicy %s deleted", npName)
+		}
+		return nil
+	}
+
+	desired, buildErr := r.buildNetworkPolicy(db)
+	if buildErr != nil {
+		return buildErr
+	}
+	if errors.IsNotFound(err) {
+		logger.Info("creating NetworkPolicy", "name", npName)
+		if err := r.Create(ctx, desired); err != nil {
+			return err
+		}
+		r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabaseNetworkPolicyCreated, "Reconcile", "NetworkPolicy %s created", npName)
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	// Update existing
+	existing.Spec = desired.Spec
+	if err := r.Update(ctx, existing); err != nil {
+		return err
+	}
+	r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabaseNetworkPolicyUpdated, "Reconcile", "NetworkPolicy %s updated", npName)
+	return nil
+}
+
+func (r *DatabaseReconciler) buildNetworkPolicy(db *openvoxv1alpha1.Database) (*networkingv1.NetworkPolicy, error) {
+	port8081 := intstr.FromInt32(DatabaseHTTPSPort)
+	tcp := corev1.ProtocolTCP
+
+	ingress := []networkingv1.NetworkPolicyIngressRule{
+		{
+			Ports: []networkingv1.NetworkPolicyPort{
+				{
+					Protocol: &tcp,
+					Port:     &port8081,
+				},
+			},
+			From: []networkingv1.NetworkPolicyPeer{
+				{
+					PodSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"app.kubernetes.io/name": "openvox",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if db.Spec.NetworkPolicy.AdditionalIngress != nil {
+		ingress = append(ingress, db.Spec.NetworkPolicy.AdditionalIngress...)
+	}
+
+	np := &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      db.Name + "-netpol",
+			Namespace: db.Namespace,
+			Labels:    databaseLabels(db.Name),
+		},
+		Spec: networkingv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					LabelDatabase: db.Name,
+				},
+			},
+			Ingress:     ingress,
+			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress},
+		},
+	}
+	if err := controllerutil.SetControllerReference(db, np, r.Scheme); err != nil {
+		return nil, fmt.Errorf("setting controller reference on NetworkPolicy: %w", err)
+	}
+	return np, nil
+}
+
 func (r *DatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&openvoxv1alpha1.Database{}).
@@ -377,6 +481,7 @@ func (r *DatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&policyv1.PodDisruptionBudget{}).
+		Owns(&networkingv1.NetworkPolicy{}).
 		Watches(&corev1.Secret{}, enqueueDatabasesForSecret(mgr.GetClient())).
 		Complete(r)
 }

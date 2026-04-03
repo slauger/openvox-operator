@@ -5,6 +5,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -208,6 +209,12 @@ func withPoolRefs(refs ...string) serverOption {
 func withPDBEnabled(enabled bool) serverOption {
 	return func(s *openvoxv1alpha1.Server) {
 		s.Spec.PDB = &openvoxv1alpha1.PDBSpec{Enabled: enabled}
+	}
+}
+
+func withServerNetworkPolicy(enabled bool) serverOption {
+	return func(s *openvoxv1alpha1.Server) {
+		s.Spec.NetworkPolicy = &openvoxv1alpha1.NetworkPolicySpec{Enabled: enabled}
 	}
 }
 
@@ -500,6 +507,20 @@ func withDatabaseReplicas(r int32) databaseOption {
 	}
 }
 
+func withDatabaseNetworkPolicy(enabled bool) databaseOption {
+	return func(db *openvoxv1alpha1.Database) {
+		db.Spec.NetworkPolicy = &openvoxv1alpha1.NetworkPolicySpec{Enabled: enabled}
+	}
+}
+
+func withDatabaseNetworkPolicyAdditionalIngress(rules []networkingv1.NetworkPolicyIngressRule) databaseOption {
+	return func(db *openvoxv1alpha1.Database) {
+		if db.Spec.NetworkPolicy == nil {
+			db.Spec.NetworkPolicy = &openvoxv1alpha1.NetworkPolicySpec{Enabled: true}
+		}
+		db.Spec.NetworkPolicy.AdditionalIngress = rules
+	}
+}
 func newDatabaseReconciler(c client.Client) *DatabaseReconciler {
 	return &DatabaseReconciler{
 		Client:   c,

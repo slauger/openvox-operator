@@ -20,12 +20,10 @@ spec:
       - https://{{ .Values.database.name }}:8081
       {{- end }}
   {{- end }}
-  {{- with .Values.config.puppet }}
   puppet:
-    environmentTimeout: {{ .environmentTimeout }}
-    storeconfigs: {{ .storeconfigs }}
-    reports: {{ .reports }}
-  {{- end }}
+    environmentTimeout: {{ .Values.config.puppet.environmentTimeout }}
+    storeconfigs: {{ ternary true .Values.config.puppet.storeconfigs .Values.database.enabled }}
+    reports: {{ .Values.config.puppet.reports }}
   {{- with .Values.config.code }}
   {{- if or .image .claimName }}
   code:

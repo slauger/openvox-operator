@@ -15,8 +15,12 @@ rules:
     verbs: ["update"]
   # Core resources
   - apiGroups: [""]
-    resources: ["configmaps", "secrets", "services", "serviceaccounts", "persistentvolumeclaims", "endpoints"]
+    resources: ["configmaps", "secrets", "services", "serviceaccounts", "persistentvolumeclaims"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # EndpointSlices (for Pool endpoint count)
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
   # RBAC for CA setup job ServiceAccount
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["roles", "rolebindings"]
@@ -36,6 +40,10 @@ rules:
   # Autoscaling
   - apiGroups: ["autoscaling"]
     resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Networking (NetworkPolicies)
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   # Gateway API
   - apiGroups: ["gateway.networking.k8s.io"]

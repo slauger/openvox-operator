@@ -82,6 +82,8 @@ When `injectDNSAltName: true`, the operator adds the route hostname to the `dnsA
 
 Without this, agents connecting via the SNI hostname would see a certificate mismatch because the server certificate wouldn't include that hostname as a SAN.
 
+**Side effect:** Modifying the Certificate's `dnsAltNames` resets its phase to `Pending`, which triggers re-signing and recreates the TLS Secret. This causes a brief restart of affected Server pods. This only happens once per hostname -- subsequent reconciles detect the hostname is already present and skip the update.
+
 ## Gateway Setup Example
 
 The Gateway resource is not managed by the operator. A cluster admin creates it:

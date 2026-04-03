@@ -52,6 +52,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     with:
       image_name: openvox-operator
       dockerfile: images/openvox-operator/Containerfile
@@ -67,6 +68,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     with:
       image_name: openvox-server
       dockerfile: images/openvox-server/Containerfile

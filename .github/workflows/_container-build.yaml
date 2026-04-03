@@ -105,6 +105,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -133,7 +135,8 @@ jobs:
           file: ${{ inputs.dockerfile }}
           platforms: ${{ matrix.platform }}
           push: ${{ inputs.push || github.ref == 'refs/heads/main' }}
-          provenance: false
+          provenance: true
+          sbom: true
           tags: ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}:${{ needs.prepare.outputs.version }}-${{ steps.platform.outputs.suffix }}
           cache-from: type=gha,scope=${{ inputs.image_name }}-${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=${{ inputs.image_name }}-${{ matrix.platform }}

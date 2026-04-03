@@ -39,19 +39,19 @@ E2E tests use [Chainsaw](https://kyverno.github.io/chainsaw/) to deploy the oper
 
 ### Container Images
 
-E2E tests require 5 container images: `openvox-operator`, `openvox-server`, `openvox-code`, `openvox-agent`, and `openvox-mock`. All images are pulled from ghcr.io at runtime -- there is no local image building or loading into the cluster.
+E2E tests require 6 container images: `openvox-operator`, `openvox-server`, `openvox-db`, `openvox-code`, `openvox-agent`, and `openvox-mock`. All images are pulled from ghcr.io at runtime -- there is no local image building or loading into the cluster.
 
 The E2E agent tests deploy Puppet code via OCI volume mounts (`image` volumes), which require the Kubernetes `ImageVolume` feature gate. This feature is default-enabled since Kubernetes 1.35, but Docker Desktop currently ships Kubernetes 1.34 via its built-in kubeadm provider -- and there is no way to inject custom feature gates into that provider. The workaround is to run a kind cluster inside Docker Desktop, where feature gates can be configured via the kind config (`tests/e2e/kind-config.yaml`). However, kind clusters cannot access locally built images directly -- images must be available in a registry. This is why the `e2e.yaml` workflow pushes all images to ghcr.io before tests can run.
 
 #### Building Images via CI
 
-Trigger the **E2E** workflow to build and push all 5 images for the current branch:
+The **E2E** workflow builds and pushes all 6 images. It runs automatically on every push to `develop` (images tagged as `develop`) and can be triggered manually for feature branches:
 
 ```bash
 gh workflow run e2e.yaml --ref $(git branch --show-current)
 ```
 
-By default, images are tagged with the short git SHA of the commit at the branch tip (e.g. `efac063`). You can pass a custom tag via the `image_tag` input:
+By default, images are tagged with the branch name (e.g. `develop`, `feat/my-feature`). You can pass a custom tag via the `image_tag` input:
 
 ```bash
 gh workflow run e2e.yaml --ref $(git branch --show-current) -f image_tag=my-feature
@@ -61,7 +61,7 @@ This runs `_container-build.yaml` for each image (multi-arch, hadolint, push to 
 
 #### Building Images Locally
 
-For local development without CI, use `make local-build` to build all 5 images with your local container tool (Docker/Podman). To use them with a local cluster (e.g. Docker Desktop Kubernetes), deploy via `make local-deploy` which sets `pullPolicy: Never`:
+For local development without CI, use `make local-build` to build all images with your local container tool (Docker/Podman). To use them with a local cluster (e.g. Docker Desktop Kubernetes), deploy via `make local-deploy` which sets `pullPolicy: Never`:
 
 ```bash
 make local-deploy
@@ -89,23 +89,40 @@ Subsets of tests can be run separately:
 make e2e-stack        # stack deployment tests (single-node, multi-server)
 make e2e-agent        # agent tests (basic, broken, idempotent, concurrent)
 make e2e-integration  # integration tests (enc, report, full)
+make e2e-database     # Database with CNPG PostgreSQL tests
+make e2e-gateway      # Envoy Gateway TLSRoute tests
+```
+
+Some tests require external dependencies. Install them with:
+
+```bash
+make e2e-deps         # Install CNPG operator + Envoy Gateway
+make e2e-cnpg         # Install only CNPG operator
+make e2e-envoy-gateway # Install only Envoy Gateway
 ```
 
 ### Image Tags
 
-The E2E workflow tags all images with the short git SHA of the built commit (e.g. `efac063`) by default. A custom tag can be passed via the `image_tag` workflow input (see [Building Images via CI](#building-images-via-ci)).
+The E2E workflow tags images with the branch name by default (e.g. `develop`, `feat/my-feature`). A custom tag can be passed via the `image_tag` workflow input (see [Building Images via CI](#building-images-via-ci)).
 
-The Makefile defaults `IMAGE_TAG` to your local `git describe --always` output, so it matches automatically when your local HEAD is the commit CI built. To use a custom tag, export `IMAGE_TAG` once for the session:
+Since images are automatically built on every push to `develop`, the simplest workflow for the develop branch is:
 
 ```bash
-export IMAGE_TAG=my-feature
+export IMAGE_TAG=develop
+make e2e
+```
+
+For feature branches, set `IMAGE_TAG` to the branch name after triggering the workflow:
+
+```bash
+export IMAGE_TAG=$(git branch --show-current)
 make e2e
 ```
 
 Or pass it inline to a single command:
 
 ```bash
-IMAGE_TAG=my-feature make e2e-stack
+IMAGE_TAG=develop make e2e-stack
 ```
 
 The `IMAGE_REGISTRY` variable (default: `ghcr.io/slauger`) can be overridden the same way if using a different registry.
@@ -203,6 +220,37 @@ Full integration test combining ENC, reports, and OpenVox DB:
 - Agent completes successfully
 - Mock received classification, report, and OpenVox DB command
 
+#### Database Tests
+
+These tests verify OpenVox DB (PuppetDB) deployment with external PostgreSQL via CloudNative PG. They require the CNPG operator (`make e2e-cnpg`).
+
+##### Database CNPG (`tests/e2e/database-cnpg/`)
+
+Deploys a CNPG PostgreSQL cluster and an OpenVox stack with Database enabled:
+
+- CNPG Cluster reaches healthy state
+- CNPG credentials Secret exists
+- CertificateAuthority reaches `Ready` phase
+- Database reaches `Running` phase with 1/1 replicas ready
+- Database Deployment and Service are created
+- Operator logs contain no error-level entries
+
+#### Gateway Tests
+
+These tests verify Pool resources with Gateway API TLSRoute. They require Envoy Gateway (`make e2e-envoy-gateway`).
+
+##### Pool Gateway (`tests/e2e/pool-gateway/`)
+
+Deploys a Gateway and an OpenVox stack with TLSRoute enabled:
+
+- GatewayClass and Gateway created
+- CertificateAuthority reaches `Ready` phase
+- Server reaches `Running` phase
+- TLSRoute is created for the server Pool
+- DNS alt name is injected into the Server Certificate
+- CA Pool does not create a TLSRoute (no route configured)
+- Operator logs contain no error-level entries
+
 ### Cleanup
 
 Each test scenario cleans up after itself (Helm uninstall + namespace deletion) via Chainsaw's `finally` block, even on failure. Scenarios use isolated namespaces so they can run in parallel.
@@ -213,22 +261,29 @@ Image builds and E2E tests are managed by three workflows:
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
-| `e2e.yaml` | `workflow_dispatch` | Builds all 5 images and pushes to ghcr.io (accepts optional `image_tag` input) |
+| `e2e.yaml` | Push to `develop`, `workflow_dispatch` | Builds all 6 images and pushes to ghcr.io (tagged with branch name or optional `image_tag` input) |
 | `ci-test-images.yaml` | Push to `main` (path filter) | Builds agent, code, mock on main |
-| `cleanup.yaml` | `workflow_dispatch` | Deletes E2E image versions (short SHA tags) |
+| `cleanup.yaml` | `workflow_dispatch` | Deletes E2E image versions |
 
-The typical workflow for validating a feature branch before merging:
+The typical workflow for the develop branch:
+
+```bash
+# Images are auto-built on every push to develop
+export IMAGE_TAG=develop
+make e2e
+```
+
+For feature branches:
 
 ```bash
 # 1. Build all images for the current branch
 gh workflow run e2e.yaml --ref $(git branch --show-current)
-# Or with a custom tag: gh workflow run e2e.yaml --ref $(git branch --show-current) -f image_tag=my-feature
 
-# 2. Check build status
-gh run list --workflow=e2e.yaml --limit=1
+# 2. Wait for the build to finish
+gh run watch $(gh run list --workflow=e2e.yaml --limit=1 --json databaseId -q '.[0].databaseId')
 
 # 3. Run E2E tests locally against a cluster that can pull from ghcr.io
-export IMAGE_TAG=$(git describe --always)  # or: export IMAGE_TAG=my-feature
+export IMAGE_TAG=$(git branch --show-current)
 make e2e
 
 # 4. Clean up E2E images after merging

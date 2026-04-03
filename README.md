@@ -55,6 +55,20 @@ A **Config** is the root resource - it holds shared configuration (puppet.conf, 
 
 Puppet code is mounted into Server pods via **OCI image volumes** (immutable, automatic rollout on image change, K8s 1.35+) or a **PVC** (mutable, externally managed). See [Code Deployment](docs/concepts/code-deployment.md) for details.
 
+### Database
+
+A **Database** deploys OpenVox DB (PuppetDB) with TLS certificates from the CA and connects to an external PostgreSQL instance (e.g. via [CloudNative PG](https://cloudnative-pg.io/)).
+
+```mermaid
+graph TD
+    CA_CRD["🔐 CertificateAuthority"]
+    CA_CRD --> Cert_DB["📜 Certificate: db-cert"]
+    Cert_DB --> DB["🗄️ Database: puppetdb"]
+    DB --> DB_D["Deployment"]
+    DB --> DB_SVC["Service :8081"]
+    DB_D -->|connects| PG["🐘 PostgreSQL<br/>(CNPG Cluster)"]
+```
+
 ### Pool Traffic Flow
 
 Each Pool owns a Kubernetes Service that selects Server pods. The CA server can be member of both pools - handling CA requests via its dedicated pool and also serving catalog requests through the server pool.

@@ -6,6 +6,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -340,5 +341,56 @@ func TestServerReconcile_StatusPhase(t *testing.T) {
 				t.Errorf("expected phase %q, got %q", tt.wantPhase, updated.Status.Phase)
 			}
 		})
+	}
+}
+
+func TestServerReconcile_NetworkPolicyCreation(t *testing.T) {
+	objs := append(serverPrereqs(), newServer("test-server", withServerNetworkPolicy(true)))
+	c := setupTestClient(objs...)
+	r := newServerReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-server")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	np := &networkingv1.NetworkPolicy{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-server-netpol", Namespace: testNamespace}, np); err != nil {
+		t.Fatalf("NetworkPolicy not created: %v", err)
+	}
+
+	if np.Spec.PodSelector.MatchLabels[LabelServer] != "test-server" {
+		t.Error("NetworkPolicy pod selector incorrect")
+	}
+	if len(np.Spec.PolicyTypes) != 1 || np.Spec.PolicyTypes[0] != networkingv1.PolicyTypeIngress {
+		t.Errorf("expected PolicyTypes [Ingress], got %v", np.Spec.PolicyTypes)
+	}
+	if len(np.Spec.Ingress) != 1 {
+		t.Fatalf("expected 1 ingress rule, got %d", len(np.Spec.Ingress))
+	}
+	if len(np.Spec.Ingress[0].Ports) != 1 || np.Spec.Ingress[0].Ports[0].Port.IntVal != 8140 {
+		t.Error("expected ingress port 8140")
+	}
+	if len(np.Spec.Ingress[0].From) != 0 {
+		t.Error("server default ingress should have no from restriction")
+	}
+}
+
+func TestServerReconcile_NetworkPolicyDeletion(t *testing.T) {
+	existingNP := &networkingv1.NetworkPolicy{}
+	existingNP.Name = "test-server-netpol"
+	existingNP.Namespace = testNamespace
+
+	objs := append(serverPrereqs(), newServer("test-server"), existingNP)
+	c := setupTestClient(objs...)
+	r := newServerReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-server")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	np := &networkingv1.NetworkPolicy{}
+	err := c.Get(testCtx(), types.NamespacedName{Name: "test-server-netpol", Namespace: testNamespace}, np)
+	if err == nil {
+		t.Error("NetworkPolicy should have been deleted")
 	}
 }

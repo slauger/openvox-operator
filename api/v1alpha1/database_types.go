@@ -61,6 +61,10 @@ type DatabaseSpec struct {
 	// +optional
 	PDB *PDBSpec `json:"pdb,omitempty"`
 
+	// NetworkPolicy defines NetworkPolicy settings.
+	// +optional
+	NetworkPolicy *NetworkPolicySpec `json:"networkPolicy,omitempty"`
+
 	// Service defines the Service configuration for the Database.
 	// +optional
 	Service DatabaseServiceSpec `json:"service,omitempty"`

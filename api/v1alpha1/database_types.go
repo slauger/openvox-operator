@@ -57,6 +57,10 @@ type DatabaseSpec struct {
 	// +optional
 	JavaArgs string `json:"javaArgs,omitempty"`
 
+	// PDB defines PodDisruptionBudget settings.
+	// +optional
+	PDB *PDBSpec `json:"pdb,omitempty"`
+
 	// Service defines the Service configuration for the Database.
 	// +optional
 	Service DatabaseServiceSpec `json:"service,omitempty"`

@@ -101,6 +101,32 @@ spec:
               javaArgs:
                 description: JavaArgs defines the JVM arguments.
                 type: string
+              pdb:
+                description: PDB defines PodDisruptionBudget settings.
+                properties:
+                  enabled:
+                    default: false
+                    description: Enabled activates the PodDisruptionBudget.
+                    type: boolean
+                  maxUnavailable:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: |-
+                      MaxUnavailable is the maximum number of pods that can be unavailable.
+                      Mutually exclusive with MinAvailable.
+                    x-kubernetes-int-or-string: true
+                  minAvailable:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: |-
+                      MinAvailable is the minimum number of pods that must be available.
+                      Mutually exclusive with MaxUnavailable.
+                    x-kubernetes-int-or-string: true
+                required:
+                - enabled
+                type: object
               postgres:
                 description: Postgres defines the external PostgreSQL connection settings.
                 properties:

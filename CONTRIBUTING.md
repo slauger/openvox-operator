@@ -62,8 +62,8 @@ make e2e
 
 ### Branching
 
-- `develop` is the main development branch — all PRs target `develop`
-- `main` is the release branch — only receives merges from `develop`
+- `develop` is the main development branch - all PRs target `develop`
+- `main` is the release branch - only receives merges from `develop`
 - Branch naming: `feat/<topic>`, `fix/<topic>`, `ci/<topic>`, `docs/<topic>`
 
 ```bash

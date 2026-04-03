@@ -82,9 +82,15 @@ docs/                      Documentation
   6. Implement `buildFoo` (construct the desired object, set controller reference)
   7. Add tests for creation, deletion, and any special behavior
 
+## Text Quality
+
+- **No Unicode em-dashes, smart quotes, or other non-ASCII punctuation.** Use plain ASCII (`-`, `--`, `'`, `"`).
+- CI runs a unicode-lint check that rejects zero-width characters, soft hyphens, word joiners, and similar invisible characters (potential AI watermarks).
+- When in doubt, stick to plain ASCII in all files (code, docs, comments, commit messages).
+
 ## Documentation
 
-- `README.md` is the primary user-facing doc — update when adding user-visible features
+- `README.md` is the primary user-facing doc - update when adding user-visible features
 - `CONTRIBUTING.md` covers developer setup and workflow
 - `docs/` contains design docs and architecture diagrams
-- No CHANGELOG — release notes are auto-generated from commit messages by semantic-release
+- No CHANGELOG - release notes are auto-generated from commit messages by semantic-release

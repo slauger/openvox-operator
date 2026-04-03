@@ -15,6 +15,7 @@ permissions:
   contents: read
   packages: write
   id-token: write
+  attestations: write
 
 jobs:
   openvox-operator:
@@ -23,6 +24,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     with:
       image_name: openvox-operator
       dockerfile: images/openvox-operator/Containerfile
@@ -36,6 +38,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     with:
       image_name: openvox-server
       dockerfile: images/openvox-server/Containerfile
@@ -49,6 +52,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     with:
       image_name: openvox-code
       dockerfile: images/openvox-code/Containerfile
@@ -63,6 +67,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     with:
       image_name: openvox-agent
       dockerfile: images/openvox-agent/Containerfile
@@ -77,6 +82,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     with:
       image_name: openvox-db
       dockerfile: images/openvox-db/Containerfile
@@ -90,6 +96,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     with:
       image_name: openvox-mock
       dockerfile: images/openvox-mock/Containerfile

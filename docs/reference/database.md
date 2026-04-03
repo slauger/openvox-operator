@@ -41,7 +41,26 @@ spec:
 | `resources` | ResourceRequirements | - | CPU/memory requests and limits |
 | `replicas` | int32 | `1` | Number of pod replicas |
 | `javaArgs` | string | - | JVM arguments |
+| `pdb` | [PDBSpec](#pdbspec) | - | PodDisruptionBudget configuration |
+| `networkPolicy` | [NetworkPolicySpec](#networkpolicyspec) | - | NetworkPolicy configuration |
 | `service` | [DatabaseServiceSpec](#databaseservicespec) | - | Service configuration |
+
+### PDBSpec
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | bool | `false` | Activate the PodDisruptionBudget |
+| `minAvailable` | int or string | - | Minimum pods that must be available (mutually exclusive with `maxUnavailable`) |
+| `maxUnavailable` | int or string | - | Maximum pods that can be unavailable (mutually exclusive with `minAvailable`) |
+
+### NetworkPolicySpec
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | bool | `false` | Activate the NetworkPolicy |
+| `additionalIngress` | []NetworkPolicyIngressRule | - | Extra ingress rules appended to the defaults |
+
+When enabled, the default policy allows TCP/8081 only from pods with `app.kubernetes.io/name: openvox` in the same namespace. Additional ingress rules are appended to this default (e.g. to allow PuppetBoard access).
 
 ### PostgresSpec
 
@@ -113,6 +132,8 @@ The init container copies TLS certificates from Secrets into the writable `ssl` 
 | Service | `{name}` | HTTPS endpoint on port 8081 |
 | ConfigMap | `{name}-config` | `jetty.ini` and `config.ini` |
 | Secret | `{name}-db` | `database.ini` with PostgreSQL credentials |
+| PDB | `{name}` | Only when `pdb.enabled: true` |
+| NetworkPolicy | `{name}-netpol` | Only when `networkPolicy.enabled: true` |
 
 ## Prerequisites
 

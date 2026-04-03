@@ -39,6 +39,7 @@ spec:
 | `topologySpreadConstraints` | []TopologySpreadConstraint | - | Pod spread constraints across topology domains |
 | `affinity` | Affinity | - | Pod affinity/anti-affinity rules |
 | `pdb` | [PDBSpec](#pdbspec) | - | PodDisruptionBudget configuration |
+| `networkPolicy` | [NetworkPolicySpec](#networkpolicyspec) | - | NetworkPolicy configuration |
 
 ### PDBSpec
 
@@ -47,6 +48,15 @@ spec:
 | `enabled` | bool | `false` | Activate the PodDisruptionBudget |
 | `minAvailable` | int or string | - | Minimum pods that must be available (mutually exclusive with `maxUnavailable`) |
 | `maxUnavailable` | int or string | - | Maximum pods that can be unavailable (mutually exclusive with `minAvailable`) |
+
+### NetworkPolicySpec
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | bool | `false` | Activate the NetworkPolicy |
+| `additionalIngress` | []NetworkPolicyIngressRule | - | Extra ingress rules appended to the defaults |
+
+When enabled, the default policy allows TCP/8140 from all sources (agents may connect from outside the cluster). Additional ingress rules are appended to this default.
 
 ### AutoscalingSpec
 
@@ -144,3 +154,4 @@ Key differences:
 | Deployment | `{name}` | OpenVox Server pods |
 | HPA | `{name}` | Only when `autoscaling.enabled: true` |
 | PDB | `{name}` | Only when `pdb.enabled: true` |
+| NetworkPolicy | `{name}-netpol` | Only when `networkPolicy.enabled: true` |

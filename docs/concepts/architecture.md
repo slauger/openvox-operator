@@ -18,10 +18,13 @@ graph TD
     Cert["Certificate"]
     Srv["Server"]
     Pool["Pool"]
+    DB["Database"]
     Cfg -->|authorityRef| CA
+    Cfg -.->|databaseRef| DB
     Cfg -.->|nodeClassifierRef| NC
     SP -.->|certificateAuthorityRef| CA
     Cert -->|authorityRef| CA
+    DB -->|certificateRef| Cert
     Srv -->|certificateRef| Cert
     Srv -->|configRef| Cfg
     RP -.->|configRef| Cfg
@@ -34,6 +37,7 @@ graph TD
 - A **NodeClassifier** is an optional standalone resource defining an External Node Classifier endpoint. A Config references it via `nodeClassifierRef`. The Config controller renders the classifier configuration into an ENC Secret, and puppet.conf gets `node_terminus = exec`. See [External Node Classification](external-node-classification.md).
 - A **ReportProcessor** is an optional standalone resource that defines an external endpoint for Puppet run reports. One or more ReportProcessors can reference the same Config via `configRef`. The Config controller collects all matching ReportProcessors, renders a `report-webhook.yaml` config, and sets `reports = webhook` in puppet.conf. A minimal Ruby shim (`webhook.rb`) pipes each report as JSON to the `openvox-report` binary, which forwards it to all configured endpoints. Supports built-in PuppetDB wire format v8 (`processor: puppetdb`) and generic HTTP webhooks with configurable auth (mTLS, Bearer, Basic, custom headers). See [Report Processing](report-processing.md).
 - A **Certificate** references a CertificateAuthority and manages the lifecycle of a single certificate: signing Job and TLS Secret.
+- A **Database** creates a Deployment of OpenVox DB pods. It references a Certificate for SSL and connects to an external PostgreSQL instance. A Config can reference a Database via `databaseRef` to automatically wire the PuppetDB connection URL from its `status.url`.
 - A **Server** references a Config and a Certificate. It creates a Deployment (with Recreate strategy for CA, RollingUpdate for servers). The Server waits for the Certificate to reach the `Signed` phase before creating its Deployment. A Server declares pool membership via `poolRefs`.
 - A **Pool** is a pure networking resource that creates a Kubernetes Service. Servers join a Pool by listing its name in their `poolRefs`.
 

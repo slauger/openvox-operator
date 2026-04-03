@@ -6,6 +6,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -33,6 +34,9 @@ const (
 	EventReasonDatabaseError          = "DatabaseError"
 	EventReasonDatabaseDeploymentSync = "DatabaseDeploymentSynced"
 	EventReasonDatabaseServiceSync    = "DatabaseServiceSynced"
+	EventReasonDatabasePDBCreated     = "DatabasePDBCreated"
+	EventReasonDatabasePDBUpdated     = "DatabasePDBUpdated"
+	EventReasonDatabasePDBDeleted     = "DatabasePDBDeleted"
 )
 
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=databases,verbs=get;list;watch;create;update;patch;delete
@@ -44,6 +48,7 @@ const (
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -126,6 +131,12 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if err := r.reconcileService(ctx, db); err != nil {
 		r.Recorder.Eventf(db, nil, corev1.EventTypeWarning, EventReasonDatabaseError, "Reconcile", "Failed to reconcile Service: %v", err)
 		return ctrl.Result{}, fmt.Errorf("reconciling Service: %w", err)
+	}
+
+	// Reconcile PodDisruptionBudget
+	if err := r.reconcilePDB(ctx, db); err != nil {
+		r.Recorder.Eventf(db, nil, corev1.EventTypeWarning, EventReasonDatabaseError, "Reconcile", "Failed to reconcile PDB: %v", err)
+		return ctrl.Result{}, fmt.Errorf("reconciling PDB: %w", err)
 	}
 
 	// Re-fetch to avoid conflict errors from concurrent reconciliations
@@ -287,12 +298,85 @@ func (r *DatabaseReconciler) getReadyReplicas(ctx context.Context, db *openvoxv1
 	return deploy.Status.ReadyReplicas
 }
 
+func (r *DatabaseReconciler) reconcilePDB(ctx context.Context, db *openvoxv1alpha1.Database) error {
+	logger := log.FromContext(ctx)
+	pdbName := db.Name
+	existing := &policyv1.PodDisruptionBudget{}
+	err := r.Get(ctx, types.NamespacedName{Name: pdbName, Namespace: db.Namespace}, existing)
+
+	// If PDB is disabled or not configured, delete if exists
+	if db.Spec.PDB == nil || !db.Spec.PDB.Enabled {
+		if err == nil {
+			logger.Info("deleting PDB (disabled)", "name", pdbName)
+			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
+				return err
+			}
+			r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabasePDBDeleted, "Reconcile", "PodDisruptionBudget %s deleted", pdbName)
+		}
+		return nil
+	}
+
+	desired, buildErr := r.buildPDB(db)
+	if buildErr != nil {
+		return buildErr
+	}
+	if errors.IsNotFound(err) {
+		logger.Info("creating PDB", "name", pdbName)
+		if err := r.Create(ctx, desired); err != nil {
+			return err
+		}
+		r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabasePDBCreated, "Reconcile", "PodDisruptionBudget %s created", pdbName)
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	// Update existing
+	existing.Spec = desired.Spec
+	if err := r.Update(ctx, existing); err != nil {
+		return err
+	}
+	r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabasePDBUpdated, "Reconcile", "PodDisruptionBudget %s updated", pdbName)
+	return nil
+}
+
+func (r *DatabaseReconciler) buildPDB(db *openvoxv1alpha1.Database) (*policyv1.PodDisruptionBudget, error) {
+	pdb := &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      db.Name,
+			Namespace: db.Namespace,
+			Labels:    databaseLabels(db.Name),
+		},
+		Spec: policyv1.PodDisruptionBudgetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					LabelDatabase: db.Name,
+				},
+			},
+		},
+	}
+	if db.Spec.PDB.MinAvailable != nil {
+		pdb.Spec.MinAvailable = db.Spec.PDB.MinAvailable
+	} else if db.Spec.PDB.MaxUnavailable != nil {
+		pdb.Spec.MaxUnavailable = db.Spec.PDB.MaxUnavailable
+	} else {
+		minAvailable := intstrInt(DefaultPDBMinAvailable)
+		pdb.Spec.MinAvailable = &minAvailable
+	}
+	if err := controllerutil.SetControllerReference(db, pdb, r.Scheme); err != nil {
+		return nil, fmt.Errorf("setting controller reference on PDB: %w", err)
+	}
+	return pdb, nil
+}
+
 func (r *DatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&openvoxv1alpha1.Database{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
+		Owns(&policyv1.PodDisruptionBudget{}).
 		Watches(&corev1.Secret{}, enqueueDatabasesForSecret(mgr.GetClient())).
 		Complete(r)
 }

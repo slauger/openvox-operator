@@ -7,7 +7,9 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
@@ -339,5 +341,95 @@ func TestDatabaseReconcile_StatusPhase(t *testing.T) {
 				t.Errorf("expected phase %q, got %q", tt.wantPhase, updated.Status.Phase)
 			}
 		})
+	}
+}
+
+func TestDatabaseReconcile_NetworkPolicyCreation(t *testing.T) {
+	objs := append(databasePrereqs(), newDatabase("test-db", withDatabaseNetworkPolicy(true)))
+	c := setupTestClient(objs...)
+	r := newDatabaseReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-db")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	np := &networkingv1.NetworkPolicy{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-db-netpol", Namespace: testNamespace}, np); err != nil {
+		t.Fatalf("NetworkPolicy not created: %v", err)
+	}
+
+	if np.Spec.PodSelector.MatchLabels[LabelDatabase] != "test-db" {
+		t.Error("NetworkPolicy pod selector incorrect")
+	}
+	if len(np.Spec.PolicyTypes) != 1 || np.Spec.PolicyTypes[0] != networkingv1.PolicyTypeIngress {
+		t.Errorf("expected PolicyTypes [Ingress], got %v", np.Spec.PolicyTypes)
+	}
+	if len(np.Spec.Ingress) != 1 {
+		t.Fatalf("expected 1 ingress rule, got %d", len(np.Spec.Ingress))
+	}
+	if len(np.Spec.Ingress[0].Ports) != 1 || np.Spec.Ingress[0].Ports[0].Port.IntVal != DatabaseHTTPSPort {
+		t.Error("expected ingress port 8081")
+	}
+	if len(np.Spec.Ingress[0].From) != 1 {
+		t.Fatal("expected 1 from peer")
+	}
+	if np.Spec.Ingress[0].From[0].PodSelector == nil ||
+		np.Spec.Ingress[0].From[0].PodSelector.MatchLabels["app.kubernetes.io/name"] != "openvox" {
+		t.Error("expected from selector app.kubernetes.io/name=openvox")
+	}
+}
+
+func TestDatabaseReconcile_NetworkPolicyDeletion(t *testing.T) {
+	existingNP := &networkingv1.NetworkPolicy{}
+	existingNP.Name = "test-db-netpol"
+	existingNP.Namespace = testNamespace
+
+	objs := append(databasePrereqs(), newDatabase("test-db"), existingNP)
+	c := setupTestClient(objs...)
+	r := newDatabaseReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-db")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	np := &networkingv1.NetworkPolicy{}
+	err := c.Get(testCtx(), types.NamespacedName{Name: "test-db-netpol", Namespace: testNamespace}, np)
+	if err == nil {
+		t.Error("NetworkPolicy should have been deleted")
+	}
+}
+
+func TestDatabaseReconcile_NetworkPolicyAdditionalIngress(t *testing.T) {
+	extraPort := intstr.FromInt32(9090)
+	tcp := corev1.ProtocolTCP
+	additionalRules := []networkingv1.NetworkPolicyIngressRule{
+		{
+			Ports: []networkingv1.NetworkPolicyPort{
+				{Protocol: &tcp, Port: &extraPort},
+			},
+		},
+	}
+
+	objs := append(databasePrereqs(), newDatabase("test-db",
+		withDatabaseNetworkPolicy(true),
+		withDatabaseNetworkPolicyAdditionalIngress(additionalRules),
+	))
+	c := setupTestClient(objs...)
+	r := newDatabaseReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-db")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	np := &networkingv1.NetworkPolicy{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-db-netpol", Namespace: testNamespace}, np); err != nil {
+		t.Fatalf("NetworkPolicy not created: %v", err)
+	}
+
+	if len(np.Spec.Ingress) != 2 {
+		t.Fatalf("expected 2 ingress rules (default + additional), got %d", len(np.Spec.Ingress))
+	}
+	if np.Spec.Ingress[1].Ports[0].Port.IntVal != 9090 {
+		t.Errorf("expected additional ingress port 9090, got %d", np.Spec.Ingress[1].Ports[0].Port.IntVal)
 	}
 }

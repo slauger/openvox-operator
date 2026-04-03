@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
@@ -102,6 +103,10 @@ type ServerSpec struct {
 	// PDB defines PodDisruptionBudget settings.
 	// +optional
 	PDB *PDBSpec `json:"pdb,omitempty"`
+
+	// NetworkPolicy defines NetworkPolicy settings.
+	// +optional
+	NetworkPolicy *NetworkPolicySpec `json:"networkPolicy,omitempty"`
 }
 
 // PDBSpec defines PodDisruptionBudget settings.
@@ -119,6 +124,17 @@ type PDBSpec struct {
 	// Mutually exclusive with MinAvailable.
 	// +optional
 	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
+}
+
+// NetworkPolicySpec defines NetworkPolicy settings.
+type NetworkPolicySpec struct {
+	// Enabled activates the NetworkPolicy.
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled"`
+
+	// AdditionalIngress defines extra ingress rules appended to the defaults.
+	// +optional
+	AdditionalIngress []networkingv1.NetworkPolicyIngressRule `json:"additionalIngress,omitempty"`
 }
 
 // AutoscalingSpec defines HPA settings.

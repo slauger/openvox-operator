@@ -22,6 +22,11 @@ on:
           - gateway
           - webhooks-byo
           - webhooks-cm
+      cleanup_images:
+        description: 'Delete E2E images after test run'
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -242,7 +247,7 @@ jobs:
   # Phase 3: Cleanup E2E images
 
   cleanup:
-    if: always()
+    if: always() && inputs.cleanup_images != false
     needs: [e2e-base, e2e-enc, e2e-gateway, e2e-webhooks-byo, e2e-webhooks-cm]
     uses: ./.github/workflows/_cleanup-images.yaml
     permissions:

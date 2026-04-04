@@ -1,29 +1,106 @@
 # Testing
 
-## Unit Tests
+## Overview
 
-Run all unit tests:
+| Type | Tool | Command | Requires Cluster |
+|------|------|---------|:---:|
+| Go unit tests | `go test` | `make test` | No |
+| CRD validation (CEL) | envtest | `go test ./api/...` | No |
+| Webhook unit tests | envtest | `go test ./internal/webhook/...` | No |
+| Helm chart lint | `helm lint` | `make helm-lint` | No |
+| Helm chart unit tests | `helm unittest` | `make helm-unittest` | No |
+| Go linting | `golangci-lint` | `make lint` | No |
+| Go vulnerability check | `govulncheck` | `make vulncheck` | No |
+| CRD/deepcopy drift check | `controller-gen` | `make check-manifests` | No |
+| Container image lint | `hadolint` | via `_container-build.yaml` | No |
+| Shell script lint | `shellcheck` | via `_shellcheck.yaml` | No |
+| Unicode lint | `grep -P` | via `_unicode-lint.yaml` | No |
+| E2E tests | Chainsaw | `make e2e-group-*` | Yes |
+
+Run all offline checks at once:
+
+```bash
+make ci
+```
+
+## CI/CD Workflows
+
+### Workflow Overview
+
+| Workflow | File | Trigger | What it does |
+|----------|------|---------|-------------|
+| CI | `ci.yaml` | Push to main/develop, PRs | Linting + all 6 image builds; pushes `:develop` tag on develop branch |
+| E2E | `e2e.yaml` | Push to develop, manual | Builds + pushes all 6 images, runs E2E test groups, cleans up images |
+| Release | `release.yaml` | Manual (main only) | semantic-release, builds operator/server/db with version tag + `:latest`, publishes Helm charts |
+
+### Reusable Workflows
+
+| Workflow | File | Purpose |
+|----------|------|---------|
+| Container Build | `_container-build.yaml` | Multi-arch image build, optional push, signing, SBOM |
+| Go | `_go.yaml` | Go build, test, vet, vulncheck, lint |
+| Helm | `_helm.yaml` | Helm lint + unittest |
+| Shellcheck | `_shellcheck.yaml` | Shell script linting |
+| Unicode Lint | `_unicode-lint.yaml` | Detect suspicious Unicode characters |
+| Cleanup Images | `_cleanup-images.yaml` | Delete E2E images from ghcr.io |
+
+### Image Tagging Strategy
+
+| Context | Images | Push | Tag | `:latest` |
+|---------|--------|:----:|-----|:---------:|
+| CI - PR | all 6 | No | - | - |
+| CI - push develop | all 6 | Yes | `:develop` | No |
+| CI - push main | all 6 | No | - | - |
+| E2E - push develop | all 6 | Yes | `:develop` (or custom) | No |
+| E2E - manual | all 6 | Yes | custom `image_tag` | No |
+| Release | operator, server, db | Yes | `:x.y.z` | Yes |
+
+**Key points:**
+
+- `:develop` images are unstable, rebuilt on every push to develop
+- `:latest` is only set by `release.yaml` and always points to the latest release
+- E2E images tagged with short SHAs are automatically cleaned up after tests
+- Cleanup can be disabled via `cleanup_images: false` in `workflow_dispatch`
+
+### Which Images Are Released?
+
+Only the three production images and three Helm charts are released:
+
+| Artifact | Type | Released |
+|----------|------|:-------:|
+| `openvox-operator` | Container image | Yes |
+| `openvox-server` | Container image | Yes |
+| `openvox-db` | Container image | Yes |
+| `openvox-agent` | Container image | No (E2E only) |
+| `openvox-code` | Container image | No (E2E only) |
+| `openvox-mock` | Container image | No (E2E only) |
+| `openvox-operator` | Helm chart | Yes |
+| `openvox-stack` | Helm chart | Yes |
+| `openvox-db-postgres` | Helm chart | Yes |
+
+## Go Unit Tests
 
 ```bash
 make test
 ```
 
-This runs `go test ./...` with coverage output. Tests include:
+Runs `go test ./...` with coverage. Tests include:
 
-- Controller reconciliation: Config, Server, Pool, Certificate, CertificateAuthority, ReportProcessor (`internal/controller/`)
-- Certificate signing and CA HTTP client (`internal/controller/`)
+- Controller reconciliation (`internal/controller/`)
+- Certificate signing and CA HTTP client
+- Webhook validation (`internal/webhook/`)
 - Duration parsing (`api/v1alpha1/duration.go`)
-- Volume helpers, hash functions, image resolution (`internal/controller/helpers.go`)
-- Label generation (`internal/controller/labels.go`)
+- Volume helpers, hash functions, image resolution
+- Label generation
 - Signing policy evaluation (`cmd/autosign/policy.go`)
-- ENC HTTP client and response handling (`cmd/enc/classifier.go`)
+- ENC HTTP client (`cmd/enc/classifier.go`)
 - PuppetDB Wire Format v8 transformation (`cmd/report/puppetdb.go`)
 
 ### CRD Validation Tests
 
-The `api/v1alpha1/` package contains envtest-based tests that validate CEL rules and enum constraints on the CRDs against a real API server. These run as part of `go test ./...` but require envtest binaries.
+The `api/v1alpha1/` package contains envtest-based tests that validate CEL rules and enum constraints against a real API server. These run as part of `go test ./...` but require envtest binaries.
 
-For local development, install envtest:
+For local development:
 
 ```bash
 go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
@@ -33,262 +110,151 @@ go test ./api/...
 
 In CI, envtest is set up automatically.
 
+## Helm Tests
+
+### Linting
+
+```bash
+make helm-lint
+```
+
+Lints all three charts: `openvox-operator`, `openvox-stack`, `openvox-db-postgres`.
+
+### Unit Tests
+
+```bash
+make helm-unittest
+```
+
+Runs [helm-unittest](https://github.com/helm-unittest/helm-unittest) for all charts. Test files are in `charts/*/tests/`.
+
+## Container Image Lint
+
+All Containerfiles are linted with [hadolint](https://github.com/hadolint/hadolint) as part of `_container-build.yaml`. This runs automatically in CI for every image build.
+
 ## E2E Tests
 
 E2E tests use [Chainsaw](https://kyverno.github.io/chainsaw/) to deploy the operator and OpenVox stack scenarios against a real Kubernetes cluster and verify the full resource lifecycle.
 
 ### Container Images
 
-E2E tests require 6 container images: `openvox-operator`, `openvox-server`, `openvox-db`, `openvox-code`, `openvox-agent`, and `openvox-mock`. All images are pulled from ghcr.io at runtime -- there is no local image building or loading into the cluster.
+E2E tests require 6 container images pulled from ghcr.io at runtime:
 
-The E2E agent tests deploy Puppet code via OCI volume mounts (`image` volumes), which require the Kubernetes `ImageVolume` feature gate. This feature is default-enabled since Kubernetes 1.35, but Docker Desktop currently ships Kubernetes 1.34 via its built-in kubeadm provider -- and there is no way to inject custom feature gates into that provider. The workaround is to run a kind cluster inside Docker Desktop, where feature gates can be configured via the kind config (`tests/e2e/kind-config.yaml`). However, kind clusters cannot access locally built images directly -- images must be available in a registry. This is why the `e2e.yaml` workflow pushes all images to ghcr.io before tests can run.
+| Image | Purpose |
+|-------|---------|
+| `openvox-operator` | The operator itself |
+| `openvox-server` | OpenVox Server (CA + compiler) |
+| `openvox-db` | OpenVox DB (PuppetDB) |
+| `openvox-code` | OCI image with Puppet environments |
+| `openvox-agent` | Puppet agent (UBI9) |
+| `openvox-mock` | Mock server for ENC, reports, OpenVox DB endpoints |
 
-#### Building Images via CI
+OCI image volumes require Kubernetes 1.35+ (`ImageVolume` feature gate).
 
-The **E2E** workflow builds and pushes all 6 images. It runs automatically on every push to `develop` (images tagged as `develop`) and can be triggered manually for feature branches:
+### Test Groups
+
+Tests are organized into groups. Each group installs the operator with specific settings, runs its tests, and cleans up.
+
+| Group | Operator Settings | Tests | Make Target |
+|-------|-------------------|-------|-------------|
+| base | webhook=false, gatewayAPI=false | single-node, multi-server, agent-basic, agent-broken, agent-idempotent, agent-concurrent, agent-report, database-cnpg | `make e2e-group-base` |
+| enc | webhook=false, gatewayAPI=false | agent-enc, agent-full | `make e2e-group-enc` |
+| gateway | webhook=false, gatewayAPI=true | pool-gateway | `make e2e-group-gateway` |
+| webhooks-byo | webhook=true, BYO TLS cert | webhook-validation-server, webhook-validation-config, webhook-validation-database, webhook-smoke | `make e2e-group-webhooks-byo` |
+| webhooks-cm | webhook=true, cert-manager | webhook-validation-server, webhook-validation-config, webhook-validation-database, webhook-smoke | `make e2e-group-webhooks-cm` |
+
+Run all groups sequentially:
 
 ```bash
+make e2e-all
+```
+
+### External Dependencies
+
+Some tests require external operators. Install them with `setup.sh`:
+
+```bash
+bash tests/e2e/setup.sh all              # Install all dependencies
+bash tests/e2e/setup.sh install-cnpg      # CNPG operator only
+bash tests/e2e/setup.sh install-envoy-gateway  # Envoy Gateway only
+bash tests/e2e/setup.sh install-cert-manager   # cert-manager only
+bash tests/e2e/setup.sh status            # Check status
+```
+
+Or via Make:
+
+```bash
+make e2e-setup
+```
+
+Versions can be overridden via environment variables: `CNPG_VERSION`, `ENVOY_GATEWAY_VERSION`, `CERT_MANAGER_VERSION`.
+
+### Running Locally
+
+```bash
+# Use develop images (auto-built on every push to develop)
+make e2e-group-base IMAGE_TAG=develop
+
+# Run all groups
+make e2e-all IMAGE_TAG=develop
+
+# For feature branches: trigger E2E workflow first to build images
 gh workflow run e2e.yaml --ref $(git branch --show-current)
+make e2e-all IMAGE_TAG=$(git branch --show-current)
 ```
 
-By default, images are tagged with the branch name (e.g. `develop`, `feat/my-feature`). You can pass a custom tag via the `image_tag` input:
+### Running in CI
+
+The E2E workflow connects to a persistent K3S cluster via `E2E_KUBECONFIG` secret. Test groups run sequentially: base, enc, gateway, webhooks-byo, webhooks-cm.
+
+Manual trigger with group selection:
 
 ```bash
-gh workflow run e2e.yaml --ref $(git branch --show-current) -f image_tag=my-feature
+gh workflow run e2e.yaml -f group=webhooks-byo
+gh workflow run e2e.yaml -f group=all -f cleanup_images=false  # keep images
 ```
 
-This runs `_container-build.yaml` for each image (multi-arch, hadolint, push to ghcr.io). On `main`, the regular CI workflows (`ci.yaml`, `ci-test-images.yaml`) build the same images automatically.
+### Chainsaw Configuration
 
-#### Building Images Locally
+Global settings in `tests/e2e/chainsaw-config.yaml`:
 
-For local development without CI, use `make local-build` to build all images with your local container tool (Docker/Podman). To use them with a local cluster (e.g. Docker Desktop Kubernetes), deploy via `make local-deploy` which sets `pullPolicy: Never`:
-
-```bash
-make local-deploy
-```
-
-### Prerequisites
-
-- A running Kubernetes cluster (Docker Desktop, kind, k3s, etc.)
-- Container images available in ghcr.io (run the E2E workflow first, or `make local-build` + push)
-
-### Running
-
-```bash
-make e2e
-```
-
-This will:
-
-1. Deploy the operator via Helm (pulling from ghcr.io)
-2. Run all Chainsaw test scenarios
-
-Subsets of tests can be run separately:
-
-```bash
-make e2e-stack        # stack deployment tests (single-node, multi-server)
-make e2e-agent        # agent tests (basic, broken, idempotent, concurrent)
-make e2e-integration  # integration tests (enc, report, full)
-make e2e-database     # Database with CNPG PostgreSQL tests
-make e2e-gateway      # Envoy Gateway TLSRoute tests
-```
-
-Some tests require external dependencies. Install them with:
-
-```bash
-make e2e-deps         # Install CNPG operator + Envoy Gateway
-make e2e-cnpg         # Install only CNPG operator
-make e2e-envoy-gateway # Install only Envoy Gateway
-```
-
-### Image Tags
-
-The E2E workflow tags images with the branch name by default (e.g. `develop`, `feat/my-feature`). A custom tag can be passed via the `image_tag` workflow input (see [Building Images via CI](#building-images-via-ci)).
-
-Since images are automatically built on every push to `develop`, the simplest workflow for the develop branch is:
-
-```bash
-export IMAGE_TAG=develop
-make e2e
-```
-
-For feature branches, set `IMAGE_TAG` to the branch name after triggering the workflow:
-
-```bash
-export IMAGE_TAG=$(git branch --show-current)
-make e2e
-```
-
-Or pass it inline to a single command:
-
-```bash
-IMAGE_TAG=develop make e2e-stack
-```
-
-The `IMAGE_REGISTRY` variable (default: `ghcr.io/slauger`) can be overridden the same way if using a different registry.
+- `skipDelete: true` -- namespaces are preserved on failure for debugging
+- `parallel: 1` -- tests run sequentially (single shared cluster)
+- Timeouts: apply 1m, assert 5m, cleanup 2m
 
 ### Test Scenarios
 
-Tests are located in `tests/e2e/` with a shared configuration in `tests/e2e/chainsaw-config.yaml`.
+Tests are in `tests/e2e/<scenario>/chainsaw-test.yaml`.
 
 #### Stack Deployment Tests
 
-These tests verify that the operator deploys OpenVox stacks correctly.
-
-##### Single-Node (`tests/e2e/single-node/`)
-
-Deploys a minimal stack with a single CA+Server and verifies:
-
-- CertificateAuthority reaches `Ready` phase
-- Config reaches `Running` phase
-- Server reaches `Running` phase with 1/1 replicas ready
-- Operator logs contain no error-level entries
-
-##### Multi-Server (`tests/e2e/multi-server/`)
-
-Deploys a stack with a dedicated CA server and 2 compiler replicas:
-
-- CertificateAuthority reaches `Ready` phase
-- CA Server reaches `Running` phase (1 replica)
-- Compiler Server reaches `Running` phase (2 replicas)
-- 3 total server pods exist (1 CA + 2 compilers)
-- Operator logs contain no error-level entries
+- **single-node** -- Minimal CA+Server stack, verifies all resources reach terminal phases
+- **multi-server** -- Dedicated CA + 2 compiler replicas, verifies pod count and phases
 
 #### Agent Tests
 
-These tests run real Puppet agents against deployed stacks to verify the full Puppet lifecycle: certificate signing, catalog compilation, catalog application, and report submission.
-
-They require additional test images:
-
-- **openvox-agent** -- Puppet agent based on UBI9
-- **openvox-code** -- OCI image with Puppet environments (production, staging, broken)
-- **openvox-mock** -- Mock server for ENC, report webhook, and OpenVox DB endpoints
-
-##### Agent Basic (`tests/e2e/agent-basic/`)
-
-Single Puppet agent run against a server with autosign and code deployment:
-
-- Stack deploys with CA, Server, and code image
-- Puppet agent connects, gets certificate, compiles catalog, applies it
-- Agent Job completes successfully
-
-##### Agent Concurrent (`tests/e2e/agent-concurrent/`)
-
-Three Puppet agents running in parallel against the same server:
-
-- All three agents get certificates and apply catalogs concurrently
-- All three Jobs complete successfully
-
-##### Agent Idempotent (`tests/e2e/agent-idempotent/`)
-
-Two consecutive Puppet agent runs verifying idempotency:
-
-- First run applies changes (exit code 2 → success)
-- Second run completes successfully
-
-##### Agent Broken (`tests/e2e/agent-broken/`)
-
-Puppet agent run with a broken environment (`include nonexistent_class`):
-
-- Agent connects to server with `--environment broken`
-- Catalog compilation fails
-- Agent Job fails as expected
-
-##### Agent ENC (`tests/e2e/agent-enc/`)
-
-Puppet agent with External Node Classification via mock server:
-
-- Mock server deployed with `ENC_CLASSES=e2e_test`
-- NodeClassifier configured to query mock at `/node/{certname}`
-- Agent completes successfully
-- Mock received classification request for the agent's certname
-
-##### Agent Report (`tests/e2e/agent-report/`)
-
-Puppet agent with report forwarding to mock server:
-
-- ReportProcessors configured for generic webhook and OpenVox DB
-- Agent completes successfully
-- Mock received report via webhook endpoint
-- Mock received OpenVox DB command
-
-##### Agent Full (`tests/e2e/agent-full/`)
-
-Full integration test combining ENC, reports, and OpenVox DB:
-
-- NodeClassifier + ReportProcessors all pointing to mock server
-- Agent completes successfully
-- Mock received classification, report, and OpenVox DB command
+- **agent-basic** -- Single Puppet agent run with autosign and code deployment
+- **agent-concurrent** -- Three agents running in parallel
+- **agent-idempotent** -- Two consecutive runs verifying idempotency
+- **agent-broken** -- Agent with broken environment, verifies expected failure
+- **agent-enc** -- Agent with ENC via mock server, verifies classification request
+- **agent-report** -- Agent with report forwarding to mock server
+- **agent-full** -- Full integration: ENC + reports + OpenVox DB via mock
 
 #### Database Tests
 
-These tests verify OpenVox DB (PuppetDB) deployment with external PostgreSQL via CloudNative PG. They require the CNPG operator (`make e2e-cnpg`).
-
-##### Database CNPG (`tests/e2e/database-cnpg/`)
-
-Deploys a CNPG PostgreSQL cluster and an OpenVox stack with Database enabled:
-
-- CNPG Cluster reaches healthy state
-- CNPG credentials Secret exists
-- CertificateAuthority reaches `Ready` phase
-- Database reaches `Running` phase with 1/1 replicas ready
-- Database Deployment and Service are created
-- Operator logs contain no error-level entries
+- **database-cnpg** -- CNPG PostgreSQL cluster + OpenVox DB deployment, verifies connectivity
 
 #### Gateway Tests
 
-These tests verify Pool resources with Gateway API TLSRoute. They require Envoy Gateway (`make e2e-envoy-gateway`).
+- **pool-gateway** -- Gateway API TLSRoute with Envoy Gateway, verifies SNI routing
 
-##### Pool Gateway (`tests/e2e/pool-gateway/`)
+#### Webhook Validation Tests
 
-Deploys a Gateway and an OpenVox stack with TLSRoute enabled:
-
-- GatewayClass and Gateway created
-- CertificateAuthority reaches `Ready` phase
-- Server reaches `Running` phase
-- TLSRoute is created for the server Pool
-- DNS alt name is injected into the Server Certificate
-- CA Pool does not create a TLSRoute (no route configured)
-- Operator logs contain no error-level entries
-
-### Cleanup
-
-Each test scenario cleans up after itself (Helm uninstall + namespace deletion) via Chainsaw's `finally` block, even on failure. Scenarios use isolated namespaces so they can run in parallel.
-
-### CI Workflows
-
-Image builds and E2E tests are managed by three workflows:
-
-| Workflow | Trigger | What it does |
-|----------|---------|-------------|
-| `e2e.yaml` | Push to `develop`, `workflow_dispatch` | Builds all 6 images and pushes to ghcr.io (tagged with branch name or optional `image_tag` input) |
-| `ci-test-images.yaml` | Push to `main` (path filter) | Builds agent, code, mock on main |
-| `cleanup.yaml` | `workflow_dispatch` | Deletes E2E image versions |
-
-The typical workflow for the develop branch:
-
-```bash
-# Images are auto-built on every push to develop
-export IMAGE_TAG=develop
-make e2e
-```
-
-For feature branches:
-
-```bash
-# 1. Build all images for the current branch
-gh workflow run e2e.yaml --ref $(git branch --show-current)
-
-# 2. Wait for the build to finish
-gh run watch $(gh run list --workflow=e2e.yaml --limit=1 --json databaseId -q '.[0].databaseId')
-
-# 3. Run E2E tests locally against a cluster that can pull from ghcr.io
-export IMAGE_TAG=$(git branch --show-current)
-make e2e
-
-# 4. Clean up E2E images after merging
-gh workflow run cleanup.yaml -f dry_run=false
-```
+- **webhook-validation-server** -- Server ref validation (configRef, certificateRef, poolRef)
+- **webhook-validation-config** -- Config ref validation (authorityRef, databaseRef/serverUrls mutual exclusion)
+- **webhook-validation-database** -- Database field validation (certificateRef, host, credentialsSecretRef, sslMode)
+- **webhook-smoke** -- ValidatingWebhookConfiguration exists, Service has endpoints, smoke create/reject
 
 ### Writing New Tests
 
@@ -301,7 +267,7 @@ tests/e2e/
     +-- chainsaw-test.yaml
 ```
 
-Each test file follows the Chainsaw v1alpha1 Test spec. Key patterns:
+Key patterns:
 
 - Use `spec.namespace` to set an isolated namespace
 - Use `script` operations for Helm install/uninstall
@@ -309,14 +275,6 @@ Each test file follows the Chainsaw v1alpha1 Test spec. Key patterns:
 - Place cleanup in the `finally` block of the last step
 - Reference chart paths via `$(git rev-parse --show-toplevel)` for portability
 
-Refer to the [Chainsaw documentation](https://kyverno.github.io/chainsaw/) for the full API reference.
+Add the test to the appropriate group in the `Makefile` (`e2e-group-*` target).
 
-## CI
-
-All CI checks can be run locally:
-
-```bash
-make ci
-```
-
-This runs lint, vet, test, manifest drift check, vulncheck, and Helm lint. E2E tests are not part of `make ci` since they require a running cluster.
+See the [Chainsaw documentation](https://kyverno.github.io/chainsaw/) for the full API reference.

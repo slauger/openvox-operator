@@ -69,9 +69,9 @@ func TestRenderENCConfig(t *testing.T) {
 
 			// Use the provided NC or default
 			nc := tt.nc
-			if nc.ObjectMeta.Name == "" {
-				nc.ObjectMeta.Name = "enc"
-				nc.ObjectMeta.Namespace = testNamespace
+			if nc.Name == "" {
+				nc.Name = "enc"
+				nc.Namespace = testNamespace
 			}
 
 			out, err := r.renderENCConfig(testCtx(), cfg, nc)

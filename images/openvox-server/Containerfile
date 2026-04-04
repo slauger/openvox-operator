@@ -14,9 +14,6 @@ ARG OPENVOXSERVER_VERSION=8.12.1
 ARG OPENVOXDB_TERMINI_VERSION=8.12.1
 # renovate: datasource=github-releases depName=OpenVoxProject/openvox
 ARG OPENVOX_VERSION=8.25.0
-# renovate: datasource=git-refs depName=https://github.com/OpenVoxProject/jvm-ssl-utils versioning=git
-ARG JVM_SSL_UTILS_VERSION=ad7d28f8c3413c199242a318fb85d10a1fea4b70
-
 ################################################################################
 # Stage: base — JRE + minimal runtime deps (no Ruby)
 ################################################################################
@@ -151,7 +148,8 @@ RUN printf '%s\n' \
         'INSTALL_DIR="/opt/puppetlabs/server/apps/puppetserver"' \
         'CONFIG="/etc/puppetlabs/puppetserver/conf.d"' \
         > /etc/sysconfig/puppetserver \
-    && puppetserver gem install --no-document openvox -v "${OPENVOX_VERSION}"
+    && puppetserver gem install --no-document openvox -v "${OPENVOX_VERSION}" \
+    && puppetserver gem install --no-document jruby-openssl -v 0.15.7
 
 # Patch openvoxserver-ca to skip cadir symlink and chown (fails rootless)
 RUN find / -path '*/openvoxserver-ca-*/lib/puppetserver/ca/action/setup.rb' \
@@ -159,22 +157,6 @@ RUN find / -path '*/openvoxserver-ca-*/lib/puppetserver/ca/action/setup.rb' \
     ; find / -path '*/openvoxserver-ca-*/lib/puppetserver/ca/utils/file_system.rb' \
          -exec sed -i 's/FileUtils\.chown/# FileUtils.chown/' {} + 2>/dev/null \
     ; true
-
-################################################################################
-# Stage: jvm-ssl-utils — patch and build jvm-ssl-utils from upstream
-################################################################################
-FROM docker.io/library/clojure:temurin-17-lein AS jvm-ssl-utils
-
-ARG JVM_SSL_UTILS_VERSION
-
-RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /src
-RUN git clone https://github.com/OpenVoxProject/jvm-ssl-utils.git . \
-    && git checkout ${JVM_SSL_UTILS_VERSION}
-COPY images/openvox-server/patches/jvm-ssl-utils-nscomment.patch /tmp/
-RUN git apply /tmp/jvm-ssl-utils-nscomment.patch \
-    && lein jar
 
 ################################################################################
 # Stage: autosign — compile the openvox-autosign Go binary
@@ -239,7 +221,6 @@ COPY images/openvox-server/puppet.conf              /etc/puppetlabs/puppet/puppe
 COPY images/openvox-server/entrypoint.sh /entrypoint.sh
 COPY images/openvox-server/healthcheck.sh /healthcheck.sh
 COPY images/openvox-server/cli-ca.sh /opt/puppetlabs/server/apps/puppetserver/cli/apps/ca
-COPY --from=jvm-ssl-utils /src/target/ssl-utils-*.jar /opt/puppetlabs/server/apps/puppetserver/jvm-ssl-utils-patch.jar
 COPY --from=autosign /openvox-autosign /usr/local/bin/openvox-autosign
 COPY --from=enc /openvox-enc /usr/local/bin/openvox-enc
 

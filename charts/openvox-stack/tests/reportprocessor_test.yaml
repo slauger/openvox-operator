@@ -1,0 +1,88 @@
+suite: ReportProcessor
+templates:
+  - templates/reportprocessor.yaml
+tests:
+  - it: should not render when reportProcessors is empty (default)
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render a ReportProcessor
+    set:
+      reportProcessors:
+        - name: my-webhook
+          url: http://my-webhook:8080/reports
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ReportProcessor
+      - equal:
+          path: metadata.name
+          value: my-webhook
+      - equal:
+          path: spec.configRef
+          value: RELEASE-NAME
+      - equal:
+          path: spec.url
+          value: http://my-webhook:8080/reports
+
+  - it: should render with processor field
+    set:
+      reportProcessors:
+        - name: my-puppetdb
+          url: http://my-puppetdb:8080/pdb/cmd/v1
+          processor: puppetdb
+    asserts:
+      - equal:
+          path: spec.processor
+          value: puppetdb
+
+  - it: should render multiple ReportProcessors
+    set:
+      reportProcessors:
+        - name: webhook
+          url: http://webhook:8080/reports
+        - name: puppetdb
+          url: http://puppetdb:8080/pdb/cmd/v1
+          processor: puppetdb
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: should use auto-generated name when name is not set
+    set:
+      reportProcessors:
+        - url: http://webhook:8080/reports
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-report-processor-0
+
+  - it: should render headers
+    set:
+      reportProcessors:
+        - name: my-webhook
+          url: http://webhook:8080/reports
+          headers:
+            - name: Authorization
+              value: "Bearer my-token"
+    asserts:
+      - equal:
+          path: spec.headers[0].name
+          value: Authorization
+      - equal:
+          path: spec.headers[0].value
+          value: "Bearer my-token"
+
+  - it: should render auth with mtls
+    set:
+      reportProcessors:
+        - name: my-webhook
+          url: http://webhook:8080/reports
+          auth:
+            mtls: true
+    asserts:
+      - equal:
+          path: spec.auth.mtls
+          value: true

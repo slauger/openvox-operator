@@ -1,0 +1,108 @@
+suite: Pools
+templates:
+  - templates/pools.yaml
+tests:
+  - it: should render 2 Pools by default
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: should render pool with default service settings
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: Pool
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-ca
+      - equal:
+          path: spec.service.type
+          value: ClusterIP
+      - equal:
+          path: spec.service.port
+          value: 8140
+
+  - it: should not render route when not configured
+    documentIndex: 0
+    asserts:
+      - isNull:
+          path: spec.route
+
+  - it: should render route when enabled with gateway
+    set:
+      gateway:
+        name: my-gateway
+      pools:
+        - name: ca
+          service:
+            type: ClusterIP
+            port: 8140
+          route:
+            enabled: true
+            hostname: puppet.example.com
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.route.enabled
+          value: true
+      - equal:
+          path: spec.route.hostname
+          value: puppet.example.com
+      - equal:
+          path: spec.route.gatewayRef.name
+          value: my-gateway
+
+  - it: should propagate gateway sectionName
+    set:
+      gateway:
+        name: my-gateway
+        sectionName: https-listener
+      pools:
+        - name: ca
+          service:
+            type: ClusterIP
+            port: 8140
+          route:
+            enabled: true
+            hostname: puppet.example.com
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.route.gatewayRef.sectionName
+          value: https-listener
+
+  - it: should not set sectionName when gateway.sectionName is empty
+    set:
+      gateway:
+        name: my-gateway
+      pools:
+        - name: ca
+          service:
+            type: ClusterIP
+            port: 8140
+          route:
+            enabled: true
+            hostname: puppet.example.com
+    documentIndex: 0
+    asserts:
+      - isNull:
+          path: spec.route.gatewayRef.sectionName
+
+  - it: should set injectDNSAltName when enabled
+    set:
+      gateway:
+        name: my-gateway
+      pools:
+        - name: ca
+          service:
+            type: ClusterIP
+            port: 8140
+          route:
+            enabled: true
+            hostname: puppet.example.com
+            injectDNSAltName: true
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.route.injectDNSAltName
+          value: true

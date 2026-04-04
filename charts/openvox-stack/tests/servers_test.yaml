@@ -1,0 +1,87 @@
+suite: Servers
+templates:
+  - templates/servers.yaml
+tests:
+  - it: should render 2 Servers by default
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: should render ca server with ca flag true
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: Server
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-ca
+      - equal:
+          path: spec.ca
+          value: true
+      - equal:
+          path: spec.server
+          value: true
+      - equal:
+          path: spec.replicas
+          value: 1
+
+  - it: should set configRef and certificateRef
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.configRef
+          value: RELEASE-NAME
+      - equal:
+          path: spec.certificateRef
+          value: RELEASE-NAME-ca
+
+  - it: should expand poolRefs to full names
+    documentIndex: 0
+    asserts:
+      - contains:
+          path: spec.poolRefs
+          content: RELEASE-NAME-ca
+      - contains:
+          path: spec.poolRefs
+          content: RELEASE-NAME-server
+
+  - it: should render second server with ca false
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-server
+      - equal:
+          path: spec.ca
+          value: false
+      - equal:
+          path: spec.replicas
+          value: 2
+
+  - it: should propagate resources
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.resources.requests.cpu
+          value: 500m
+      - equal:
+          path: spec.resources.limits.memory
+          value: 2Gi
+
+  - it: should render single server
+    set:
+      servers:
+        - name: standalone
+          ca: true
+          server: true
+          certificate:
+            certname: puppet
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-standalone
+      - equal:
+          path: spec.replicas
+          value: 1

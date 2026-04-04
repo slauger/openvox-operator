@@ -1,0 +1,95 @@
+suite: CNPG Cluster
+templates:
+  - templates/cluster.yaml
+tests:
+  - it: should render a Cluster with default values
+    asserts:
+      - isKind:
+          of: Cluster
+      - isAPIVersion:
+          of: postgresql.cnpg.io/v1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME
+      - equal:
+          path: spec.instances
+          value: 1
+      - equal:
+          path: spec.storage.size
+          value: 1Gi
+      - isNull:
+          path: spec.storage.storageClassName
+      - equal:
+          path: spec.bootstrap.initdb.database
+          value: openvoxdb
+      - equal:
+          path: spec.bootstrap.initdb.owner
+          value: app
+
+  - it: should always include pg_trgm extension
+    asserts:
+      - contains:
+          path: spec.bootstrap.initdb.postInitApplicationSQL
+          content: CREATE EXTENSION IF NOT EXISTS pg_trgm
+
+  - it: should override instance count
+    set:
+      instances: 3
+    asserts:
+      - equal:
+          path: spec.instances
+          value: 3
+
+  - it: should set storageClassName when storageClass is provided
+    set:
+      storage:
+        size: 5Gi
+        storageClass: premium-rwo
+    asserts:
+      - equal:
+          path: spec.storage.storageClassName
+          value: premium-rwo
+      - equal:
+          path: spec.storage.size
+          value: 5Gi
+
+  - it: should not set storageClassName when storageClass is empty
+    asserts:
+      - isNull:
+          path: spec.storage.storageClassName
+
+  - it: should append postInitSQL after pg_trgm
+    set:
+      postInitSQL:
+        - "CREATE INDEX idx_reports ON reports (certname)"
+    asserts:
+      - equal:
+          path: spec.bootstrap.initdb.postInitApplicationSQL[0]
+          value: CREATE EXTENSION IF NOT EXISTS pg_trgm
+      - equal:
+          path: spec.bootstrap.initdb.postInitApplicationSQL[1]
+          value: "CREATE INDEX idx_reports ON reports (certname)"
+
+  - it: should include only pg_trgm with empty postInitSQL
+    set:
+      postInitSQL: []
+    asserts:
+      - lengthEqual:
+          path: spec.bootstrap.initdb.postInitApplicationSQL
+          count: 1
+
+  - it: should use custom database name
+    set:
+      database: customdb
+    asserts:
+      - equal:
+          path: spec.bootstrap.initdb.database
+          value: customdb
+
+  - it: should use custom name override
+    set:
+      name: my-pg-cluster
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-pg-cluster

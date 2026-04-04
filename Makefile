@@ -136,6 +136,12 @@ helm-lint: ## Lint the Helm chart.
 	helm lint charts/openvox-stack
 	helm lint charts/openvox-db-postgres
 
+.PHONY: helm-unittest
+helm-unittest: ## Run helm-unittest for all charts.
+	helm unittest charts/openvox-operator
+	helm unittest charts/openvox-stack
+	helm unittest charts/openvox-db-postgres
+
 .PHONY: helm-template
 helm-template: ## Render Helm chart templates locally.
 	helm template openvox-operator charts/openvox-operator
@@ -161,7 +167,7 @@ check-manifests: manifests generate ## Check for CRD and deepcopy drift.
 	fi
 
 .PHONY: ci
-ci: lint vet test check-manifests vulncheck helm-lint ## Run all CI checks locally.
+ci: lint vet test check-manifests vulncheck helm-lint helm-unittest ## Run all CI checks locally.
 	@echo "All CI checks passed."
 
 ##@ E2E

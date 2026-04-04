@@ -1,0 +1,42 @@
+suite: ClusterRoleBinding
+templates:
+  - templates/clusterrolebinding.yaml
+tests:
+  - it: should render a ClusterRoleBinding in cluster mode (default)
+    asserts:
+      - isKind:
+          of: ClusterRoleBinding
+      - equal:
+          path: roleRef.kind
+          value: ClusterRole
+      - equal:
+          path: roleRef.name
+          value: RELEASE-NAME-openvox-operator
+      - isNull:
+          path: metadata.namespace
+
+  - it: should render a RoleBinding in namespace mode
+    set:
+      scope:
+        mode: namespace
+    asserts:
+      - isKind:
+          of: RoleBinding
+      - equal:
+          path: roleRef.kind
+          value: Role
+      - equal:
+          path: metadata.namespace
+          value: NAMESPACE
+
+  - it: should reference the correct ServiceAccount
+    asserts:
+      - equal:
+          path: subjects[0].kind
+          value: ServiceAccount
+      - equal:
+          path: subjects[0].name
+          value: RELEASE-NAME-openvox-operator
+      - equal:
+          path: subjects[0].namespace
+          value: NAMESPACE

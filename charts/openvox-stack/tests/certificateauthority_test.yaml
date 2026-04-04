@@ -1,0 +1,53 @@
+suite: CertificateAuthority
+templates:
+  - templates/certificateauthority.yaml
+tests:
+  - it: should render a CertificateAuthority with default values
+    asserts:
+      - isKind:
+          of: CertificateAuthority
+      - isAPIVersion:
+          of: openvox.voxpupuli.org/v1alpha1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-ca
+      - equal:
+          path: spec.ttl
+          value: 5y
+      - equal:
+          path: spec.storage.size
+          value: 1Gi
+
+  - it: should propagate custom ttl
+    set:
+      ca:
+        ttl: 10y
+    asserts:
+      - equal:
+          path: spec.ttl
+          value: 10y
+
+  - it: should set storageClass when provided
+    set:
+      ca:
+        storage:
+          size: 5Gi
+          storageClass: fast-ssd
+    asserts:
+      - equal:
+          path: spec.storage.storageClass
+          value: fast-ssd
+
+  - it: should not set storageClass when empty (default)
+    asserts:
+      - isNull:
+          path: spec.storage.storageClass
+
+  - it: should use custom name
+    set:
+      ca:
+        name: my-custom-ca
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-custom-ca

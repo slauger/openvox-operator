@@ -11,14 +11,12 @@ spec:
     repository: {{ .Values.config.image.repository }}
     tag: {{ .Values.config.image.tag | quote }}
     pullPolicy: {{ .Values.config.image.pullPolicy }}
-  {{- if or .Values.config.puppetdb.serverUrls (and .Values.database.enabled .Values.database.name) }}
+  {{- if .Values.config.puppetdb.serverUrls }}
   puppetdb:
     serverUrls:
-      {{- if .Values.config.puppetdb.serverUrls }}
       {{- toYaml .Values.config.puppetdb.serverUrls | nindent 6 }}
-      {{- else }}
-      - https://{{ .Values.database.name }}:8081
-      {{- end }}
+  {{- else if and .Values.database.enabled .Values.database.name }}
+  databaseRef: {{ .Values.database.name }}
   {{- end }}
   {{- if .Values.config.readOnlyRootFilesystem }}
   readOnlyRootFilesystem: true

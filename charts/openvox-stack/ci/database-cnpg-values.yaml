@@ -13,11 +13,7 @@ database:
     sslMode: disable
 
 config:
-  puppetdb:
-    serverUrls:
-      - https://openvox-stack-db-puppetdb:8081
   puppet:
-    storeconfigs: true
     reports: store,puppetdb
 
 servers:

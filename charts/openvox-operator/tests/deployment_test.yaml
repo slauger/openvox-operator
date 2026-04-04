@@ -1,0 +1,111 @@
+suite: Deployment
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: should render a Deployment with default values
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-openvox-operator
+      - equal:
+          path: spec.replicas
+          value: 1
+
+  - it: should use tag-based image by default
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/slauger/openvox-operator:latest"
+
+  - it: should use digest-based image when digest is set
+    set:
+      image:
+        repository: ghcr.io/slauger/openvox-operator
+        digest: sha256:abc123def456
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/slauger/openvox-operator@sha256:abc123def456"
+
+  - it: should enable leader election by default
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --leader-elect
+
+  - it: should not have any args when leaderElect is false
+    set:
+      leaderElect: false
+    asserts:
+      - isEmpty:
+          path: spec.template.spec.containers[0].args
+
+  - it: should not have webhook port or args when webhook is disabled
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: webhook
+          any: true
+      - isNull:
+          path: spec.template.spec.containers[0].volumeMounts
+      - isNull:
+          path: spec.template.spec.volumes
+
+  - it: should have webhook port and args when webhook is enabled
+    set:
+      webhook:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --enable-webhooks
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: webhook
+            containerPort: 9443
+            protocol: TCP
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].name
+          value: webhook-certs
+      - equal:
+          path: spec.template.spec.volumes[0].name
+          value: webhook-certs
+
+  - it: should not have watch-namespace arg in cluster mode
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --watch-namespace=NAMESPACE
+          any: true
+
+  - it: should have watch-namespace arg in namespace mode
+    set:
+      scope:
+        mode: namespace
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --watch-namespace=NAMESPACE
+
+  - it: should use custom watchNamespace in namespace mode
+    set:
+      scope:
+        mode: namespace
+        watchNamespace: custom-ns
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --watch-namespace=custom-ns
+
+  - it: should propagate resources
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 128Mi

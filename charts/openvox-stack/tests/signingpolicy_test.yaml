@@ -1,0 +1,102 @@
+suite: SigningPolicy
+templates:
+  - templates/signingpolicy.yaml
+tests:
+  - it: should not render when signingPolicies is empty (default)
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render a SigningPolicy with any true
+    set:
+      signingPolicies:
+        - name: autosign-any
+          any: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: SigningPolicy
+      - equal:
+          path: metadata.name
+          value: autosign-any
+      - equal:
+          path: spec.certificateAuthorityRef
+          value: RELEASE-NAME-ca
+      - equal:
+          path: spec.any
+          value: true
+
+  - it: should render a SigningPolicy with pattern
+    set:
+      signingPolicies:
+        - name: domain-only
+          pattern:
+            allow:
+              - "*.example.com"
+              - "*.test.local"
+    documentIndex: 0
+    asserts:
+      - contains:
+          path: spec.pattern.allow
+          content: "*.example.com"
+      - contains:
+          path: spec.pattern.allow
+          content: "*.test.local"
+
+  - it: should render a SigningPolicy with csrAttributes
+    set:
+      signingPolicies:
+        - name: preshared-key
+          csrAttributes:
+            - name: pp_preshared_key
+              value: "my-secret-token"
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.csrAttributes[0].name
+          value: pp_preshared_key
+      - equal:
+          path: spec.csrAttributes[0].value
+          value: "my-secret-token"
+
+  - it: should render csrAttributes with valueFrom
+    set:
+      signingPolicies:
+        - name: secret-key
+          csrAttributes:
+            - name: pp_preshared_key
+              valueFrom:
+                secretKeyRef:
+                  name: signing-secret
+                  key: psk
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.csrAttributes[0].valueFrom.secretKeyRef.name
+          value: signing-secret
+      - equal:
+          path: spec.csrAttributes[0].valueFrom.secretKeyRef.key
+          value: psk
+
+  - it: should render multiple SigningPolicies
+    set:
+      signingPolicies:
+        - name: policy-a
+          any: true
+        - name: policy-b
+          pattern:
+            allow:
+              - "*.example.com"
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: should use auto-generated name when name is not set
+    set:
+      signingPolicies:
+        - any: true
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-signing-policy-0

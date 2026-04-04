@@ -1,0 +1,93 @@
+suite: Webhook cert-manager resources
+templates:
+  - templates/webhook-certmanager.yaml
+tests:
+  - it: should not render when webhook is disabled
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render 4 resources when webhook is enabled
+    set:
+      webhook:
+        enabled: true
+    asserts:
+      - hasDocuments:
+          count: 4
+
+  - it: should render a self-signed Issuer as first document
+    set:
+      webhook:
+        enabled: true
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: Issuer
+      - isAPIVersion:
+          of: cert-manager.io/v1
+      - exists:
+          path: spec.selfSigned
+
+  - it: should render a CA Certificate as second document
+    set:
+      webhook:
+        enabled: true
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Certificate
+      - equal:
+          path: spec.isCA
+          value: true
+      - equal:
+          path: spec.duration
+          value: 87600h
+
+  - it: should render a CA Issuer as third document
+    set:
+      webhook:
+        enabled: true
+    documentIndex: 2
+    asserts:
+      - isKind:
+          of: Issuer
+      - equal:
+          path: spec.ca.secretName
+          value: RELEASE-NAME-openvox-operator-ca-cert
+
+  - it: should render a webhook Certificate as fourth document
+    set:
+      webhook:
+        enabled: true
+    documentIndex: 3
+    asserts:
+      - isKind:
+          of: Certificate
+      - equal:
+          path: spec.secretName
+          value: RELEASE-NAME-openvox-operator-webhook-cert
+      - equal:
+          path: spec.duration
+          value: 8760h
+      - equal:
+          path: spec.renewBefore
+          value: 720h
+      - lengthEqual:
+          path: spec.dnsNames
+          count: 4
+
+  - it: should use custom cert-manager duration and renewBefore
+    set:
+      webhook:
+        enabled: true
+        certManager:
+          duration: 17520h
+          renewBefore: 1440h
+    documentIndex: 3
+    asserts:
+      - equal:
+          path: spec.duration
+          value: 17520h
+      - equal:
+          path: spec.renewBefore
+          value: 1440h

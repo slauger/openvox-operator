@@ -1,0 +1,121 @@
+suite: Config
+templates:
+  - templates/config.yaml
+tests:
+  - it: should render a Config with default values
+    asserts:
+      - isKind:
+          of: Config
+      - isAPIVersion:
+          of: openvox.voxpupuli.org/v1alpha1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME
+      - equal:
+          path: spec.authorityRef
+          value: RELEASE-NAME-ca
+      - equal:
+          path: spec.image.repository
+          value: ghcr.io/slauger/openvox-server
+
+  - it: should set readOnlyRootFilesystem when true
+    set:
+      config:
+        readOnlyRootFilesystem: true
+    asserts:
+      - equal:
+          path: spec.readOnlyRootFilesystem
+          value: true
+
+  - it: should not set readOnlyRootFilesystem when false (default)
+    asserts:
+      - isNull:
+          path: spec.readOnlyRootFilesystem
+
+  - it: should use databaseRef when database is enabled and no serverUrls
+    set:
+      database:
+        enabled: true
+        name: my-puppetdb
+    asserts:
+      - equal:
+          path: spec.databaseRef
+          value: my-puppetdb
+      - isNull:
+          path: spec.puppetdb
+
+  - it: should use puppetdb.serverUrls when set explicitly
+    set:
+      config:
+        puppetdb:
+          serverUrls:
+            - https://puppetdb:8081
+    asserts:
+      - equal:
+          path: spec.puppetdb.serverUrls[0]
+          value: https://puppetdb:8081
+      - isNull:
+          path: spec.databaseRef
+
+  - it: should prefer puppetdb.serverUrls over databaseRef
+    set:
+      database:
+        enabled: true
+        name: my-puppetdb
+      config:
+        puppetdb:
+          serverUrls:
+            - https://puppetdb:8081
+    asserts:
+      - isNotEmpty:
+          path: spec.puppetdb.serverUrls
+      - isNull:
+          path: spec.databaseRef
+
+  - it: should force storeconfigs true when database is enabled
+    set:
+      database:
+        enabled: true
+        name: my-puppetdb
+      config:
+        puppet:
+          storeconfigs: false
+    asserts:
+      - equal:
+          path: spec.puppet.storeconfigs
+          value: true
+
+  - it: should keep storeconfigs false when database is disabled
+    asserts:
+      - equal:
+          path: spec.puppet.storeconfigs
+          value: false
+
+  - it: should include nodeClassifierRef when nodeClassifier is enabled
+    set:
+      nodeClassifier:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.nodeClassifierRef
+          value: RELEASE-NAME-enc
+
+  - it: should not include nodeClassifierRef when nodeClassifier is disabled
+    asserts:
+      - isNull:
+          path: spec.nodeClassifierRef
+
+  - it: should render code section when code image is set
+    set:
+      config:
+        code:
+          image: ghcr.io/slauger/openvox-code:latest
+    asserts:
+      - equal:
+          path: spec.code.image
+          value: ghcr.io/slauger/openvox-code:latest
+
+  - it: should not render code section when image and claimName are empty
+    asserts:
+      - isNull:
+          path: spec.code

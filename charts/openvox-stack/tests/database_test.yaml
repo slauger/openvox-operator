@@ -1,0 +1,181 @@
+suite: Database
+templates:
+  - templates/database.yaml
+tests:
+  - it: should not render when database is disabled (default)
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should fail when database.name is missing
+    set:
+      database:
+        enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "database.name is required when database.enabled is true"
+
+  - it: should fail when database.certificate.certname is missing
+    set:
+      database:
+        enabled: true
+        name: my-puppetdb
+    asserts:
+      - failedTemplate:
+          errorMessage: "database.certificate.certname is required when database.enabled is true"
+
+  - it: should fail when database.postgres.host is missing
+    set:
+      database:
+        enabled: true
+        name: my-puppetdb
+        certificate:
+          certname: puppetdb
+    asserts:
+      - failedTemplate:
+          errorMessage: "database.postgres.host is required when database.enabled is true"
+
+  - it: should fail when database.postgres.credentialsSecretRef is missing
+    set:
+      database:
+        enabled: true
+        name: my-puppetdb
+        certificate:
+          certname: puppetdb
+        postgres:
+          host: pg-cluster-rw.postgres.svc
+    asserts:
+      - failedTemplate:
+          errorMessage: "database.postgres.credentialsSecretRef is required when database.enabled is true"
+
+  - it: should render Certificate and Database when all required fields are set
+    set:
+      database:
+        enabled: true
+        name: my-puppetdb
+        certificate:
+          certname: puppetdb
+        postgres:
+          host: pg-cluster-rw.postgres.svc
+          credentialsSecretRef: pg-credentials
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: should render Certificate as first document
+    set:
+      database:
+        enabled: true
+        name: my-puppetdb
+        certificate:
+          certname: puppetdb
+        postgres:
+          host: pg-cluster-rw.postgres.svc
+          credentialsSecretRef: pg-credentials
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: Certificate
+      - equal:
+          path: metadata.name
+          value: my-puppetdb
+      - equal:
+          path: spec.authorityRef
+          value: RELEASE-NAME-ca
+      - equal:
+          path: spec.certname
+          value: puppetdb
+
+  - it: should render Database as second document
+    set:
+      database:
+        enabled: true
+        name: my-puppetdb
+        certificate:
+          certname: puppetdb
+        postgres:
+          host: pg-cluster-rw.postgres.svc
+          credentialsSecretRef: pg-credentials
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Database
+      - equal:
+          path: metadata.name
+          value: my-puppetdb
+      - equal:
+          path: spec.certificateRef
+          value: my-puppetdb
+      - equal:
+          path: spec.postgres.host
+          value: pg-cluster-rw.postgres.svc
+      - equal:
+          path: spec.postgres.port
+          value: 5432
+      - equal:
+          path: spec.postgres.database
+          value: openvoxdb
+      - equal:
+          path: spec.postgres.credentialsSecretRef
+          value: pg-credentials
+      - equal:
+          path: spec.postgres.sslMode
+          value: require
+
+  - it: should propagate javaArgs
+    set:
+      database:
+        enabled: true
+        name: my-puppetdb
+        certificate:
+          certname: puppetdb
+        postgres:
+          host: pg-cluster-rw.postgres.svc
+          credentialsSecretRef: pg-credentials
+        javaArgs: "-Xmx512m -Xms256m"
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.javaArgs
+          value: "-Xmx512m -Xms256m"
+
+  - it: should propagate resources
+    set:
+      database:
+        enabled: true
+        name: my-puppetdb
+        certificate:
+          certname: puppetdb
+        postgres:
+          host: pg-cluster-rw.postgres.svc
+          credentialsSecretRef: pg-credentials
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.resources.requests.cpu
+          value: 500m
+      - equal:
+          path: spec.resources.requests.memory
+          value: 1Gi
+
+  - it: should render dnsAltNames on Certificate when set
+    set:
+      database:
+        enabled: true
+        name: my-puppetdb
+        certificate:
+          certname: puppetdb
+          dnsAltNames:
+            - puppetdb.example.com
+        postgres:
+          host: pg-cluster-rw.postgres.svc
+          credentialsSecretRef: pg-credentials
+    documentIndex: 0
+    asserts:
+      - contains:
+          path: spec.dnsAltNames
+          content: puppetdb.example.com

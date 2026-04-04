@@ -19,8 +19,14 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v5
 
+      - name: Install helm-unittest plugin
+        run: helm plugin install --verify=false https://github.com/helm-unittest/helm-unittest
+
       - name: Helm lint
         run: helm lint charts/${{ matrix.chart }}
 
       - name: Helm template
         run: helm template test charts/${{ matrix.chart }}
+
+      - name: Helm unittest
+        run: helm unittest charts/${{ matrix.chart }}

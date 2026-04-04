@@ -58,6 +58,7 @@ jobs:
       dockerfile: images/openvox-operator/Containerfile
       context: '.'
       push: true
+      latest: true
       image_tag: ${{ needs.semantic-release.outputs.new-release-version }}
 
   openvox-server:
@@ -74,6 +75,7 @@ jobs:
       dockerfile: images/openvox-server/Containerfile
       context: '.'
       push: true
+      latest: true
       image_tag: ${{ needs.semantic-release.outputs.new-release-version }}
 
   openvox-db:
@@ -90,6 +92,7 @@ jobs:
       dockerfile: images/openvox-db/Containerfile
       context: '.'
       push: true
+      latest: true
       image_tag: ${{ needs.semantic-release.outputs.new-release-version }}
 
   helm-charts:

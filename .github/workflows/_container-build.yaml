@@ -31,6 +31,11 @@ on:
         required: false
         type: string
         default: ''
+      latest:
+        description: 'Also tag the image as :latest'
+        required: false
+        type: boolean
+        default: false
       sign:
         description: 'Sign images with cosign keyless signing'
         required: false
@@ -179,7 +184,7 @@ jobs:
 
           docker buildx imagetools create -t "${IMAGE}:${VERSION}" ${SOURCES}
 
-          if [[ "${{ inputs.push }}" == "true" ]]; then
+          if [[ "${{ inputs.latest }}" == "true" ]]; then
             docker buildx imagetools create -t "${IMAGE}:latest" ${SOURCES}
           fi
 

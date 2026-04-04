@@ -1,0 +1,88 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: webhook-validation-config
+spec:
+  namespace: e2e-webhook-val-config
+  steps:
+    - name: Create prerequisites
+      try:
+        - apply:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: CertificateAuthority
+              metadata:
+                name: wh-config-ca
+              spec:
+                storage:
+                  size: 1Gi
+
+    - name: Valid Config is accepted
+      try:
+        - apply:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Config
+              metadata:
+                name: wh-config-valid
+              spec:
+                image:
+                  repository: ghcr.io/slauger/openvox-server
+                  tag: latest
+                authorityRef: wh-config-ca
+
+    - name: Config with non-existent authorityRef is rejected
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              if kubectl apply -f - <<'EOF' 2>&1
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Config
+              metadata:
+                name: wh-config-bad-ca
+                namespace: e2e-webhook-val-config
+              spec:
+                image:
+                  repository: ghcr.io/slauger/openvox-server
+                  tag: latest
+                authorityRef: does-not-exist
+              EOF
+              then
+                echo "ERROR: Config with non-existent authorityRef should have been rejected"
+                exit 1
+              fi
+              echo "Confirmed: Config with non-existent authorityRef was rejected."
+
+    - name: Config with databaseRef and puppetdb.serverUrls is rejected
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              if kubectl apply -f - <<'EOF' 2>&1
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Config
+              metadata:
+                name: wh-config-mutual-excl
+                namespace: e2e-webhook-val-config
+              spec:
+                image:
+                  repository: ghcr.io/slauger/openvox-server
+                  tag: latest
+                databaseRef: some-db
+                puppetdb:
+                  serverUrls:
+                    - https://puppetdb:8081
+              EOF
+              then
+                echo "ERROR: Config with databaseRef + puppetdb.serverUrls should have been rejected"
+                exit 1
+              fi
+              echo "Confirmed: Config with databaseRef + puppetdb.serverUrls was rejected."
+      finally:
+        - script:
+            timeout: 2m
+            content: |
+              kubectl delete config --all -n e2e-webhook-val-config --ignore-not-found 2>/dev/null || true
+              kubectl delete certificateauthority --all -n e2e-webhook-val-config --ignore-not-found 2>/dev/null || true
+              kubectl delete namespace e2e-webhook-val-config --ignore-not-found 2>/dev/null || true

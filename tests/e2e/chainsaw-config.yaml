@@ -3,6 +3,8 @@ kind: Configuration
 metadata:
   name: openvox-e2e
 spec:
+  skipDelete: true
+  parallel: 1
   timeouts:
     apply: 1m
     assert: 5m

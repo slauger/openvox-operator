@@ -1,0 +1,74 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: webhook-smoke
+spec:
+  namespace: e2e-webhook-smoke
+  steps:
+    - name: ValidatingWebhookConfiguration exists
+      try:
+        - assert:
+            resource:
+              apiVersion: admissionregistration.k8s.io/v1
+              kind: ValidatingWebhookConfiguration
+              metadata:
+                name: openvox-operator-validating-webhook-configuration
+
+    - name: Webhook Service exists and has Endpoints
+      try:
+        - assert:
+            resource:
+              apiVersion: v1
+              kind: Service
+              metadata:
+                name: openvox-operator-webhook
+                namespace: openvox-system
+        - script:
+            timeout: 30s
+            content: |
+              ENDPOINTS=$(kubectl get endpoints openvox-operator-webhook \
+                -n openvox-system -o jsonpath='{.subsets[0].addresses}')
+              if [ -z "${ENDPOINTS}" ] || [ "${ENDPOINTS}" = "null" ]; then
+                echo "ERROR: Webhook Service has no endpoints"
+                exit 1
+              fi
+              echo "Webhook Service has endpoints: ${ENDPOINTS}"
+
+    - name: Valid CertificateAuthority is accepted
+      try:
+        - apply:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: CertificateAuthority
+              metadata:
+                name: wh-smoke-ca
+              spec:
+                storage:
+                  size: 1Gi
+
+    - name: Invalid Server is rejected (smoke check)
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              if kubectl apply -f - <<'EOF' 2>&1
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: wh-smoke-bad-server
+                namespace: e2e-webhook-smoke
+              spec:
+                configRef: does-not-exist
+                certificateRef: does-not-exist
+              EOF
+              then
+                echo "ERROR: Invalid Server should have been rejected"
+                exit 1
+              fi
+              echo "Confirmed: Invalid Server was rejected by webhook."
+      finally:
+        - script:
+            timeout: 2m
+            content: |
+              kubectl delete certificateauthority --all -n e2e-webhook-smoke --ignore-not-found 2>/dev/null || true
+              kubectl delete namespace e2e-webhook-smoke --ignore-not-found 2>/dev/null || true

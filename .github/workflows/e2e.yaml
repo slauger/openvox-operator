@@ -238,3 +238,14 @@ jobs:
 
       - name: Run webhooks-cm test group
         run: make e2e-group-webhooks-cm IMAGE_TAG=${{ env.IMAGE_TAG }}
+
+  # Phase 3: Cleanup E2E images
+
+  cleanup:
+    if: always()
+    needs: [e2e-base, e2e-enc, e2e-gateway, e2e-webhooks-byo, e2e-webhooks-cm]
+    uses: ./.github/workflows/_cleanup-images.yaml
+    permissions:
+      packages: write
+    with:
+      image_tag: ${{ inputs.image_tag || github.ref_name }}

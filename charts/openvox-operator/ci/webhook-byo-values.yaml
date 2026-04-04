@@ -1,0 +1,8 @@
+webhook:
+  enabled: true
+  port: 9443
+  certManager:
+    enabled: false
+  tls:
+    certSecret: my-webhook-cert
+    caBundle: LS0tLS1CRUdJTi...

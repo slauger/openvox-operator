@@ -31,13 +31,17 @@ resources:
     cpu: 10m
     memory: 64Mi
 
-# Admission webhook configuration (requires cert-manager)
+# Admission webhook configuration
 webhook:
   enabled: false
   port: 9443
   certManager:
-    duration: 8760h    # 1 year
-    renewBefore: 720h  # 30 days
+    enabled: true        # set to false to skip cert-manager resources
+    duration: 8760h      # 1 year
+    renewBefore: 720h    # 30 days
+  tls:
+    certSecret: ""       # name of an existing TLS Secret (tls.crt, tls.key, ca.crt)
+    caBundle: ""         # base64-encoded CA certificate for webhook config
 
 nodeSelector: {}
 tolerations: []

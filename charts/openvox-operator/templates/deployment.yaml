@@ -87,7 +87,7 @@ spec:
       volumes:
         - name: webhook-certs
           secret:
-            secretName: {{ include "openvox-operator.fullname" . }}-webhook-cert
+            secretName: {{ .Values.webhook.tls.certSecret | default (printf "%s-webhook-cert" (include "openvox-operator.fullname" .)) }}
       {{- end }}
       terminationGracePeriodSeconds: 10
       {{- with .Values.nodeSelector }}

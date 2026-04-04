@@ -37,6 +37,7 @@ func main() {
 	var probeAddr string
 	var enableLeaderElection bool
 	var enableWebhooks bool
+	var enableGatewayAPI bool
 	var watchNamespace string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -45,6 +46,7 @@ func main() {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.BoolVar(&enableWebhooks, "enable-webhooks", false, "Enable admission webhooks.")
+	flag.BoolVar(&enableGatewayAPI, "enable-gateway-api", true, "Enable Gateway API TLSRoute support. When enabled, the operator auto-detects Gateway API CRDs.")
 	flag.StringVar(&watchNamespace, "watch-namespace", "",
 		"Namespace to restrict the operator to. If empty, the operator watches all namespaces (cluster-wide).")
 
@@ -112,13 +114,17 @@ func main() {
 	}
 
 	gatewayAPIAvailable := false
-	if _, err := mgr.GetRESTMapper().RESTMapping(
-		schema.GroupKind{Group: "gateway.networking.k8s.io", Kind: "TLSRoute"},
-	); err == nil {
-		gatewayAPIAvailable = true
-		setupLog.Info("Gateway API detected, TLSRoute support enabled")
+	if enableGatewayAPI {
+		if _, err := mgr.GetRESTMapper().RESTMapping(
+			schema.GroupKind{Group: "gateway.networking.k8s.io", Kind: "TLSRoute"},
+		); err == nil {
+			gatewayAPIAvailable = true
+			setupLog.Info("Gateway API detected, TLSRoute support enabled")
+		} else {
+			setupLog.Info("Gateway API not detected, TLSRoute support disabled")
+		}
 	} else {
-		setupLog.Info("Gateway API not detected, TLSRoute support disabled")
+		setupLog.Info("Gateway API disabled via --enable-gateway-api=false")
 	}
 
 	if err = (&controller.PoolReconciler{

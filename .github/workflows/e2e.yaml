@@ -33,7 +33,7 @@ env:
   IMAGE_TAG: ${{ inputs.image_tag || github.ref_name }}
 
 jobs:
-  # ── Phase 1: Build (parallel) ──────────────────────────────────────
+  # Phase 1: Build (parallel)
 
   openvox-operator:
     uses: ./.github/workflows/_container-build.yaml
@@ -122,7 +122,7 @@ jobs:
       image_tag: ${{ inputs.image_tag || github.ref_name }}
       sign: false
 
-  # ── Phase 2: Test (sequential) ─────────────────────────────────────
+  # Phase 2: Test (sequential)
 
   e2e-base:
     if: inputs.group == 'all' || inputs.group == 'base' || inputs.group == ''

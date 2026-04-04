@@ -22,11 +22,11 @@ func (r *CertificateAuthorityReconciler) reconcileCRLRefresh(ctx context.Context
 
 	interval := DefaultCRLRefreshInterval
 	if ca.Spec.CRLRefreshInterval != "" {
-		parsed, err := time.ParseDuration(ca.Spec.CRLRefreshInterval)
+		secs, err := openvoxv1alpha1.ParseDurationToSeconds(ca.Spec.CRLRefreshInterval)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("parsing crlRefreshInterval %q: %w", ca.Spec.CRLRefreshInterval, err)
 		}
-		interval = parsed
+		interval = time.Duration(secs) * time.Second
 	}
 
 	// Resolve CA base URL: external URL or internal CA Service

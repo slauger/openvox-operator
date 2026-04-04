@@ -1,4 +1,4 @@
-{{- if .Values.webhook.enabled }}
+{{- if and .Values.webhook.enabled .Values.webhook.certManager.enabled }}
 ---
 # Self-signed issuer for bootstrapping
 apiVersion: cert-manager.io/v1

@@ -76,8 +76,24 @@ jobs:
       push: true
       image_tag: ${{ needs.semantic-release.outputs.new-release-version }}
 
+  openvox-db:
+    needs: semantic-release
+    if: needs.semantic-release.outputs.new-release-published == 'true'
+    uses: ./.github/workflows/_container-build.yaml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    with:
+      image_name: openvox-db
+      dockerfile: images/openvox-db/Containerfile
+      context: '.'
+      push: true
+      image_tag: ${{ needs.semantic-release.outputs.new-release-version }}
+
   helm-charts:
-    needs: [semantic-release, openvox-operator, openvox-server]
+    needs: [semantic-release, openvox-operator, openvox-server, openvox-db]
     if: needs.semantic-release.outputs.new-release-published == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -95,14 +111,14 @@ jobs:
       - name: Inject version into Chart.yaml
         run: |
           VERSION="${{ needs.semantic-release.outputs.new-release-version }}"
-          for chart in openvox-operator openvox-stack; do
+          for chart in openvox-operator openvox-stack openvox-db-postgres; do
             sed -i "s/^version:.*/version: ${VERSION}/" charts/${chart}/Chart.yaml
             sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" charts/${chart}/Chart.yaml
           done
 
       - name: Package and push charts
         run: |
-          for chart in openvox-operator openvox-stack; do
+          for chart in openvox-operator openvox-stack openvox-db-postgres; do
             helm package charts/${chart}
             helm push ${chart}-*.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
           done

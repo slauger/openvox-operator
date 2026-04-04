@@ -8,6 +8,11 @@ Connection details:
 Example openvox-stack values:
 
   database:
-    backend: cnpg
-    cnpg:
-      clusterName: {{ include "openvox-db-postgres.name" . }}
+    enabled: true
+    name: puppetdb
+    certificate:
+      certname: puppetdb
+    postgres:
+      host: {{ include "openvox-db-postgres.name" . }}-rw
+      credentialsSecretRef: {{ include "openvox-db-postgres.name" . }}-app
+      database: {{ .Values.database }}

@@ -23,6 +23,9 @@ scope:
   # watchNamespace: defaults to .Release.Namespace when mode is "namespace"
   watchNamespace: ""
 
+gatewayAPI:
+  enabled: true  # set to false to disable TLSRoute support
+
 resources:
   limits:
     cpu: 500m

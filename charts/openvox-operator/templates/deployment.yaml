@@ -46,6 +46,9 @@ spec:
             {{- if .Values.webhook.enabled }}
             - --enable-webhooks
             {{- end }}
+            {{- if not .Values.gatewayAPI.enabled }}
+            - --enable-gateway-api=false
+            {{- end }}
           ports:
             - name: health
               containerPort: 8081

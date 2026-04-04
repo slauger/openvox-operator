@@ -101,6 +101,21 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --watch-namespace=custom-ns
 
+  - it: should not have enable-gateway-api arg by default
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --enable-gateway-api=false
+
+  - it: should have enable-gateway-api=false arg when gatewayAPI is disabled
+    set:
+      gatewayAPI:
+        enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --enable-gateway-api=false
+
   - it: should propagate resources
     asserts:
       - equal:

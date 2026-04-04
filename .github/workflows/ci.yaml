@@ -57,3 +57,45 @@ jobs:
       image_name: openvox-db
       dockerfile: images/openvox-db/Containerfile
       context: '.'
+
+  openvox-code:
+    needs: shellcheck
+    uses: ./.github/workflows/_container-build.yaml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    with:
+      image_name: openvox-code
+      dockerfile: images/openvox-code/Containerfile
+      context: '.'
+      sign: false
+
+  openvox-agent:
+    needs: shellcheck
+    uses: ./.github/workflows/_container-build.yaml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    with:
+      image_name: openvox-agent
+      dockerfile: images/openvox-agent/Containerfile
+      context: 'images/openvox-agent'
+      sign: false
+
+  openvox-mock:
+    needs: shellcheck
+    uses: ./.github/workflows/_container-build.yaml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    with:
+      image_name: openvox-mock
+      dockerfile: images/openvox-mock/Containerfile
+      context: '.'
+      sign: false

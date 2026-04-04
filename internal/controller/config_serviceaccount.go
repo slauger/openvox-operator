@@ -18,7 +18,8 @@ func (r *ConfigReconciler) reconcileServerServiceAccount(ctx context.Context, cf
 	automount := false
 
 	sa := &corev1.ServiceAccount{}
-	if err := r.Get(ctx, types.NamespacedName{Name: saName, Namespace: cfg.Namespace}, sa); errors.IsNotFound(err) {
+	err := r.Get(ctx, types.NamespacedName{Name: saName, Namespace: cfg.Namespace}, sa)
+	if errors.IsNotFound(err) {
 		sa = &corev1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      saName,
@@ -31,7 +32,8 @@ func (r *ConfigReconciler) reconcileServerServiceAccount(ctx context.Context, cf
 			return err
 		}
 		return r.Create(ctx, sa)
-	} else {
+	} else if err != nil {
 		return err
 	}
+	return nil
 }

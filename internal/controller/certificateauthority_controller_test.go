@@ -10,6 +10,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/events"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
@@ -44,6 +45,34 @@ func TestCAReconcile_NoConfig(t *testing.T) {
 	}
 	if res.RequeueAfter != 5*time.Second {
 		t.Errorf("expected requeue after 5s, got %v", res.RequeueAfter)
+	}
+}
+
+func TestCAReconcile_NoConfig_EmitsEvent(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.Phase = ""
+	c := setupTestClient(ca)
+	rec := events.NewFakeRecorder(10)
+	r := &CertificateAuthorityReconciler{
+		Client:   c,
+		Scheme:   testScheme(),
+		Recorder: rec,
+	}
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-ca")); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	select {
+	case evt := <-rec.Events:
+		if !strings.Contains(evt, EventReasonCAWaitingForConfig) {
+			t.Errorf("expected event reason %q, got %q", EventReasonCAWaitingForConfig, evt)
+		}
+		if !strings.Contains(evt, "Waiting for a Config with authorityRef") {
+			t.Errorf("expected event message about waiting for Config, got %q", evt)
+		}
+	default:
+		t.Error("expected WaitingForConfig event, but none was emitted")
 	}
 }
 

@@ -149,8 +149,8 @@ jobs:
       - name: Cleanup previous run
         run: make e2e-cleanup
 
-      - name: Wait for E2E dependencies (managed by ArgoCD)
-        run: make e2e-wait
+      - name: Verify cluster connectivity
+        run: kubectl get nodes
 
   # Phase 2: Test (sequential)
 

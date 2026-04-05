@@ -31,10 +31,11 @@ type CertificateAuthorityReconciler struct {
 
 // Event reasons for CertificateAuthority.
 const (
-	EventReasonCAInitialized    = "CAInitialized"
-	EventReasonCAExternal       = "CAExternal"
-	EventReasonCRLRefreshed     = "CRLRefreshed"
-	EventReasonCRLRefreshFailed = "CRLRefreshFailed"
+	EventReasonCAInitialized      = "CAInitialized"
+	EventReasonCAExternal         = "CAExternal"
+	EventReasonCAWaitingForConfig = "WaitingForConfig"
+	EventReasonCRLRefreshed       = "CRLRefreshed"
+	EventReasonCRLRefreshFailed   = "CRLRefreshFailed"
 )
 
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificateauthorities,verbs=get;list;watch;create;update;patch;delete
@@ -77,6 +78,8 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 	cfg := r.findConfigForCA(ctx, ca)
 	if cfg == nil {
 		logger.Info("waiting for a Config with authorityRef pointing to this CA", "ca", ca.Name)
+		r.Recorder.Eventf(ca, nil, corev1.EventTypeNormal, EventReasonCAWaitingForConfig, "Reconcile",
+			"Waiting for a Config with authorityRef: %s", ca.Name)
 		return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 	}
 

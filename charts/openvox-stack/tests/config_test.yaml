@@ -119,3 +119,122 @@ tests:
     asserts:
       - isNull:
           path: spec.code
+
+  - it: should not render optional fields by default
+    asserts:
+      - isNull:
+          path: spec.image.pullSecrets
+      - isNull:
+          path: spec.puppet.environmentPath
+      - isNull:
+          path: spec.puppet.hieraConfig
+      - isNull:
+          path: spec.puppet.storeBackend
+      - isNull:
+          path: spec.puppet.extraConfig
+      - isNull:
+          path: spec.puppetserver
+      - isNull:
+          path: spec.logging
+      - isNull:
+          path: spec.metrics
+
+  - it: should propagate image pullSecrets
+    set:
+      config:
+        image:
+          pullSecrets:
+            - name: my-secret
+    asserts:
+      - equal:
+          path: spec.image.pullSecrets[0].name
+          value: my-secret
+
+  - it: should propagate puppet environmentPath
+    set:
+      config:
+        puppet:
+          environmentPath: /custom/environments
+    asserts:
+      - equal:
+          path: spec.puppet.environmentPath
+          value: /custom/environments
+
+  - it: should propagate puppet hieraConfig
+    set:
+      config:
+        puppet:
+          hieraConfig: /etc/puppetlabs/puppet/hiera.yaml
+    asserts:
+      - equal:
+          path: spec.puppet.hieraConfig
+          value: /etc/puppetlabs/puppet/hiera.yaml
+
+  - it: should propagate puppet storeBackend
+    set:
+      config:
+        puppet:
+          storeBackend: puppetdb
+    asserts:
+      - equal:
+          path: spec.puppet.storeBackend
+          value: puppetdb
+
+  - it: should propagate puppet extraConfig
+    set:
+      config:
+        puppet:
+          extraConfig:
+            strict_variables: "true"
+            parser: future
+    asserts:
+      - equal:
+          path: spec.puppet.extraConfig.strict_variables
+          value: "true"
+      - equal:
+          path: spec.puppet.extraConfig.parser
+          value: future
+
+  - it: should propagate puppetserver settings
+    set:
+      config:
+        puppetserver:
+          maxRequestsPerInstance: 1000
+          compileMode: jit
+    asserts:
+      - equal:
+          path: spec.puppetserver.maxRequestsPerInstance
+          value: 1000
+      - equal:
+          path: spec.puppetserver.compileMode
+          value: jit
+
+  - it: should propagate logging settings
+    set:
+      config:
+        logging:
+          level: DEBUG
+          loggers:
+            mylogger: TRACE
+    asserts:
+      - equal:
+          path: spec.logging.level
+          value: DEBUG
+      - equal:
+          path: spec.logging.loggers.mylogger
+          value: TRACE
+
+  - it: should propagate metrics settings
+    set:
+      config:
+        metrics:
+          enabled: true
+          jmx:
+            enabled: true
+    asserts:
+      - equal:
+          path: spec.metrics.enabled
+          value: true
+      - equal:
+          path: spec.metrics.jmx.enabled
+          value: true

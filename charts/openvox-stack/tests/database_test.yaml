@@ -162,6 +162,83 @@ tests:
           path: spec.resources.requests.memory
           value: 1Gi
 
+  - it: should not render optional fields by default
+    set:
+      database:
+        enabled: true
+        name: my-puppetdb
+        certificate:
+          certname: puppetdb
+        postgres:
+          host: pg-cluster-rw.postgres.svc
+          credentialsSecretRef: pg-credentials
+    documentIndex: 1
+    asserts:
+      - isNull:
+          path: spec.pdb
+      - isNull:
+          path: spec.networkPolicy
+      - isNull:
+          path: spec.service
+
+  - it: should propagate pdb
+    set:
+      database:
+        enabled: true
+        name: my-puppetdb
+        certificate:
+          certname: puppetdb
+        postgres:
+          host: pg-cluster-rw.postgres.svc
+          credentialsSecretRef: pg-credentials
+        pdb:
+          minAvailable: 1
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.pdb.minAvailable
+          value: 1
+
+  - it: should propagate networkPolicy
+    set:
+      database:
+        enabled: true
+        name: my-puppetdb
+        certificate:
+          certname: puppetdb
+        postgres:
+          host: pg-cluster-rw.postgres.svc
+          credentialsSecretRef: pg-credentials
+        networkPolicy:
+          enabled: true
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.networkPolicy.enabled
+          value: true
+
+  - it: should propagate service
+    set:
+      database:
+        enabled: true
+        name: my-puppetdb
+        certificate:
+          certname: puppetdb
+        postgres:
+          host: pg-cluster-rw.postgres.svc
+          credentialsSecretRef: pg-credentials
+        service:
+          type: ClusterIP
+          port: 8081
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.service.type
+          value: ClusterIP
+      - equal:
+          path: spec.service.port
+          value: 8081
+
   - it: should render dnsAltNames on Certificate when set
     set:
       database:

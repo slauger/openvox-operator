@@ -85,3 +85,158 @@ tests:
       - equal:
           path: spec.replicas
           value: 1
+
+  - it: should not render optional fields by default
+    documentIndex: 0
+    asserts:
+      - isNull:
+          path: spec.javaArgs
+      - isNull:
+          path: spec.maxActiveInstances
+      - isNull:
+          path: spec.image
+      - isNull:
+          path: spec.code
+      - isNull:
+          path: spec.autoscaling
+      - isNull:
+          path: spec.pdb
+      - isNull:
+          path: spec.networkPolicy
+      - isNull:
+          path: spec.topologySpreadConstraints
+      - isNull:
+          path: spec.affinity
+
+  - it: should propagate javaArgs
+    set:
+      servers:
+        - name: test
+          certificate:
+            certname: puppet
+          javaArgs: "-Xms512m -Xmx1024m"
+    asserts:
+      - equal:
+          path: spec.javaArgs
+          value: "-Xms512m -Xmx1024m"
+
+  - it: should propagate maxActiveInstances
+    set:
+      servers:
+        - name: test
+          certificate:
+            certname: puppet
+          maxActiveInstances: 4
+    asserts:
+      - equal:
+          path: spec.maxActiveInstances
+          value: 4
+
+  - it: should propagate image override
+    set:
+      servers:
+        - name: test
+          certificate:
+            certname: puppet
+          image:
+            repository: custom/image
+            tag: v1.0
+    asserts:
+      - equal:
+          path: spec.image.repository
+          value: custom/image
+      - equal:
+          path: spec.image.tag
+          value: v1.0
+
+  - it: should propagate code override
+    set:
+      servers:
+        - name: test
+          certificate:
+            certname: puppet
+          code:
+            image: ghcr.io/example/code:latest
+    asserts:
+      - equal:
+          path: spec.code.image
+          value: ghcr.io/example/code:latest
+
+  - it: should propagate autoscaling
+    set:
+      servers:
+        - name: test
+          certificate:
+            certname: puppet
+          autoscaling:
+            minReplicas: 2
+            maxReplicas: 5
+            targetCPUUtilizationPercentage: 80
+    asserts:
+      - equal:
+          path: spec.autoscaling.minReplicas
+          value: 2
+      - equal:
+          path: spec.autoscaling.maxReplicas
+          value: 5
+
+  - it: should propagate pdb
+    set:
+      servers:
+        - name: test
+          certificate:
+            certname: puppet
+          pdb:
+            minAvailable: 1
+    asserts:
+      - equal:
+          path: spec.pdb.minAvailable
+          value: 1
+
+  - it: should propagate networkPolicy
+    set:
+      servers:
+        - name: test
+          certificate:
+            certname: puppet
+          networkPolicy:
+            enabled: true
+    asserts:
+      - equal:
+          path: spec.networkPolicy.enabled
+          value: true
+
+  - it: should propagate topologySpreadConstraints
+    set:
+      servers:
+        - name: test
+          certificate:
+            certname: puppet
+          topologySpreadConstraints:
+            - maxSkew: 1
+              topologyKey: kubernetes.io/hostname
+              whenUnsatisfiable: DoNotSchedule
+    asserts:
+      - equal:
+          path: spec.topologySpreadConstraints[0].maxSkew
+          value: 1
+      - equal:
+          path: spec.topologySpreadConstraints[0].topologyKey
+          value: kubernetes.io/hostname
+
+  - it: should propagate affinity
+    set:
+      servers:
+        - name: test
+          certificate:
+            certname: puppet
+          affinity:
+            podAntiAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  podAffinityTerm:
+                    topologyKey: kubernetes.io/hostname
+    asserts:
+      - equal:
+          path: spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].weight
+          value: 100

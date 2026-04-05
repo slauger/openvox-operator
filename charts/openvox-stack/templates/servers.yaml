@@ -24,4 +24,38 @@ spec:
   resources:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+  {{- with $entry.javaArgs }}
+  javaArgs: {{ . | quote }}
+  {{- end }}
+  {{- with $entry.maxActiveInstances }}
+  maxActiveInstances: {{ . }}
+  {{- end }}
+  {{- with $entry.image }}
+  image:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $entry.code }}
+  code:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $entry.autoscaling }}
+  autoscaling:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $entry.pdb }}
+  pdb:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $entry.networkPolicy }}
+  networkPolicy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $entry.topologySpreadConstraints }}
+  topologySpreadConstraints:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $entry.affinity }}
+  affinity:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 {{- end }}

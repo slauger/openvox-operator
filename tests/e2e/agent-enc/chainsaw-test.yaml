@@ -122,18 +122,11 @@ spec:
                             if [ $EXIT -eq 0 ] || [ $EXIT -eq 2 ]; then exit 0; else exit $EXIT; fi
                         securityContext:
                           runAsUser: 0
-        - assert:
+        - script:
             timeout: 5m
-            resource:
-              apiVersion: batch/v1
-              kind: Job
-              metadata:
-                name: puppet-agent-enc
-                namespace: e2e-agent-enc
-              status:
-                conditions:
-                  - type: Complete
-                    status: "True"
+            content: |
+              kubectl wait --for=condition=Complete job/puppet-agent-enc \
+                -n e2e-agent-enc --timeout=300s
 
     - name: Verify mock received classification request
       try:

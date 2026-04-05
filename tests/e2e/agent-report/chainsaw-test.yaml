@@ -77,6 +77,25 @@ spec:
       catch:
         - events: {}
 
+    - name: Assert ReportProcessors are Active
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: ReportProcessor
+              metadata:
+                name: e2e-report-webhook
+              status:
+                phase: Active
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: ReportProcessor
+              metadata:
+                name: e2e-report-puppetdb
+              status:
+                phase: Active
+
     - name: Assert Server is Running
       try:
         - assert:

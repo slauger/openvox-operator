@@ -31,16 +31,16 @@ type DatabaseReconciler struct {
 
 // Event reasons for Database.
 const (
-	EventReasonDatabaseRunning        = "DatabaseRunning"
-	EventReasonDatabaseError          = "DatabaseError"
-	EventReasonDatabaseDeploymentSync = "DatabaseDeploymentSynced"
-	EventReasonDatabaseServiceSync    = "DatabaseServiceSynced"
-	EventReasonDatabasePDBCreated     = "DatabasePDBCreated"
-	EventReasonDatabasePDBUpdated     = "DatabasePDBUpdated"
-	EventReasonDatabasePDBDeleted             = "DatabasePDBDeleted"
-	EventReasonDatabaseNetworkPolicyCreated   = "DatabaseNetworkPolicyCreated"
-	EventReasonDatabaseNetworkPolicyUpdated   = "DatabaseNetworkPolicyUpdated"
-	EventReasonDatabaseNetworkPolicyDeleted   = "DatabaseNetworkPolicyDeleted"
+	EventReasonDatabaseRunning              = "DatabaseRunning"
+	EventReasonDatabaseError                = "DatabaseError"
+	EventReasonDatabaseDeploymentSync       = "DatabaseDeploymentSynced"
+	EventReasonDatabaseServiceSync          = "DatabaseServiceSynced"
+	EventReasonDatabasePDBCreated           = "DatabasePDBCreated"
+	EventReasonDatabasePDBUpdated           = "DatabasePDBUpdated"
+	EventReasonDatabasePDBDeleted           = "DatabasePDBDeleted"
+	EventReasonDatabaseNetworkPolicyCreated = "DatabaseNetworkPolicyCreated"
+	EventReasonDatabaseNetworkPolicyUpdated = "DatabaseNetworkPolicyUpdated"
+	EventReasonDatabaseNetworkPolicyDeleted = "DatabaseNetworkPolicyDeleted"
 )
 
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=databases,verbs=get;list;watch;create;update;patch;delete

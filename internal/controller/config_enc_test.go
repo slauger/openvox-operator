@@ -18,9 +18,9 @@ func TestRenderENCConfig(t *testing.T) {
 			name: "no auth",
 			nc: &openvoxv1alpha1.NodeClassifier{
 				Spec: openvoxv1alpha1.NodeClassifierSpec{
-					URL:     "https://enc.example.com",
-					Request: openvoxv1alpha1.NodeClassifierRequest{Method: "GET", Path: "/node/{certname}"},
-					Response: openvoxv1alpha1.NodeClassifierResponse{Format: "yaml"},
+					URL:            "https://enc.example.com",
+					Request:        openvoxv1alpha1.NodeClassifierRequest{Method: "GET", Path: "/node/{certname}"},
+					Response:       openvoxv1alpha1.NodeClassifierResponse{Format: "yaml"},
 					TimeoutSeconds: 15,
 				},
 			},

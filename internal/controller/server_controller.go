@@ -32,18 +32,18 @@ type ServerReconciler struct {
 
 // Event reasons for Server.
 const (
-	EventReasonServerRunning    = "ServerRunning"
-	EventReasonServerError      = "ServerError"
-	EventReasonPDBCreated       = "PDBCreated"
-	EventReasonPDBUpdated       = "PDBUpdated"
-	EventReasonPDBDeleted       = "PDBDeleted"
-	EventReasonHPACreated       = "HPACreated"
-	EventReasonHPAUpdated       = "HPAUpdated"
-	EventReasonHPADeleted       = "HPADeleted"
-	EventReasonDeploymentSynced        = "DeploymentSynced"
-	EventReasonNetworkPolicyCreated    = "NetworkPolicyCreated"
-	EventReasonNetworkPolicyUpdated    = "NetworkPolicyUpdated"
-	EventReasonNetworkPolicyDeleted    = "NetworkPolicyDeleted"
+	EventReasonServerRunning        = "ServerRunning"
+	EventReasonServerError          = "ServerError"
+	EventReasonPDBCreated           = "PDBCreated"
+	EventReasonPDBUpdated           = "PDBUpdated"
+	EventReasonPDBDeleted           = "PDBDeleted"
+	EventReasonHPACreated           = "HPACreated"
+	EventReasonHPAUpdated           = "HPAUpdated"
+	EventReasonHPADeleted           = "HPADeleted"
+	EventReasonDeploymentSynced     = "DeploymentSynced"
+	EventReasonNetworkPolicyCreated = "NetworkPolicyCreated"
+	EventReasonNetworkPolicyUpdated = "NetworkPolicyUpdated"
+	EventReasonNetworkPolicyDeleted = "NetworkPolicyDeleted"
 )
 
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=servers,verbs=get;list;watch;create;update;patch;delete

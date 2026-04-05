@@ -30,7 +30,41 @@ Autosigning is configured via [SigningPolicy](signingpolicy.md) resources that r
 | `crlRefreshInterval` | string | `5m` | How often the operator refreshes the CRL Secret from the CA (Go duration: `5m`, `1h`, `30s`) |
 | `resources` | [ResourceRequirements](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#resources) | requests: 200m/768Mi, limits: 1/1Gi | Compute resources for the CA setup Job |
 | `storage` | [StorageSpec](index.md#storagespec) | - | PVC settings for CA data |
+| `external` | [ExternalCASpec](#externalcaspec) | - | External CA configuration (mutually exclusive with custom storage) |
 | `intermediateCA` | [IntermediateCASpec](#intermediatecaspec) | - | Intermediate CA configuration |
+
+### ExternalCASpec
+
+Configures an external CA running outside the cluster. When set, the operator delegates CSR signing and CRL fetching to the external CA URL instead of managing its own CA infrastructure. See the [External CA guide](../guides/ca-import.md#option-b-external-ca-ongoing-delegation) for step-by-step setup instructions.
+
+!!! warning "Mutual exclusivity"
+    `spec.external` and custom `spec.storage` are mutually exclusive. A CEL validation rule rejects resources that set both. External CAs do not need local storage.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `url` | string | Yes | Base URL of the external Puppet/OpenVox CA (e.g. `https://puppet-ca.example.com:8140`). Must start with `http://` or `https://`. |
+| `caSecretRef` | string | No | Name of a Secret containing `ca_crt.pem` for TLS verification of the external CA |
+| `tlsSecretRef` | string | No | Name of a Secret containing `tls.crt` and `tls.key` for mTLS client authentication |
+| `insecureSkipVerify` | bool | No | Skip TLS certificate verification (not recommended for production) |
+
+**Example:**
+
+```yaml
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: CertificateAuthority
+metadata:
+  name: external-ca
+spec:
+  allowSubjectAltNames: true
+  allowAuthorizationExtensions: true
+  enableInfraCRL: true
+  crlRefreshInterval: 5m
+  external:
+    url: https://puppet-ca.example.com:8140
+    caSecretRef: external-ca-cert      # Secret with ca_crt.pem
+    tlsSecretRef: external-ca-tls      # Secret with tls.crt + tls.key (optional mTLS)
+    insecureSkipVerify: false
+```
 
 ### IntermediateCASpec
 

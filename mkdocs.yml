@@ -64,6 +64,8 @@ nav:
   - Getting Started:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quickstart.md
+  - Guides:
+      - CA Import & External CA: guides/ca-import.md
   - Examples:
       - Overview: examples/index.md
   - Development:

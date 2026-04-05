@@ -1,5 +1,9 @@
 name: E2E
 
+concurrency:
+  group: e2e
+  cancel-in-progress: false
+
 on:
   push:
     branches: [develop]

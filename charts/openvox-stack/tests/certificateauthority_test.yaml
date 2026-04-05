@@ -51,3 +51,128 @@ tests:
       - equal:
           path: metadata.name
           value: my-custom-ca
+
+  - it: should not render optional fields by default
+    asserts:
+      - isNull:
+          path: spec.allowSubjectAltNames
+      - isNull:
+          path: spec.allowAuthorizationExtensions
+      - isNull:
+          path: spec.enableInfraCRL
+      - isNull:
+          path: spec.allowAutoRenewal
+      - isNull:
+          path: spec.autoRenewalCertTTL
+      - isNull:
+          path: spec.crlRefreshInterval
+      - isNull:
+          path: spec.resources
+      - isNull:
+          path: spec.intermediateCA
+      - isNull:
+          path: spec.external
+
+  - it: should set allowSubjectAltNames to false
+    set:
+      ca:
+        allowSubjectAltNames: false
+    asserts:
+      - equal:
+          path: spec.allowSubjectAltNames
+          value: false
+
+  - it: should set allowSubjectAltNames to true
+    set:
+      ca:
+        allowSubjectAltNames: true
+    asserts:
+      - equal:
+          path: spec.allowSubjectAltNames
+          value: true
+
+  - it: should set allowAuthorizationExtensions to false
+    set:
+      ca:
+        allowAuthorizationExtensions: false
+    asserts:
+      - equal:
+          path: spec.allowAuthorizationExtensions
+          value: false
+
+  - it: should set enableInfraCRL to false
+    set:
+      ca:
+        enableInfraCRL: false
+    asserts:
+      - equal:
+          path: spec.enableInfraCRL
+          value: false
+
+  - it: should set allowAutoRenewal to false
+    set:
+      ca:
+        allowAutoRenewal: false
+    asserts:
+      - equal:
+          path: spec.allowAutoRenewal
+          value: false
+
+  - it: should propagate autoRenewalCertTTL
+    set:
+      ca:
+        autoRenewalCertTTL: 30d
+    asserts:
+      - equal:
+          path: spec.autoRenewalCertTTL
+          value: 30d
+
+  - it: should propagate crlRefreshInterval
+    set:
+      ca:
+        crlRefreshInterval: 10m
+    asserts:
+      - equal:
+          path: spec.crlRefreshInterval
+          value: 10m
+
+  - it: should propagate resources
+    set:
+      ca:
+        resources:
+          requests:
+            cpu: 200m
+            memory: 768Mi
+          limits:
+            memory: 1Gi
+    asserts:
+      - equal:
+          path: spec.resources.requests.cpu
+          value: 200m
+      - equal:
+          path: spec.resources.limits.memory
+          value: 1Gi
+
+  - it: should propagate intermediateCA
+    set:
+      ca:
+        intermediateCA:
+          enabled: true
+          secretName: my-intermediate-ca
+    asserts:
+      - equal:
+          path: spec.intermediateCA.enabled
+          value: true
+      - equal:
+          path: spec.intermediateCA.secretName
+          value: my-intermediate-ca
+
+  - it: should propagate external
+    set:
+      ca:
+        external:
+          url: https://ca.example.com
+    asserts:
+      - equal:
+          path: spec.external.url
+          value: https://ca.example.com

@@ -48,4 +48,16 @@ spec:
   resources:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+  {{- with .Values.database.pdb }}
+  pdb:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.database.networkPolicy }}
+  networkPolicy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.database.service }}
+  service:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 {{- end }}

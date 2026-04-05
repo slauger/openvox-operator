@@ -4,8 +4,38 @@ metadata:
   name: {{ include "openvox-stack.caName" . }}
 spec:
   ttl: {{ .Values.ca.ttl }}
+  {{- if hasKey .Values.ca "allowSubjectAltNames" }}
+  allowSubjectAltNames: {{ .Values.ca.allowSubjectAltNames }}
+  {{- end }}
+  {{- if hasKey .Values.ca "allowAuthorizationExtensions" }}
+  allowAuthorizationExtensions: {{ .Values.ca.allowAuthorizationExtensions }}
+  {{- end }}
+  {{- if hasKey .Values.ca "enableInfraCRL" }}
+  enableInfraCRL: {{ .Values.ca.enableInfraCRL }}
+  {{- end }}
+  {{- if hasKey .Values.ca "allowAutoRenewal" }}
+  allowAutoRenewal: {{ .Values.ca.allowAutoRenewal }}
+  {{- end }}
+  {{- with .Values.ca.autoRenewalCertTTL }}
+  autoRenewalCertTTL: {{ . }}
+  {{- end }}
+  {{- with .Values.ca.crlRefreshInterval }}
+  crlRefreshInterval: {{ . }}
+  {{- end }}
   storage:
     size: {{ .Values.ca.storage.size }}
     {{- if .Values.ca.storage.storageClass }}
     storageClass: {{ .Values.ca.storage.storageClass }}
     {{- end }}
+  {{- with .Values.ca.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.ca.intermediateCA }}
+  intermediateCA:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.ca.external }}
+  external:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}

@@ -8,24 +8,72 @@ config:
     repository: ghcr.io/slauger/openvox-server
     tag: latest
     pullPolicy: Always
+    pullSecrets: []
+    # pullSecrets:
+    #   - name: my-registry-secret
   puppetdb:
     serverUrls: []
   puppet:
     environmentTimeout: ""
+    environmentPath: ""
+    hieraConfig: ""
     storeconfigs: false
+    storeBackend: ""
     reports: store
+    extraConfig: {}
+    # extraConfig:
+    #   strict_variables: "true"
+    #   parser: future
   code:
     image: ""
     imagePullPolicy: IfNotPresent
     imagePullSecret: ""
     claimName: ""
+  # puppetserver:
+  #   maxRequestsPerInstance: 0
+  #   borrowTimeout: 1200000
+  #   compileMode: "off"
+  #   clientAuth: want
+  #   httpClient:
+  #     connectTimeoutMs: 120000
+  #     idleTimeoutMs: 120000
+  #   authorizationRules: []
+  # logging:
+  #   level: INFO
+  #   loggers:
+  #     puppetlabs.puppetserver: DEBUG
+  # metrics:
+  #   enabled: true
+  #   jmx:
+  #     enabled: true
+  #   graphite:
+  #     enabled: true
+  #     host: graphite.example.com
+  #     port: 2003
 
 ca:
   name: ""             # default: {fullname}-ca
   ttl: 5y
+  # allowSubjectAltNames: true
+  # allowAuthorizationExtensions: true
+  # enableInfraCRL: true
+  # allowAutoRenewal: true
+  # autoRenewalCertTTL: 90d
+  # crlRefreshInterval: 5m
   storage:
     size: 1Gi
     storageClass: ""
+  # resources:
+  #   requests:
+  #     cpu: 200m
+  #     memory: 768Mi
+  #   limits:
+  #     memory: 1Gi
+  # intermediateCA:
+  #   enabled: true
+  #   secretName: my-intermediate-ca
+  # external:
+  #   url: https://ca.example.com
 
 reportProcessors: []
 # reportProcessors:
@@ -85,6 +133,13 @@ database:
       memory: 512Mi
     limits:
       memory: 1Gi
+  # pdb:
+  #   minAvailable: 1
+  # networkPolicy:
+  #   enabled: true
+  # service:
+  #   type: ClusterIP
+  #   port: 8081
 
 servers:
   - name: ca
@@ -115,6 +170,31 @@ servers:
         memory: 1Gi
       limits:
         memory: 2Gi
+    # javaArgs: "-Xms512m -Xmx1024m"
+    # maxActiveInstances: 2
+    # image:
+    #   repository: ghcr.io/slauger/openvox-server
+    #   tag: custom
+    # code:
+    #   image: ghcr.io/slauger/openvox-code:latest
+    # autoscaling:
+    #   minReplicas: 2
+    #   maxReplicas: 5
+    #   targetCPUUtilizationPercentage: 80
+    # pdb:
+    #   minAvailable: 1
+    # networkPolicy:
+    #   enabled: true
+    # topologySpreadConstraints:
+    #   - maxSkew: 1
+    #     topologyKey: kubernetes.io/hostname
+    #     whenUnsatisfiable: DoNotSchedule
+    # affinity:
+    #   podAntiAffinity:
+    #     preferredDuringSchedulingIgnoredDuringExecution:
+    #       - weight: 100
+    #         podAffinityTerm:
+    #           topologyKey: kubernetes.io/hostname
 
 gateway:
   name: ""              # shared Gateway resource name

@@ -11,7 +11,7 @@ on:
         description: 'JSON array of package names to clean up'
         required: false
         type: string
-        default: '["openvox-operator","openvox-server","openvox-agent","openvox-code","openvox-db","openvox-mock"]'
+        default: '["openvox-operator","openvox-server","openvox-agent","openvox-e2e-code","openvox-db","openvox-mock"]'
 
 jobs:
   cleanup:

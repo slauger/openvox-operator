@@ -176,7 +176,7 @@ servers:
     #   repository: ghcr.io/slauger/openvox-server
     #   tag: custom
     # code:
-    #   image: ghcr.io/slauger/openvox-code:latest
+    #   image: ghcr.io/slauger/openvox-e2e-code:latest
     # autoscaling:
     #   minReplicas: 2
     #   maxReplicas: 5

@@ -191,13 +191,16 @@ e2e-wait: ## Wait for E2E dependencies to be available (pre-installed via ArgoCD
 	kubectl wait --for=condition=Available deployment/cert-manager-webhook -n cert-manager --timeout=3m
 
 .PHONY: e2e-cleanup
-e2e-cleanup: ## Remove operator, CRDs, and all E2E test namespaces.
+e2e-cleanup: ## Remove operator and all E2E test namespaces (keeps CRDs).
 	helm uninstall openvox-operator --namespace $(NAMESPACE) --wait 2>/dev/null || true
 	@echo "Cleaning up leftover E2E namespaces..."
 	@kubectl get namespaces -o name | grep '^namespace/e2e-' | xargs -r kubectl delete --ignore-not-found 2>/dev/null || true
+	kubectl delete namespace $(NAMESPACE) --ignore-not-found 2>/dev/null || true
+
+.PHONY: e2e-cleanup-full
+e2e-cleanup-full: e2e-cleanup ## Full cleanup including CRDs (use between test groups).
 	@echo "Removing CRDs..."
 	@kubectl get crds -o name | grep 'openvox\.voxpupuli\.org' | xargs -r kubectl delete --ignore-not-found 2>/dev/null || true
-	kubectl delete namespace $(NAMESPACE) --ignore-not-found 2>/dev/null || true
 
 .PHONY: e2e-webhook-byo-cert
 e2e-webhook-byo-cert: ## Generate self-signed TLS cert and create webhook Secret.

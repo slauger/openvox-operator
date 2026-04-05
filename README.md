@@ -14,7 +14,7 @@ A Kubernetes Operator that maps [OpenVox Server](https://github.com/OpenVoxProje
 - ⚡ **Scalable Servers** - Scale catalog compilation horizontally - multiple server pools with HPA
 - 🔄 **Multi-Version Deployments** - Run different server versions side by side - canary deployments, rolling upgrades
 - 🔒 **Rootless & OpenShift Ready** - Random UID compatible, no root, no ezbake, no privilege escalation
-- 🪶 **Minimal Image** - UBI9-based, no system Ruby, no ezbake packaging - smaller footprint, fewer updates
+- 🪶 **Minimal Image** - UBI9-based, no agent Ruby, no ezbake packaging - smaller footprint, fewer updates
 - 🧠 **Auto-tuned JVM** - Heap size calculated from memory limits (90%) - no manual `-Xmx` tuning needed
 - 📦 **OCI Image Volumes** - Package Puppet code as OCI images, deploy immutably with automatic rollout (K8s 1.35+)
 - 🌐 **Gateway API** - SNI-based TLSRoute support - share a single LoadBalancer across environments via TLS passthrough
@@ -132,13 +132,13 @@ All resources use the API group `openvox.voxpupuli.org/v1alpha1`.
 
 ## Differences to VM-based Installations
 
-Traditional Puppet/OpenVox Server installations on VMs use OS packages that install both a system Ruby (CRuby) and the server JAR with its embedded JRuby. The system Ruby is used by CLI tools like `puppet config set` and `puppetserver ca`. The server process requires root privileges.
+Traditional Puppet/OpenVox Server installations on VMs use OS packages that install both the agent Ruby (a dedicated CRuby shipped with the agent packages) and the server JAR with its embedded JRuby. The agent Ruby is used by CLI tools like `puppet config set` and `puppetserver ca`. The server process requires root privileges.
 
 This operator takes a **Kubernetes-native approach** that differs in several key areas:
 
 | | VM-based | openvox-operator |
 |---|---|---|
-| **Ruby** | System Ruby (CRuby) installed alongside JRuby for CLI tooling | **No system Ruby** - only JRuby embedded in the server JAR |
+| **Ruby** | Agent Ruby (CRuby) installed alongside JRuby for CLI tooling | **No agent Ruby** - only JRuby embedded in the server JAR |
 | **Configuration** | `puppet.conf` managed via `puppet config set`, Puppet modules, or config management | Declarative CRDs, operator renders ConfigMaps and Secrets |
 | **Privileges** | Requires root | Fully rootless, random UID compatible |
 | **CA Management** | `puppetserver ca` CLI with CRuby shebang | Custom JRuby wrapper that routes through `clojure.main` |
@@ -151,7 +151,7 @@ This operator takes a **Kubernetes-native approach** that differs in several key
 | **Traffic Routing** | DNS round-robin or hardware load balancer per environment | Gateway API TLSRoute with SNI-based routing - share a single LoadBalancer across environments |
 | **Multi-Version** | Separate VMs or manual package pinning | Multiple `Server` CRDs in the same `Pool` with different image tags |
 
-By eliminating system Ruby from the runtime image, the container has a smaller footprint and a reduced attack surface, avoiding the duplicate Ruby installation (CRuby + JRuby) that the OS packages carry.
+By eliminating the agent Ruby from the runtime image, the container has a smaller footprint and a reduced attack surface, avoiding the duplicate Ruby installation (CRuby + JRuby) that the OS packages carry.
 
 ## Quick Start
 

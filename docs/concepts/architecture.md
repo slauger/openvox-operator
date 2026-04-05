@@ -43,7 +43,7 @@ graph TD
 
 ## Why Separate CRDs for CA and Certificates?
 
-Traditional Puppet/OpenVox Server bundles CA management, certificate signing, and server runtime into a single process. This works on VMs where `puppetserver ca` (a CRuby CLI) manages everything locally. This operator deliberately ships **no system Ruby** - only JRuby embedded in the server JAR - to keep the image small and reduce the update surface. CA operations are handled through a custom JRuby wrapper that calls `clojure.main` instead.
+Traditional Puppet/OpenVox Server bundles CA management, certificate signing, and server runtime into a single process. This works on VMs where `puppetserver ca` (a CRuby CLI) manages everything locally. This operator deliberately ships **no agent Ruby** - only JRuby embedded in the server JAR - to keep the image small and reduce the update surface. CA operations are handled through a custom JRuby wrapper that calls `clojure.main` instead.
 
 By separating the CA lifecycle (`CertificateAuthority`) from certificate signing (`Certificate`) and from the server runtime (`Server`), each concern becomes independently manageable. Certificates can be issued before a server is running, revoked without restarting pods, and the CA can be initialized once while multiple servers share the same signed certificate for horizontal scaling.
 
@@ -193,7 +193,7 @@ See [Code Deployment](code-deployment.md) for the full guide.
 
 ## Why a New Approach?
 
-Traditional Puppet/OpenVox Server installations on VMs use OS packages that install both a system Ruby (CRuby) and the server JAR with its embedded JRuby. Existing container images carry this VM-centric approach into containers, leading to several problems in a Kubernetes context.
+Traditional Puppet/OpenVox Server installations on VMs use OS packages that install both the agent Ruby (a dedicated CRuby shipped with the agent packages) and the server JAR with its embedded JRuby. Existing container images carry this VM-centric approach into containers, leading to several problems in a Kubernetes context.
 
 ### ezbake Legacy
 
@@ -201,7 +201,7 @@ Upstream OpenVox Server uses ezbake for packaging. It generates init scripts tha
 
 ### Duplicate Ruby Installation
 
-The server needs JRuby (embedded in the JAR) for runtime. Existing containers additionally install system Ruby + the openvox gem just so entrypoint scripts can call `puppet config set/print`. This is unnecessary when configuration comes via ConfigMaps.
+The server needs JRuby (embedded in the JAR) for runtime. Existing containers additionally install the agent Ruby + the openvox gem just so entrypoint scripts can call `puppet config set/print`. This is unnecessary when configuration comes via ConfigMaps.
 
 ### Docker Logic in Kubernetes
 
@@ -215,7 +215,7 @@ Existing containers decide at startup whether to run as CA or server based on en
 
 | | VM-based / Docker | openvox-operator |
 |---|---|---|
-| **Ruby** | System Ruby (CRuby) alongside JRuby | No system Ruby - only JRuby in the server JAR |
+| **Ruby** | Agent Ruby (CRuby) alongside JRuby | No agent Ruby - only JRuby in the server JAR |
 | **Configuration** | `puppet config set`, entrypoint scripts, ENV vars | Declarative CRDs, operator renders ConfigMaps |
 | **Privileges** | Requires root | Fully rootless, random UID compatible |
 | **CA Management** | `puppetserver ca` CLI (CRuby) | Custom JRuby wrapper via `clojure.main` |
@@ -242,7 +242,7 @@ The operator uses a minimal container image:
 **Removed (compared to upstream images):**
 
 - All entrypoint.d scripts
-- System Ruby and openvox gem
+- Agent Ruby and openvox gem
 - Gemfile / bundle install / ruby-devel / gcc / make
 - ENV var to config translation logic
 - Docker-Compose support

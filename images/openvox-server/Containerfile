@@ -1,5 +1,5 @@
 # Rootless OpenVox Server on UBI9 for Kubernetes/OpenShift
-# K8s-first: no entrypoint.d scripts, no System Ruby, no Docker ENV config.
+# K8s-first: no entrypoint.d scripts, no agent Ruby, no Docker ENV config.
 # The operator manages all configuration via ConfigMaps and Secrets.
 #
 # Build (from repo root):

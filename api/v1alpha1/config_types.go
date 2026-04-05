@@ -332,7 +332,7 @@ type StorageSpec struct {
 // PuppetSpec defines puppet.conf settings.
 type PuppetSpec struct {
 	// EnvironmentTimeout controls how long puppet caches environments.
-	// +kubebuilder:default="unlimited"
+	// When unset, Puppet's default (0 = no caching) is used.
 	// +optional
 	EnvironmentTimeout string `json:"environmentTimeout,omitempty"`
 

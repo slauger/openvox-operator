@@ -206,9 +206,9 @@ spec:
                     description: EnvironmentPath is the path to puppet environments.
                     type: string
                   environmentTimeout:
-                    default: unlimited
-                    description: EnvironmentTimeout controls how long puppet caches
-                      environments.
+                    description: |-
+                      EnvironmentTimeout controls how long puppet caches environments.
+                      When unset, Puppet's default (0 = no caching) is used.
                     type: string
                   extraConfig:
                     additionalProperties:

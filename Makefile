@@ -183,9 +183,20 @@ WEBHOOK_SAN ?= openvox-operator-webhook.$(NAMESPACE).svc
 e2e-setup: ## Install all E2E external dependencies (CNPG, Envoy Gateway, cert-manager).
 	bash tests/e2e/setup.sh all
 
+.PHONY: e2e-wait
+e2e-wait: ## Wait for E2E dependencies to be available (pre-installed via ArgoCD in CI).
+	kubectl wait --for=condition=Available deployment/cnpg-controller-manager -n cnpg-system --timeout=3m
+	kubectl wait --for=condition=Available deployment/envoy-gateway -n envoy-gateway-system --timeout=3m
+	kubectl wait --for=condition=Available deployment/cert-manager -n cert-manager --timeout=3m
+	kubectl wait --for=condition=Available deployment/cert-manager-webhook -n cert-manager --timeout=3m
+
 .PHONY: e2e-cleanup
-e2e-cleanup: ## Remove operator after E2E tests.
+e2e-cleanup: ## Remove operator, CRDs, and all E2E test namespaces.
 	helm uninstall openvox-operator --namespace $(NAMESPACE) --wait 2>/dev/null || true
+	@echo "Cleaning up leftover E2E namespaces..."
+	@kubectl get namespaces -o name | grep '^namespace/e2e-' | xargs -r kubectl delete --ignore-not-found 2>/dev/null || true
+	@echo "Removing CRDs..."
+	@kubectl get crds -o name | grep 'openvox\.voxpupuli\.org' | xargs -r kubectl delete --ignore-not-found 2>/dev/null || true
 	kubectl delete namespace $(NAMESPACE) --ignore-not-found 2>/dev/null || true
 
 .PHONY: e2e-webhook-byo-cert
@@ -211,7 +222,7 @@ e2e-webhook-byo-cert: ## Generate self-signed TLS cert and create webhook Secret
 	fi
 
 .PHONY: e2e-operator-base
-e2e-operator-base: ## Install operator: webhooks=false, gatewayAPI=false.
+e2e-operator-base: e2e-cleanup ## Install operator: webhooks=false, gatewayAPI=false.
 	helm upgrade --install openvox-operator charts/openvox-operator \
 		--namespace $(NAMESPACE) --create-namespace \
 		--set image.repository=$(IMAGE_REGISTRY)/openvox-operator \
@@ -223,7 +234,7 @@ e2e-operator-base: ## Install operator: webhooks=false, gatewayAPI=false.
 		-n $(NAMESPACE) --timeout=2m
 
 .PHONY: e2e-operator-gateway
-e2e-operator-gateway: ## Install operator: webhooks=false, gatewayAPI=true.
+e2e-operator-gateway: e2e-cleanup ## Install operator: webhooks=false, gatewayAPI=true.
 	helm upgrade --install openvox-operator charts/openvox-operator \
 		--namespace $(NAMESPACE) --create-namespace \
 		--set image.repository=$(IMAGE_REGISTRY)/openvox-operator \
@@ -235,7 +246,7 @@ e2e-operator-gateway: ## Install operator: webhooks=false, gatewayAPI=true.
 		-n $(NAMESPACE) --timeout=2m
 
 .PHONY: e2e-operator-webhooks-byo
-e2e-operator-webhooks-byo: e2e-webhook-byo-cert ## Install operator: webhooks=true, BYO TLS cert.
+e2e-operator-webhooks-byo: e2e-cleanup e2e-webhook-byo-cert ## Install operator: webhooks=true, BYO TLS cert.
 	$(eval CA_BUNDLE := $(shell kubectl get secret $(WEBHOOK_CERT_SECRET) -n $(NAMESPACE) -o jsonpath='{.data.ca\.crt}'))
 	helm upgrade --install openvox-operator charts/openvox-operator \
 		--namespace $(NAMESPACE) --create-namespace \
@@ -251,7 +262,7 @@ e2e-operator-webhooks-byo: e2e-webhook-byo-cert ## Install operator: webhooks=tr
 		-n $(NAMESPACE) --timeout=2m
 
 .PHONY: e2e-operator-webhooks-cm
-e2e-operator-webhooks-cm: ## Install operator: webhooks=true, cert-manager.
+e2e-operator-webhooks-cm: e2e-cleanup ## Install operator: webhooks=true, cert-manager.
 	helm upgrade --install openvox-operator charts/openvox-operator \
 		--namespace $(NAMESPACE) --create-namespace \
 		--set image.repository=$(IMAGE_REGISTRY)/openvox-operator \

@@ -171,7 +171,15 @@ make e2e-all
 
 ### External Dependencies
 
-Some tests require external operators. Install them with `setup.sh`:
+Some tests require external operators:
+
+- **CloudNativePG** -- PostgreSQL operator for `database-cnpg` test
+- **Envoy Gateway** -- Gateway API implementation for `pool-gateway` test
+- **cert-manager** -- Webhook TLS automation for `webhooks-cm` test
+
+In CI, these are pre-installed on the persistent E2E cluster via ArgoCD. The workflow only waits for readiness (`make e2e-wait`).
+
+For local development, install them with `setup.sh`:
 
 ```bash
 bash tests/e2e/setup.sh all              # Install all dependencies
@@ -184,7 +192,8 @@ bash tests/e2e/setup.sh status            # Check status
 Or via Make:
 
 ```bash
-make e2e-setup
+make e2e-setup    # Install all dependencies (local dev)
+make e2e-wait     # Only check readiness (used in CI)
 ```
 
 Versions can be overridden via environment variables: `CNPG_VERSION`, `ENVOY_GATEWAY_VERSION`, `CERT_MANAGER_VERSION`.
@@ -205,7 +214,7 @@ make e2e-all IMAGE_TAG=$(git branch --show-current)
 
 ### Running in CI
 
-The E2E workflow connects to a persistent K3S cluster via `E2E_KUBECONFIG` secret. Test groups run sequentially: base, enc, gateway, webhooks-byo, webhooks-cm.
+The E2E workflow connects to a persistent K3S cluster via `E2E_KUBECONFIG` secret. External dependencies (CNPG, Envoy Gateway, cert-manager) are managed by ArgoCD on the cluster -- the workflow only verifies they are available before starting tests. Test groups run sequentially: base, enc, gateway, webhooks-byo, webhooks-cm.
 
 Manual trigger with group selection:
 

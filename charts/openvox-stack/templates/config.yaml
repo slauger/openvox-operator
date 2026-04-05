@@ -22,7 +22,9 @@ spec:
   readOnlyRootFilesystem: true
   {{- end }}
   puppet:
-    environmentTimeout: {{ .Values.config.puppet.environmentTimeout }}
+    {{- with .Values.config.puppet.environmentTimeout }}
+    environmentTimeout: {{ . }}
+    {{- end }}
     storeconfigs: {{ ternary true .Values.config.puppet.storeconfigs .Values.database.enabled }}
     reports: {{ .Values.config.puppet.reports }}
   {{- with .Values.config.code }}

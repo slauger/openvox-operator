@@ -1,6 +1,9 @@
 {
-  "name": "e2e_test",
+  "name": "openvox-e2e_test",
   "version": "0.1.0",
+  "author": "openvox",
+  "license": "Apache-2.0",
+  "source": "https://github.com/slauger/openvox-operator",
   "summary": "E2E test module for openvox-operator",
   "dependencies": [
     {

@@ -1,0 +1,115 @@
+name: E2E Images
+
+on:
+  push:
+    branches: [develop]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - 'CHANGELOG*'
+      - '.github/*.md'
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Custom image tag (default: branch name)'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+env:
+  IMAGE_TAG: ${{ inputs.image_tag || github.ref_name }}
+
+jobs:
+  openvox-operator:
+    uses: ./.github/workflows/_container-build.yaml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    with:
+      image_name: openvox-operator
+      dockerfile: images/openvox-operator/Containerfile
+      context: '.'
+      push: true
+      image_tag: ${{ inputs.image_tag || github.ref_name }}
+
+  openvox-server:
+    uses: ./.github/workflows/_container-build.yaml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    with:
+      image_name: openvox-server
+      dockerfile: images/openvox-server/Containerfile
+      context: '.'
+      push: true
+      image_tag: ${{ inputs.image_tag || github.ref_name }}
+
+  openvox-e2e-code:
+    uses: ./.github/workflows/_container-build.yaml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    with:
+      image_name: openvox-e2e-code
+      dockerfile: images/openvox-e2e-code/Containerfile
+      context: '.'
+      push: true
+      image_tag: ${{ inputs.image_tag || github.ref_name }}
+      sign: false
+
+  openvox-agent:
+    uses: ./.github/workflows/_container-build.yaml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    with:
+      image_name: openvox-agent
+      dockerfile: images/openvox-agent/Containerfile
+      context: 'images/openvox-agent'
+      push: true
+      image_tag: ${{ inputs.image_tag || github.ref_name }}
+      sign: false
+
+  openvox-db:
+    uses: ./.github/workflows/_container-build.yaml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    with:
+      image_name: openvox-db
+      dockerfile: images/openvox-db/Containerfile
+      context: '.'
+      push: true
+      image_tag: ${{ inputs.image_tag || github.ref_name }}
+
+  openvox-mock:
+    uses: ./.github/workflows/_container-build.yaml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    with:
+      image_name: openvox-mock
+      dockerfile: images/openvox-mock/Containerfile
+      context: '.'
+      push: true
+      image_tag: ${{ inputs.image_tag || github.ref_name }}
+      sign: false

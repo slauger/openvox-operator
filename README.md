@@ -21,9 +21,6 @@ A Kubernetes Operator that maps [OpenVox Server](https://github.com/OpenVoxProje
 - 🗄️ **Managed OpenVox DB** - Deploy OpenVox DB (PuppetDB) with external PostgreSQL - TLS, config, and credentials managed by the operator
 - 🔃 **Automatic Config Rollout** - Config and certificate changes trigger rolling restarts automatically
 - ☸️ **Kubernetes-Native** - All config via ConfigMaps/Secrets - no entrypoint scripts, no ENV translation
-
-> **⚠️ Status: Early Development** - This project is experimental and under active development. CRDs, APIs, and behavior may change at any time. Not ready for production use. Feedback is welcome - especially on the CRD data model, which is still evolving. Feel free to open an [issue](https://github.com/slauger/openvox-operator/issues).
-
 ## Architecture
 
 ```mermaid
@@ -215,11 +212,11 @@ make uninstall                    # Remove everything
 Override the image tag or use a different scenario:
 
 ```bash
-make local-deploy LOCAL_TAG=my-feature
-make local-stack LOCAL_TAG=my-feature STACK_VALUES=charts/openvox-stack/ci/multi-server-values.yaml
+make local-deploy IMAGE_TAG=my-feature
+make local-stack IMAGE_TAG=my-feature STACK_VALUES=charts/openvox-stack/ci/multi-server-values.yaml
 ```
 
-### Testing
+## Testing
 
 ```bash
 make ci           # Run all offline checks (lint, vet, test, vulncheck, helm-lint, helm-unittest)

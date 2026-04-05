@@ -30,7 +30,8 @@ make ci
 | Workflow | File | Trigger | What it does |
 |----------|------|---------|-------------|
 | CI | `ci.yaml` | Push to main/develop, PRs | Linting + all 6 image builds; pushes `:develop` tag on develop branch |
-| E2E | `e2e.yaml` | Push to develop, manual | Builds + pushes all 6 images, runs E2E test groups, cleans up images |
+| E2E Images | `e2e-images.yaml` | Push to develop, manual | Builds + pushes all 6 E2E images to ghcr.io |
+| E2E | `e2e.yaml` | Manual only | Runs E2E test groups against pre-built images (sequential, with group selection) |
 | Release | `release.yaml` | Manual (main only) | semantic-release, builds operator/server/db with version tag + `:latest`, publishes Helm charts |
 
 ### Reusable Workflows
@@ -38,11 +39,11 @@ make ci
 | Workflow | File | Purpose |
 |----------|------|---------|
 | Container Build | `_container-build.yaml` | Multi-arch image build, optional push, signing, SBOM |
+| E2E Run | `_e2e-run.yaml` | Run a single E2E test group (cluster cleanup + test execution) |
 | Go | `_go.yaml` | Go build, test, vet, vulncheck, lint |
 | Helm | `_helm.yaml` | Helm lint + unittest |
 | Shellcheck | `_shellcheck.yaml` | Shell script linting |
 | Unicode Lint | `_unicode-lint.yaml` | Detect suspicious Unicode characters |
-| Cleanup Images | `_cleanup-images.yaml` | Delete E2E images from ghcr.io |
 
 ### Image Tagging Strategy
 
@@ -51,16 +52,15 @@ make ci
 | CI - PR | all 6 | No | - | - |
 | CI - push develop | all 6 | Yes | `:develop` | No |
 | CI - push main | all 6 | No | - | - |
-| E2E - push develop | all 6 | Yes | `:develop` (or custom) | No |
-| E2E - manual | all 6 | Yes | custom `image_tag` | No |
+| E2E Images - push develop | all 6 | Yes | `:develop` | No |
+| E2E Images - manual | all 6 | Yes | custom `image_tag` or branch name | No |
 | Release | operator, server, db | Yes | `:x.y.z` | Yes |
 
 **Key points:**
 
-- `:develop` images are unstable, rebuilt on every push to develop
+- `:develop` images are unstable, rebuilt on every push to develop (by both CI and E2E Images workflows)
 - `:latest` is only set by `release.yaml` and always points to the latest release
-- E2E images tagged with short SHAs are automatically cleaned up after tests
-- Cleanup can be disabled via `cleanup_images: false` in `workflow_dispatch`
+- E2E tests run against pre-built images; no images are built or cleaned up during test runs
 
 ### Which Images Are Released?
 
@@ -206,21 +206,24 @@ make e2e-group-base IMAGE_TAG=develop
 
 # Run all groups
 make e2e-all IMAGE_TAG=develop
-
-# For feature branches: trigger E2E workflow first to build images
-gh workflow run e2e.yaml --ref $(git branch --show-current)
-make e2e-all IMAGE_TAG=$(git branch --show-current)
 ```
+
+> **Feature branches:** E2E images are only pushed for the `develop` branch. To run E2E
+> tests for a feature branch, you need to build and push images manually (e.g. via
+> `gh workflow run e2e-images.yaml --ref <branch>`). A future in-cluster registry feature
+> will make this easier -- see the tracking issue for details.
 
 ### Running in CI
 
 The E2E workflow connects to a persistent K3S cluster via `E2E_KUBECONFIG` secret. External dependencies (CNPG, Envoy Gateway, cert-manager) are managed by ArgoCD on the cluster -- the workflow only verifies they are available before starting tests. Test groups run sequentially: base, enc, gateway, webhooks-byo, webhooks-cm.
 
+Images are built by the separate `e2e-images.yaml` workflow (triggered on push to develop). The `e2e.yaml` workflow only runs tests against already-pushed images.
+
 Manual trigger with group selection:
 
 ```bash
-gh workflow run e2e.yaml -f group=webhooks-byo
-gh workflow run e2e.yaml -f group=all -f cleanup_images=false  # keep images
+gh workflow run e2e.yaml -f group=webhooks-byo -f image_tag=develop
+gh workflow run e2e.yaml -f group=all -f image_tag=develop
 ```
 
 ### Chainsaw Configuration

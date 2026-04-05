@@ -59,17 +59,17 @@ docker-push: ## Push container image.
 
 ##@ Local Development
 
-LOCAL_TAG ?= $(shell git describe --always)
+IMAGE_TAG ?= $(shell git describe --always)
 
 .PHONY: local-build
 local-build: ## Build all images for local development (Docker Desktop K8s).
-	$(CONTAINER_TOOL) build -t ghcr.io/slauger/openvox-operator:$(LOCAL_TAG) -f images/openvox-operator/Containerfile .
-	$(CONTAINER_TOOL) build -t ghcr.io/slauger/openvox-server:$(LOCAL_TAG) -f images/openvox-server/Containerfile .
+	$(CONTAINER_TOOL) build -t ghcr.io/slauger/openvox-operator:$(IMAGE_TAG) -f images/openvox-operator/Containerfile .
+	$(CONTAINER_TOOL) build -t ghcr.io/slauger/openvox-server:$(IMAGE_TAG) -f images/openvox-server/Containerfile .
 	$(CONTAINER_TOOL) build -t ghcr.io/slauger/openvox-e2e-code:latest -f images/openvox-e2e-code/Containerfile .
 	$(CONTAINER_TOOL) build -t ghcr.io/slauger/openvox-agent:latest -f images/openvox-agent/Containerfile images/openvox-agent/
 	$(CONTAINER_TOOL) build -t ghcr.io/slauger/openvox-mock:latest -f images/openvox-mock/Containerfile .
-	@echo "Built ghcr.io/slauger/openvox-operator:$(LOCAL_TAG)"
-	@echo "Built ghcr.io/slauger/openvox-server:$(LOCAL_TAG)"
+	@echo "Built ghcr.io/slauger/openvox-operator:$(IMAGE_TAG)"
+	@echo "Built ghcr.io/slauger/openvox-server:$(IMAGE_TAG)"
 	@echo "Built ghcr.io/slauger/openvox-e2e-code:latest"
 	@echo "Built ghcr.io/slauger/openvox-agent:latest"
 	@echo "Built ghcr.io/slauger/openvox-mock:latest"
@@ -77,16 +77,16 @@ local-build: ## Build all images for local development (Docker Desktop K8s).
 .PHONY: local-deploy
 local-deploy: local-build local-install ## Build images and deploy operator via Helm.
 	@echo ""
-	@echo "Operator deployed with openvox-operator:$(LOCAL_TAG)"
+	@echo "Operator deployed with openvox-operator:$(IMAGE_TAG)"
 
 STACK_NAMESPACE ?= openvox
 STACK_VALUES ?= charts/openvox-stack/values.yaml
 
 ##@ Deployment
 
-# When IMAGE_TAG is set (e.g. make install IMAGE_TAG=487ea36), configure
-# helm to pull that specific image from the registry.
-ifdef IMAGE_TAG
+# When IMAGE_TAG is explicitly passed (e.g. make install IMAGE_TAG=487ea36),
+# configure helm to pull that specific image from the registry.
+ifeq ($(origin IMAGE_TAG),command line)
 HELM_SET ?= --set image.repository=$(IMAGE_REGISTRY)/openvox-operator --set image.tag=$(IMAGE_TAG) --set image.pullPolicy=Always
 STACK_HELM_SET ?= --set config.image.repository=$(IMAGE_REGISTRY)/openvox-server --set config.image.tag=$(IMAGE_TAG) --set config.image.pullPolicy=Always
 endif
@@ -97,7 +97,7 @@ install: manifests ## Install operator via Helm (supports IMAGE_TAG=<tag>).
 		--namespace $(NAMESPACE) --create-namespace $(HELM_SET)
 
 .PHONY: local-install
-local-install: HELM_SET := --set image.tag=$(LOCAL_TAG) --set image.pullPolicy=Never
+local-install: HELM_SET := --set image.tag=$(IMAGE_TAG) --set image.pullPolicy=Never
 local-install: install ## Install operator via Helm with local images (no build).
 
 .PHONY: stack
@@ -107,7 +107,7 @@ stack: ## Deploy openvox-stack via Helm (supports IMAGE_TAG=<tag>).
 		--values $(STACK_VALUES) $(STACK_HELM_SET)
 
 .PHONY: local-stack
-local-stack: STACK_HELM_SET := --set config.image.tag=$(LOCAL_TAG) --set config.image.pullPolicy=Never
+local-stack: STACK_HELM_SET := --set config.image.tag=$(IMAGE_TAG) --set config.image.pullPolicy=Never
 local-stack: stack ## Deploy openvox-stack via Helm with local images.
 
 .PHONY: unstack
@@ -174,8 +174,6 @@ ci: lint vet test check-manifests vulncheck helm-lint helm-unittest ## Run all C
 	@echo "All CI checks passed."
 
 ##@ E2E
-
-IMAGE_TAG ?= $(LOCAL_TAG)
 
 .PHONY: chainsaw
 chainsaw: $(CHAINSAW) ## Download chainsaw binary.
@@ -250,6 +248,8 @@ e2e-operator-base: e2e-cleanup ## Install operator: webhooks=false, gatewayAPI=f
 		--set image.repository=$(IMAGE_REGISTRY)/openvox-operator \
 		--set image.tag=$(IMAGE_TAG) \
 		--set image.pullPolicy=Always \
+		--set resources.limits.cpu=null \
+		--set resources.limits.memory=null \
 		--set webhook.enabled=false \
 		--set gatewayAPI.enabled=false
 	kubectl wait --for=condition=Available deployment/openvox-operator \
@@ -262,6 +262,8 @@ e2e-operator-gateway: e2e-cleanup ## Install operator: webhooks=false, gatewayAP
 		--set image.repository=$(IMAGE_REGISTRY)/openvox-operator \
 		--set image.tag=$(IMAGE_TAG) \
 		--set image.pullPolicy=Always \
+		--set resources.limits.cpu=null \
+		--set resources.limits.memory=null \
 		--set webhook.enabled=false \
 		--set gatewayAPI.enabled=true
 	kubectl wait --for=condition=Available deployment/openvox-operator \
@@ -275,6 +277,8 @@ e2e-operator-webhooks-byo: e2e-cleanup e2e-webhook-byo-cert ## Install operator:
 		--set image.repository=$(IMAGE_REGISTRY)/openvox-operator \
 		--set image.tag=$(IMAGE_TAG) \
 		--set image.pullPolicy=Always \
+		--set resources.limits.cpu=null \
+		--set resources.limits.memory=null \
 		--set webhook.enabled=true \
 		--set webhook.certManager.enabled=false \
 		--set webhook.tls.certSecret=$(WEBHOOK_CERT_SECRET) \
@@ -290,6 +294,8 @@ e2e-operator-webhooks-cm: e2e-cleanup ## Install operator: webhooks=true, cert-m
 		--set image.repository=$(IMAGE_REGISTRY)/openvox-operator \
 		--set image.tag=$(IMAGE_TAG) \
 		--set image.pullPolicy=Always \
+		--set resources.limits.cpu=null \
+		--set resources.limits.memory=null \
 		--set webhook.enabled=true \
 		--set webhook.certManager.enabled=true \
 		--set gatewayAPI.enabled=false

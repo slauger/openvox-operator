@@ -134,7 +134,7 @@ spec:
             timeout: 30s
             content: |
               CLASSIFICATIONS=$(kubectl exec -n e2e-agent-enc deploy/openvox-mock -- \
-                wget -qO- http://localhost:8080/api/classifications)
+                curl -sf http://localhost:8080/api/classifications)
               echo "Classifications: ${CLASSIFICATIONS}"
               if echo "${CLASSIFICATIONS}" | grep -q "agent-enc-test"; then
                 echo "Mock received classification request for agent-enc-test."

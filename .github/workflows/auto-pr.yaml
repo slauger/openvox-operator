@@ -105,9 +105,8 @@ jobs:
         if: steps.check-pr.outputs.count == '0' || steps.check-pr.outputs.is_auto == 'true'
         id: analyze
         run: |
-          COMMITS=$(git log main..HEAD --pretty=format:"- %s (%h)" --no-merges | head -20)
-          FILES_CHANGED=$(git diff main..HEAD --stat | tail -30)
-          DIFF=$(git diff main..HEAD -- '*.go' '*.yaml' '*.yml' '*.md' '*.json' | head -c 8000)
+          COMMITS=$(git log main..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          FILES_CHANGED=$(git diff main..HEAD --stat)
 
           BUMP="${{ steps.version.outputs.bump }}"
           CURRENT="${{ steps.version.outputs.current }}"
@@ -120,25 +119,20 @@ jobs:
 
           Predicted release: ${CURRENT} -> ${NEXT} (${BUMP} bump)
 
-          Commits:
+          ALL commits since last release (complete list, nothing omitted):
           $COMMITS
 
-          Files changed:
+          Files changed (summary):
           $FILES_CHANGED
-
-          Diff (truncated):
-          \`\`\`
-          $DIFF
-          \`\`\`
 
           IMPORTANT: The FIRST line of your response must be a concise PR title (max 60 chars, no markdown, no prefix like "Title:"). It should summarize the most important changes. Examples: "Add Database CRD and update CI workflows", "Fix auth handling and bump dependencies".
 
-          Then leave one blank line and write the description:
+          Then leave one blank line and write the description. You MUST cover ALL commits listed above - do not skip any.
           ## Summary
-          - 3-5 bullet points explaining WHAT changed and WHY
+          - 5-8 bullet points explaining WHAT changed and WHY
 
           ## Changes
-          - Categorized list (features, fixes, chore, docs, etc.)
+          - Categorized list covering EVERY commit (features, fixes, refactor, chore, docs, tests, ci)
 
           ## Testing
           - How to verify these changes
@@ -154,7 +148,7 @@ jobs:
               ],
               "model": "gpt-4.1",
               "temperature": 0.7,
-              "max_tokens": 1500
+              "max_tokens": 4000
             }')
 
           API_RESPONSE=$(echo "$REQUEST_JSON" | curl -s -X POST \
@@ -173,7 +167,7 @@ jobs:
 
           $COMMITS
 
-          ### Files changed
+          ## Files changed
           \`\`\`
           $FILES_CHANGED
           \`\`\`"

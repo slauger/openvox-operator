@@ -244,6 +244,8 @@ func (r *CertificateAuthorityReconciler) reconcileExternalCA(ctx context.Context
 	notAfter := r.extractCANotAfter(ctx, caSecretName, ca.Namespace)
 	extMsg := fmt.Sprintf("External CA configured at %s", ext.URL)
 
+	// Note: ServiceName is intentionally not set for external CAs —
+	// no internal ClusterIP Service is created.
 	if err := updateStatusWithRetry(ctx, r.Client, ca, func() {
 		ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseExternal
 		ca.Status.CASecretName = caSecretName

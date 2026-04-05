@@ -221,64 +221,13 @@ make local-stack LOCAL_TAG=my-feature STACK_VALUES=charts/openvox-stack/ci/multi
 
 ### Testing
 
-Run unit tests:
-
 ```bash
-make test
+make ci           # Run all offline checks (lint, vet, test, vulncheck, helm-lint, helm-unittest)
+make test         # Go unit tests only
+make e2e-all      # Run all E2E test groups (requires cluster + images in ghcr.io)
 ```
 
-E2E tests require container images in ghcr.io because they run on a kind cluster with the `ImageVolume` feature gate. Images are automatically built and pushed on every push to `develop`. For feature branches, trigger the E2E workflow manually:
-
-```bash
-# Images are auto-built on push to develop (tagged as "develop")
-export IMAGE_TAG=develop
-make e2e
-
-# For feature branches: build and push images manually
-gh workflow run e2e.yaml --ref $(git branch --show-current)
-gh run watch $(gh run list --workflow=e2e.yaml --limit=1 --json databaseId -q '.[0].databaseId')
-export IMAGE_TAG=$(git branch --show-current)  # branch name is used as tag
-make e2e
-```
-
-Subsets of E2E tests can be run separately:
-
-```bash
-make e2e-stack        # stack deployment tests (single-node, multi-server)
-make e2e-agent        # agent tests (basic, broken, idempotent, concurrent)
-make e2e-integration  # integration tests (enc, report, full)
-make e2e-database     # Database with CNPG PostgreSQL tests
-make e2e-gateway      # Envoy Gateway TLSRoute tests
-```
-
-Some tests require external dependencies (CNPG operator, Envoy Gateway). Install them all at once:
-
-```bash
-make e2e-deps         # Install CNPG + Envoy Gateway
-```
-
-See [Testing](docs/development/testing.md) for details.
-
-### Available Targets
-
-| Target | Description |
-|---|---|
-| `install` | Install operator via Helm (supports `IMAGE_TAG=<tag>`) |
-| `stack` | Deploy openvox-stack via Helm (supports `IMAGE_TAG=<tag>`) |
-| `uninstall` | Remove stack, operator, and CRDs from the cluster |
-| `unstack` | Remove only the openvox-stack |
-| `local-build` | Build all container images with the current git commit as tag |
-| `local-deploy` | Build images and deploy the operator via Helm (`pullPolicy: Never`) |
-| `local-install` | Deploy operator via Helm with local images (no build) |
-| `local-stack` | Deploy openvox-stack via Helm with local images |
-| `e2e` | Run all E2E tests (installs CNPG + Envoy Gateway dependencies) |
-| `e2e-stack` | Run stack deployment tests (single-node, multi-server) |
-| `e2e-agent` | Run agent tests (basic, broken, idempotent, concurrent) |
-| `e2e-integration` | Run integration tests (enc, report, full) |
-| `e2e-database` | Run Database with CNPG PostgreSQL tests |
-| `e2e-gateway` | Run Envoy Gateway TLSRoute tests |
-| `e2e-deps` | Install CNPG + Envoy Gateway for E2E tests |
-| `ci` | Run all CI checks locally (lint, vet, test, manifests, vulncheck, helm-lint) |
+See [Testing](docs/development/testing.md) for E2E test groups, CI/CD workflows, image tagging strategy, and how to write new tests.
 
 ## Supply Chain Security
 

@@ -31,6 +31,8 @@ jobs:
       image_name: openvox-operator
       dockerfile: images/openvox-operator/Containerfile
       context: '.'
+      push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
+      image_tag: develop
 
   openvox-server:
     needs: shellcheck
@@ -44,6 +46,8 @@ jobs:
       image_name: openvox-server
       dockerfile: images/openvox-server/Containerfile
       context: '.'
+      push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
+      image_tag: develop
 
   openvox-db:
     needs: shellcheck
@@ -57,3 +61,53 @@ jobs:
       image_name: openvox-db
       dockerfile: images/openvox-db/Containerfile
       context: '.'
+      push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
+      image_tag: develop
+
+  openvox-code:
+    needs: shellcheck
+    uses: ./.github/workflows/_container-build.yaml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    with:
+      image_name: openvox-code
+      dockerfile: images/openvox-code/Containerfile
+      context: '.'
+      push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
+      image_tag: develop
+      sign: false
+
+  openvox-agent:
+    needs: shellcheck
+    uses: ./.github/workflows/_container-build.yaml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    with:
+      image_name: openvox-agent
+      dockerfile: images/openvox-agent/Containerfile
+      context: 'images/openvox-agent'
+      push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
+      image_tag: develop
+      sign: false
+
+  openvox-mock:
+    needs: shellcheck
+    uses: ./.github/workflows/_container-build.yaml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    with:
+      image_name: openvox-mock
+      dockerfile: images/openvox-mock/Containerfile
+      context: '.'
+      push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
+      image_tag: develop
+      sign: false

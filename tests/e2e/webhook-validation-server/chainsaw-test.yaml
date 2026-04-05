@@ -1,0 +1,135 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: webhook-validation-server
+spec:
+  namespace: e2e-webhook-val-server
+  steps:
+    - name: Create prerequisites
+      try:
+        - apply:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: CertificateAuthority
+              metadata:
+                name: wh-server-ca
+              spec:
+                storage:
+                  size: 1Gi
+        - apply:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Certificate
+              metadata:
+                name: wh-server-cert
+              spec:
+                authorityRef: wh-server-ca
+        - apply:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Config
+              metadata:
+                name: wh-server-config
+              spec:
+                image:
+                  repository: ghcr.io/slauger/openvox-server
+                  tag: latest
+                authorityRef: wh-server-ca
+        - apply:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Pool
+              metadata:
+                name: wh-server-pool
+              spec:
+                service:
+                  port: 8140
+
+    - name: Valid Server is accepted
+      try:
+        - apply:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: wh-server-valid
+              spec:
+                configRef: wh-server-config
+                certificateRef: wh-server-cert
+                poolRefs:
+                  - wh-server-pool
+
+    - name: Server with non-existent configRef is rejected
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              if kubectl apply -f - <<'EOF' 2>&1
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: wh-server-bad-config
+                namespace: e2e-webhook-val-server
+              spec:
+                configRef: does-not-exist
+                certificateRef: wh-server-cert
+              EOF
+              then
+                echo "ERROR: Server with non-existent configRef should have been rejected"
+                exit 1
+              fi
+              echo "Confirmed: Server with non-existent configRef was rejected."
+
+    - name: Server with non-existent certificateRef is rejected
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              if kubectl apply -f - <<'EOF' 2>&1
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: wh-server-bad-cert
+                namespace: e2e-webhook-val-server
+              spec:
+                configRef: wh-server-config
+                certificateRef: does-not-exist
+              EOF
+              then
+                echo "ERROR: Server with non-existent certificateRef should have been rejected"
+                exit 1
+              fi
+              echo "Confirmed: Server with non-existent certificateRef was rejected."
+
+    - name: Server with non-existent poolRef is rejected
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              if kubectl apply -f - <<'EOF' 2>&1
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: wh-server-bad-pool
+                namespace: e2e-webhook-val-server
+              spec:
+                configRef: wh-server-config
+                certificateRef: wh-server-cert
+                poolRefs:
+                  - does-not-exist
+              EOF
+              then
+                echo "ERROR: Server with non-existent poolRef should have been rejected"
+                exit 1
+              fi
+              echo "Confirmed: Server with non-existent poolRef was rejected."
+      finally:
+        - script:
+            timeout: 2m
+            content: |
+              kubectl delete server --all -n e2e-webhook-val-server --ignore-not-found 2>/dev/null || true
+              kubectl delete pool --all -n e2e-webhook-val-server --ignore-not-found 2>/dev/null || true
+              kubectl delete config --all -n e2e-webhook-val-server --ignore-not-found 2>/dev/null || true
+              kubectl delete certificate --all -n e2e-webhook-val-server --ignore-not-found 2>/dev/null || true
+              kubectl delete certificateauthority --all -n e2e-webhook-val-server --ignore-not-found 2>/dev/null || true
+              kubectl delete namespace e2e-webhook-val-server --ignore-not-found 2>/dev/null || true

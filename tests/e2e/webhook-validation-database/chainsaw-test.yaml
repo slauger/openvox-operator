@@ -1,0 +1,164 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: webhook-validation-database
+spec:
+  namespace: e2e-webhook-val-db
+  steps:
+    - name: Create prerequisites
+      try:
+        - apply:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: CertificateAuthority
+              metadata:
+                name: wh-db-ca
+              spec:
+                storage:
+                  size: 1Gi
+        - apply:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Certificate
+              metadata:
+                name: wh-db-cert
+              spec:
+                authorityRef: wh-db-ca
+        - apply:
+            resource:
+              apiVersion: v1
+              kind: Secret
+              metadata:
+                name: wh-db-pg-creds
+              type: Opaque
+              stringData:
+                username: puppetdb
+                password: test
+
+    - name: Valid Database is accepted
+      try:
+        - apply:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Database
+              metadata:
+                name: wh-db-valid
+              spec:
+                certificateRef: wh-db-cert
+                image:
+                  repository: ghcr.io/slauger/openvox-db
+                  tag: latest
+                postgres:
+                  host: pg-cluster-rw
+                  credentialsSecretRef: wh-db-pg-creds
+
+    - name: Database without certificateRef is rejected
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              if kubectl apply -f - <<'EOF' 2>&1
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Database
+              metadata:
+                name: wh-db-no-cert
+                namespace: e2e-webhook-val-db
+              spec:
+                image:
+                  repository: ghcr.io/slauger/openvox-db
+                  tag: latest
+                postgres:
+                  host: pg-cluster-rw
+                  credentialsSecretRef: wh-db-pg-creds
+              EOF
+              then
+                echo "ERROR: Database without certificateRef should have been rejected"
+                exit 1
+              fi
+              echo "Confirmed: Database without certificateRef was rejected."
+
+    - name: Database without postgres.host is rejected
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              if kubectl apply -f - <<'EOF' 2>&1
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Database
+              metadata:
+                name: wh-db-no-host
+                namespace: e2e-webhook-val-db
+              spec:
+                certificateRef: wh-db-cert
+                image:
+                  repository: ghcr.io/slauger/openvox-db
+                  tag: latest
+                postgres:
+                  credentialsSecretRef: wh-db-pg-creds
+              EOF
+              then
+                echo "ERROR: Database without postgres.host should have been rejected"
+                exit 1
+              fi
+              echo "Confirmed: Database without postgres.host was rejected."
+
+    - name: Database without postgres.credentialsSecretRef is rejected
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              if kubectl apply -f - <<'EOF' 2>&1
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Database
+              metadata:
+                name: wh-db-no-creds
+                namespace: e2e-webhook-val-db
+              spec:
+                certificateRef: wh-db-cert
+                image:
+                  repository: ghcr.io/slauger/openvox-db
+                  tag: latest
+                postgres:
+                  host: pg-cluster-rw
+              EOF
+              then
+                echo "ERROR: Database without postgres.credentialsSecretRef should have been rejected"
+                exit 1
+              fi
+              echo "Confirmed: Database without postgres.credentialsSecretRef was rejected."
+
+    - name: Database with invalid sslMode is rejected
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              if kubectl apply -f - <<'EOF' 2>&1
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Database
+              metadata:
+                name: wh-db-bad-ssl
+                namespace: e2e-webhook-val-db
+              spec:
+                certificateRef: wh-db-cert
+                image:
+                  repository: ghcr.io/slauger/openvox-db
+                  tag: latest
+                postgres:
+                  host: pg-cluster-rw
+                  credentialsSecretRef: wh-db-pg-creds
+                  sslMode: invalid-mode
+              EOF
+              then
+                echo "ERROR: Database with invalid sslMode should have been rejected"
+                exit 1
+              fi
+              echo "Confirmed: Database with invalid sslMode was rejected."
+      finally:
+        - script:
+            timeout: 2m
+            content: |
+              kubectl delete database --all -n e2e-webhook-val-db --ignore-not-found 2>/dev/null || true
+              kubectl delete certificate --all -n e2e-webhook-val-db --ignore-not-found 2>/dev/null || true
+              kubectl delete certificateauthority --all -n e2e-webhook-val-db --ignore-not-found 2>/dev/null || true
+              kubectl delete secret wh-db-pg-creds -n e2e-webhook-val-db --ignore-not-found 2>/dev/null || true
+              kubectl delete namespace e2e-webhook-val-db --ignore-not-found 2>/dev/null || true

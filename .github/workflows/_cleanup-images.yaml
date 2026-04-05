@@ -1,0 +1,54 @@
+name: Cleanup Images
+
+on:
+  workflow_call:
+    inputs:
+      image_tag:
+        description: 'Image tag to delete (skips non-SHA tags)'
+        required: true
+        type: string
+      packages:
+        description: 'JSON array of package names to clean up'
+        required: false
+        type: string
+        default: '["openvox-operator","openvox-server","openvox-agent","openvox-code","openvox-db","openvox-mock"]'
+
+jobs:
+  cleanup:
+    name: ${{ matrix.package }}
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    strategy:
+      matrix:
+        package: ${{ fromJson(inputs.packages) }}
+    steps:
+      - name: Delete E2E image version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE: ${{ matrix.package }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          # Only delete tags that look like short SHAs (not releases/branch names)
+          if ! echo "${IMAGE_TAG}" | grep -qP '^[0-9a-f]{7,}$'; then
+            echo "Tag '${IMAGE_TAG}' does not look like a short SHA, skipping cleanup."
+            exit 0
+          fi
+
+          API_PATH="repos/${{ github.repository }}/packages/container/${PACKAGE}/versions"
+
+          echo "=== ${PACKAGE} (tag: ${IMAGE_TAG}) ==="
+
+          VERSIONS=$(gh api "$API_PATH" --paginate -q \
+            ".[] | select(.metadata.container.tags | any(. == \"${IMAGE_TAG}\" or startswith(\"${IMAGE_TAG}-\"))) | .id") || true
+
+          if [ -z "$VERSIONS" ]; then
+            echo "No matching versions found."
+            exit 0
+          fi
+
+          for ID in $VERSIONS; do
+            gh api --method DELETE "$API_PATH/$ID" --silent \
+              && echo "Deleted version $ID" \
+              || echo "Failed to delete version $ID"
+          done

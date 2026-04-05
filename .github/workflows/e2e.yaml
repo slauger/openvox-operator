@@ -10,6 +10,23 @@ on:
         required: false
         type: string
         default: ''
+      group:
+        description: 'Test group to run'
+        required: false
+        type: choice
+        default: 'all'
+        options:
+          - all
+          - base
+          - enc
+          - gateway
+          - webhooks-byo
+          - webhooks-cm
+      cleanup_images:
+        description: 'Delete E2E images after test run'
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -17,7 +34,12 @@ permissions:
   id-token: write
   attestations: write
 
+env:
+  IMAGE_TAG: ${{ inputs.image_tag || github.ref_name }}
+
 jobs:
+  # Phase 1: Build (parallel)
+
   openvox-operator:
     uses: ./.github/workflows/_container-build.yaml
     permissions:
@@ -104,3 +126,131 @@ jobs:
       push: true
       image_tag: ${{ inputs.image_tag || github.ref_name }}
       sign: false
+
+  # Phase 2: Test (sequential)
+
+  e2e-base:
+    if: inputs.group == 'all' || inputs.group == 'base' || inputs.group == ''
+    needs: [openvox-operator, openvox-server, openvox-code, openvox-agent, openvox-db, openvox-mock]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Setup Kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.E2E_KUBECONFIG }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl version --short 2>/dev/null || kubectl version
+
+      - name: Run base test group
+        run: make e2e-group-base IMAGE_TAG=${{ env.IMAGE_TAG }}
+
+  e2e-enc:
+    if: inputs.group == 'all' || inputs.group == 'enc' || inputs.group == ''
+    needs: [e2e-base]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Setup Kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.E2E_KUBECONFIG }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl version --short 2>/dev/null || kubectl version
+
+      - name: Run enc test group
+        run: make e2e-group-enc IMAGE_TAG=${{ env.IMAGE_TAG }}
+
+  e2e-gateway:
+    if: inputs.group == 'all' || inputs.group == 'gateway' || inputs.group == ''
+    needs: [e2e-enc]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Setup Kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.E2E_KUBECONFIG }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl version --short 2>/dev/null || kubectl version
+
+      - name: Run gateway test group
+        run: make e2e-group-gateway IMAGE_TAG=${{ env.IMAGE_TAG }}
+
+  e2e-webhooks-byo:
+    if: inputs.group == 'all' || inputs.group == 'webhooks-byo' || inputs.group == ''
+    needs: [e2e-gateway]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Setup Kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.E2E_KUBECONFIG }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl version --short 2>/dev/null || kubectl version
+
+      - name: Run webhooks-byo test group
+        run: make e2e-group-webhooks-byo IMAGE_TAG=${{ env.IMAGE_TAG }}
+
+  e2e-webhooks-cm:
+    if: inputs.group == 'all' || inputs.group == 'webhooks-cm' || inputs.group == ''
+    needs: [e2e-webhooks-byo]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Setup Kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.E2E_KUBECONFIG }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl version --short 2>/dev/null || kubectl version
+
+      - name: Run webhooks-cm test group
+        run: make e2e-group-webhooks-cm IMAGE_TAG=${{ env.IMAGE_TAG }}
+
+  # Phase 3: Cleanup E2E images
+
+  cleanup:
+    if: always() && inputs.cleanup_images != false
+    needs: [e2e-base, e2e-enc, e2e-gateway, e2e-webhooks-byo, e2e-webhooks-cm]
+    uses: ./.github/workflows/_cleanup-images.yaml
+    permissions:
+      packages: write
+    with:
+      image_tag: ${{ inputs.image_tag || github.ref_name }}

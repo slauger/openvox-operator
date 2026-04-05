@@ -8,6 +8,15 @@
 - Kubernetes or OpenShift cluster
 - Helm 3.x
 
+### Optional Components
+
+| Component | When needed |
+|---|---|
+| Kubernetes 1.35+ | OCI Image Volumes for [code deployment](../concepts/code-deployment.md) (1.31+ with `ImageVolume` feature gate) |
+| cert-manager | Webhook TLS certificate automation |
+| Gateway API CRDs | [TLSRoute](../concepts/gateway-api.md) support in Pool |
+| CloudNativePG (CNPG) | Managed PostgreSQL for [Database](../reference/database.md) |
+
 ## Install via Helm (OCI)
 
 The Helm chart is published as an OCI artifact to GitHub Container Registry.

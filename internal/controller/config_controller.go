@@ -53,8 +53,9 @@ func (r *ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// Set initial phase
 	if cfg.Status.Phase == "" {
-		cfg.Status.Phase = openvoxv1alpha1.ConfigPhasePending
-		if err := r.Status().Update(ctx, cfg); err != nil {
+		if err := updateStatusWithRetry(ctx, r.Client, cfg, func() {
+			cfg.Status.Phase = openvoxv1alpha1.ConfigPhasePending
+		}); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -64,13 +65,6 @@ func (r *ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	if err := r.reconcileConfigMap(ctx, cfg); err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconciling ConfigMaps: %w", err)
 	}
-	meta.SetStatusCondition(&cfg.Status.Conditions, metav1.Condition{
-		Type:               openvoxv1alpha1.ConditionConfigReady,
-		Status:             metav1.ConditionTrue,
-		Reason:             "ConfigMapsCreated",
-		Message:            "Configuration ConfigMaps are up to date",
-		LastTransitionTime: metav1.Now(),
-	})
 
 	// Step 2: Reconcile autosign policy Secrets for all CAs in this Config
 	if err := r.reconcileAutosignSecrets(ctx, cfg); err != nil {
@@ -93,9 +87,16 @@ func (r *ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	// Update status
-	cfg.Status.Phase = openvoxv1alpha1.ConfigPhaseRunning
-
-	if err := r.Status().Update(ctx, cfg); err != nil {
+	if err := updateStatusWithRetry(ctx, r.Client, cfg, func() {
+		cfg.Status.Phase = openvoxv1alpha1.ConfigPhaseRunning
+		meta.SetStatusCondition(&cfg.Status.Conditions, metav1.Condition{
+			Type:               openvoxv1alpha1.ConditionConfigReady,
+			Status:             metav1.ConditionTrue,
+			Reason:             "ConfigMapsCreated",
+			Message:            "Configuration ConfigMaps are up to date",
+			LastTransitionTime: metav1.Now(),
+		})
+	}); err != nil {
 		return ctrl.Result{}, err
 	}
 

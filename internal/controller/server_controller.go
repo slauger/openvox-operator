@@ -72,8 +72,9 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// Set initial phase
 	if server.Status.Phase == "" {
-		server.Status.Phase = openvoxv1alpha1.ServerPhasePending
-		if err := r.Status().Update(ctx, server); err != nil {
+		if err := updateStatusWithRetry(ctx, r.Client, server, func() {
+			server.Status.Phase = openvoxv1alpha1.ServerPhasePending
+		}); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -100,8 +101,9 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	if cert.Status.Phase != openvoxv1alpha1.CertificatePhaseSigned || cert.Status.SecretName == "" {
 		logger.Info("waiting for Certificate to be signed", "certificate", cert.Name, "phase", cert.Status.Phase)
-		server.Status.Phase = openvoxv1alpha1.ServerPhaseWaitingForCert
-		if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+		if statusErr := updateStatusWithRetry(ctx, r.Client, server, func() {
+			server.Status.Phase = openvoxv1alpha1.ServerPhaseWaitingForCert
+		}); statusErr != nil {
 			logger.Error(statusErr, "failed to update Server status", "name", server.Name)
 		}
 		return ctrl.Result{RequeueAfter: RequeueIntervalMedium}, nil
@@ -138,27 +140,22 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, fmt.Errorf("reconciling NetworkPolicy: %w", err)
 	}
 
-	// Re-fetch server to avoid conflict errors from concurrent reconciliations
-	if err := r.Get(ctx, req.NamespacedName, server); err != nil {
-		return ctrl.Result{}, err
-	}
-
 	// Update status
-	replicas := int32(1)
-	if server.Spec.Replicas != nil {
-		replicas = *server.Spec.Replicas
-	}
 	ready := r.getReadyReplicas(ctx, server)
-	server.Status.Desired = replicas
-	server.Status.Ready = ready
+	if err := updateStatusWithRetry(ctx, r.Client, server, func() {
+		replicas := int32(1)
+		if server.Spec.Replicas != nil {
+			replicas = *server.Spec.Replicas
+		}
+		server.Status.Desired = replicas
+		server.Status.Ready = ready
 
-	if ready > 0 {
-		server.Status.Phase = openvoxv1alpha1.ServerPhaseRunning
-	} else {
-		server.Status.Phase = openvoxv1alpha1.ServerPhasePending
-	}
-
-	if err := r.Status().Update(ctx, server); err != nil {
+		if ready > 0 {
+			server.Status.Phase = openvoxv1alpha1.ServerPhaseRunning
+		} else {
+			server.Status.Phase = openvoxv1alpha1.ServerPhasePending
+		}
+	}); err != nil {
 		return ctrl.Result{}, err
 	}
 

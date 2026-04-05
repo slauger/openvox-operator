@@ -1,7 +1,17 @@
 package controller
 
 import (
+	"context"
+	"fmt"
+	"sync/atomic"
 	"testing"
+
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
@@ -175,6 +185,93 @@ func TestBoolPtr(t *testing.T) {
 	val = boolPtr(false)
 	if val == nil || *val {
 		t.Errorf("boolPtr(false) = %v, want pointer to false", val)
+	}
+}
+
+func TestUpdateStatusWithRetry(t *testing.T) {
+	cfg := &openvoxv1alpha1.Config{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-config",
+			Namespace: testNamespace,
+		},
+	}
+	c := setupTestClient(cfg)
+
+	err := updateStatusWithRetry(testCtx(), c, cfg, func() {
+		cfg.Status.Phase = openvoxv1alpha1.ConfigPhaseRunning
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify the mutation was applied
+	got := &openvoxv1alpha1.Config{}
+	if err := c.Get(testCtx(), client.ObjectKeyFromObject(cfg), got); err != nil {
+		t.Fatalf("failed to get config: %v", err)
+	}
+	if got.Status.Phase != openvoxv1alpha1.ConfigPhaseRunning {
+		t.Errorf("expected phase %q, got %q", openvoxv1alpha1.ConfigPhaseRunning, got.Status.Phase)
+	}
+}
+
+func TestUpdateStatusWithRetry_ConflictRetry(t *testing.T) {
+	cfg := &openvoxv1alpha1.Config{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-config",
+			Namespace: testNamespace,
+		},
+	}
+
+	var calls atomic.Int32
+	c := fake.NewClientBuilder().
+		WithScheme(testScheme()).
+		WithObjects(cfg).
+		WithStatusSubresource(&openvoxv1alpha1.Config{}).
+		WithInterceptorFuncs(interceptor.Funcs{
+			SubResourceUpdate: func(ctx context.Context, client client.Client, subResourceName string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+				if calls.Add(1) == 1 {
+					return errors.NewConflict(schema.GroupResource{Group: "openvox.voxpupuli.org", Resource: "configs"}, obj.GetName(), fmt.Errorf("conflict"))
+				}
+				return client.SubResource(subResourceName).Update(ctx, obj, opts...)
+			},
+		}).
+		Build()
+
+	err := updateStatusWithRetry(testCtx(), c, cfg, func() {
+		cfg.Status.Phase = openvoxv1alpha1.ConfigPhaseRunning
+	})
+	if err != nil {
+		t.Fatalf("unexpected error after retry: %v", err)
+	}
+	if calls.Load() < 2 {
+		t.Errorf("expected at least 2 calls, got %d", calls.Load())
+	}
+}
+
+func TestUpdateStatusWithRetry_NonConflictError(t *testing.T) {
+	cfg := &openvoxv1alpha1.Config{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-config",
+			Namespace: testNamespace,
+		},
+	}
+
+	c := fake.NewClientBuilder().
+		WithScheme(testScheme()).
+		WithObjects(cfg).
+		WithStatusSubresource(&openvoxv1alpha1.Config{}).
+		WithInterceptorFuncs(interceptor.Funcs{
+			SubResourceUpdate: func(ctx context.Context, client client.Client, subResourceName string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+				return fmt.Errorf("internal server error")
+			},
+		}).
+		Build()
+
+	err := updateStatusWithRetry(testCtx(), c, cfg, func() {
+		cfg.Status.Phase = openvoxv1alpha1.ConfigPhaseRunning
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
 	}
 }
 

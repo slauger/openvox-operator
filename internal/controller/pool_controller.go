@@ -123,9 +123,11 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	// Update status
-	pool.Status.ServiceName = pool.Name
-	pool.Status.Endpoints = r.countEndpoints(ctx, pool)
-	if err := r.Status().Update(ctx, pool); err != nil {
+	endpoints := r.countEndpoints(ctx, pool)
+	if err := updateStatusWithRetry(ctx, r.Client, pool, func() {
+		pool.Status.ServiceName = pool.Name
+		pool.Status.Endpoints = endpoints
+	}); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -416,8 +418,9 @@ func (r *PoolReconciler) injectDNSAltNames(ctx context.Context, pool *openvoxv1a
 
 		// Reset certificate phase to trigger re-signing with the new alt name
 		if cert.Status.Phase == openvoxv1alpha1.CertificatePhaseSigned {
-			cert.Status.Phase = openvoxv1alpha1.CertificatePhasePending
-			if err := r.Status().Update(ctx, cert); err != nil {
+			if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
+				cert.Status.Phase = openvoxv1alpha1.CertificatePhasePending
+			}); err != nil {
 				return fmt.Errorf("resetting Certificate %s phase: %w", cert.Name, err)
 			}
 			logger.Info("reset Certificate phase to Pending for re-signing",

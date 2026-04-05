@@ -69,6 +69,7 @@ nav:
   - Development:
       - Local Setup: development/local-setup.md
       - Testing: development/testing.md
+      - E2E Infrastructure: development/e2e-infrastructure.md
       - Mock Server: development/mock-server.md
   - Reference:
       - Overview: reference/index.md

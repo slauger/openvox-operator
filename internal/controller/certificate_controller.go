@@ -51,8 +51,9 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Set initial phase
 	if cert.Status.Phase == "" {
-		cert.Status.Phase = openvoxv1alpha1.CertificatePhasePending
-		if err := r.Status().Update(ctx, cert); err != nil {
+		if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
+			cert.Status.Phase = openvoxv1alpha1.CertificatePhasePending
+		}); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -70,8 +71,9 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Wait for CA to be ready (accept both Ready and External phases)
 	if ca.Status.Phase != openvoxv1alpha1.CertificateAuthorityPhaseReady && ca.Status.Phase != openvoxv1alpha1.CertificateAuthorityPhaseExternal {
 		logger.Info("waiting for CertificateAuthority to be ready", "ca", ca.Name, "phase", ca.Status.Phase)
-		cert.Status.Phase = openvoxv1alpha1.CertificatePhasePending
-		if statusErr := r.Status().Update(ctx, cert); statusErr != nil {
+		if statusErr := updateStatusWithRetry(ctx, r.Client, cert, func() {
+			cert.Status.Phase = openvoxv1alpha1.CertificatePhasePending
+		}); statusErr != nil {
 			logger.Error(statusErr, "failed to update Certificate status", "name", cert.Name)
 		}
 		return ctrl.Result{RequeueAfter: RequeueIntervalMedium}, nil
@@ -85,17 +87,19 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{}, fmt.Errorf("adopting TLS Secret: %w", err)
 		}
 
-		cert.Status.Phase = openvoxv1alpha1.CertificatePhaseSigned
-		cert.Status.SecretName = tlsSecretName
-		cert.Status.NotAfter = r.extractNotAfter(ctx, tlsSecretName, cert.Namespace)
-		meta.SetStatusCondition(&cert.Status.Conditions, metav1.Condition{
-			Type:               openvoxv1alpha1.ConditionCertSigned,
-			Status:             metav1.ConditionTrue,
-			Reason:             "CertificateSigned",
-			Message:            "Certificate is signed and available",
-			LastTransitionTime: metav1.Now(),
-		})
-		if err := r.Status().Update(ctx, cert); err != nil {
+		notAfter := r.extractNotAfter(ctx, tlsSecretName, cert.Namespace)
+		if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
+			cert.Status.Phase = openvoxv1alpha1.CertificatePhaseSigned
+			cert.Status.SecretName = tlsSecretName
+			cert.Status.NotAfter = notAfter
+			meta.SetStatusCondition(&cert.Status.Conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionCertSigned,
+				Status:             metav1.ConditionTrue,
+				Reason:             "CertificateSigned",
+				Message:            "Certificate is signed and available",
+				LastTransitionTime: metav1.Now(),
+			})
+		}); err != nil {
 			return ctrl.Result{}, err
 		}
 		r.Recorder.Eventf(cert, nil, corev1.EventTypeNormal, EventReasonCertificateSigned, "Reconcile", "Certificate signed and available in Secret %s", tlsSecretName)
@@ -131,23 +135,26 @@ func (r *CertificateReconciler) reconcileCertSigning(ctx context.Context, cert *
 		caBaseURL = fmt.Sprintf("https://%s.%s.svc:8140", caInternalServiceName(ca.Name), cert.Namespace)
 	}
 
-	cert.Status.Phase = openvoxv1alpha1.CertificatePhaseRequesting
-	if statusErr := r.Status().Update(ctx, cert); statusErr != nil {
+	if statusErr := updateStatusWithRetry(ctx, r.Client, cert, func() {
+		cert.Status.Phase = openvoxv1alpha1.CertificatePhaseRequesting
+	}); statusErr != nil {
 		logger.Error(statusErr, "failed to update Certificate status", "name", cert.Name)
 	}
 
 	result, err := r.signCertificate(ctx, cert, ca, caBaseURL, cert.Namespace)
 	if err != nil {
 		logger.Error(err, "certificate signing failed, will retry")
-		cert.Status.Phase = openvoxv1alpha1.CertificatePhaseError
-		meta.SetStatusCondition(&cert.Status.Conditions, metav1.Condition{
-			Type:               openvoxv1alpha1.ConditionCertSigned,
-			Status:             metav1.ConditionFalse,
-			Reason:             "SigningFailed",
-			Message:            err.Error(),
-			LastTransitionTime: metav1.Now(),
-		})
-		if statusErr := r.Status().Update(ctx, cert); statusErr != nil {
+		errMsg := err.Error()
+		if statusErr := updateStatusWithRetry(ctx, r.Client, cert, func() {
+			cert.Status.Phase = openvoxv1alpha1.CertificatePhaseError
+			meta.SetStatusCondition(&cert.Status.Conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionCertSigned,
+				Status:             metav1.ConditionFalse,
+				Reason:             "SigningFailed",
+				Message:            errMsg,
+				LastTransitionTime: metav1.Now(),
+			})
+		}); statusErr != nil {
 			logger.Error(statusErr, "failed to update Certificate status", "name", cert.Name)
 		}
 		if result.RequeueAfter > 0 {
@@ -163,17 +170,19 @@ func (r *CertificateReconciler) reconcileCertSigning(ctx context.Context, cert *
 
 	// Mark as signed
 	tlsSecretName := fmt.Sprintf("%s-tls", cert.Name)
-	cert.Status.Phase = openvoxv1alpha1.CertificatePhaseSigned
-	cert.Status.SecretName = tlsSecretName
-	cert.Status.NotAfter = r.extractNotAfter(ctx, tlsSecretName, cert.Namespace)
-	meta.SetStatusCondition(&cert.Status.Conditions, metav1.Condition{
-		Type:               openvoxv1alpha1.ConditionCertSigned,
-		Status:             metav1.ConditionTrue,
-		Reason:             "CertificateSigned",
-		Message:            "Certificate is signed and available",
-		LastTransitionTime: metav1.Now(),
-	})
-	if err := r.Status().Update(ctx, cert); err != nil {
+	notAfter := r.extractNotAfter(ctx, tlsSecretName, cert.Namespace)
+	if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
+		cert.Status.Phase = openvoxv1alpha1.CertificatePhaseSigned
+		cert.Status.SecretName = tlsSecretName
+		cert.Status.NotAfter = notAfter
+		meta.SetStatusCondition(&cert.Status.Conditions, metav1.Condition{
+			Type:               openvoxv1alpha1.ConditionCertSigned,
+			Status:             metav1.ConditionTrue,
+			Reason:             "CertificateSigned",
+			Message:            "Certificate is signed and available",
+			LastTransitionTime: metav1.Now(),
+		})
+	}); err != nil {
 		return ctrl.Result{}, err
 	}
 

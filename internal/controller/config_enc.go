@@ -162,26 +162,31 @@ func (r *ConfigReconciler) renderENCConfig(ctx context.Context, cfg *openvoxv1al
 
 // updateNodeClassifierStatus sets the phase and condition on a NodeClassifier.
 func (r *ConfigReconciler) updateNodeClassifierStatus(ctx context.Context, nc *openvoxv1alpha1.NodeClassifier, err error) {
+	var errMsg string
 	if err != nil {
-		nc.Status.Phase = openvoxv1alpha1.NodeClassifierPhaseError
-		meta.SetStatusCondition(&nc.Status.Conditions, metav1.Condition{
-			Type:               openvoxv1alpha1.ConditionNodeClassifierReady,
-			Status:             metav1.ConditionFalse,
-			Reason:             "Error",
-			Message:            err.Error(),
-			LastTransitionTime: metav1.Now(),
-		})
-	} else {
-		nc.Status.Phase = openvoxv1alpha1.NodeClassifierPhaseActive
-		meta.SetStatusCondition(&nc.Status.Conditions, metav1.Condition{
-			Type:               openvoxv1alpha1.ConditionNodeClassifierReady,
-			Status:             metav1.ConditionTrue,
-			Reason:             "ConfigRendered",
-			Message:            "Node classifier configuration is active",
-			LastTransitionTime: metav1.Now(),
-		})
+		errMsg = err.Error()
 	}
-	if statusErr := r.Status().Update(ctx, nc); statusErr != nil {
+	if statusErr := updateStatusWithRetry(ctx, r.Client, nc, func() {
+		if err != nil {
+			nc.Status.Phase = openvoxv1alpha1.NodeClassifierPhaseError
+			meta.SetStatusCondition(&nc.Status.Conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionNodeClassifierReady,
+				Status:             metav1.ConditionFalse,
+				Reason:             "Error",
+				Message:            errMsg,
+				LastTransitionTime: metav1.Now(),
+			})
+		} else {
+			nc.Status.Phase = openvoxv1alpha1.NodeClassifierPhaseActive
+			meta.SetStatusCondition(&nc.Status.Conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionNodeClassifierReady,
+				Status:             metav1.ConditionTrue,
+				Reason:             "ConfigRendered",
+				Message:            "Node classifier configuration is active",
+				LastTransitionTime: metav1.Now(),
+			})
+		}
+	}); statusErr != nil {
 		log.FromContext(ctx).Error(statusErr, "failed to update NodeClassifier status", "name", nc.Name)
 	}
 }

@@ -61,8 +61,9 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 
 	// Set initial phase
 	if ca.Status.Phase == "" {
-		ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhasePending
-		if err := r.Status().Update(ctx, ca); err != nil {
+		if err := updateStatusWithRetry(ctx, r.Client, ca, func() {
+			ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhasePending
+		}); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -121,24 +122,29 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 
 	// CA is ready
 	wasReady := ca.Status.Phase == openvoxv1alpha1.CertificateAuthorityPhaseReady
-	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseReady
-	ca.Status.CASecretName = caSecretName
-	ca.Status.ServiceName = caInternalServiceName(ca.Name)
-	ca.Status.NotAfter = r.extractCANotAfter(ctx, caSecretName, ca.Namespace)
-
-	// Find the CA server cert's TLS secret for signing credentials
+	notAfter := r.extractCANotAfter(ctx, caSecretName, ca.Namespace)
+	serviceName := caInternalServiceName(ca.Name)
+	var signingSecretName string
 	if caCert := r.findCAServerCert(ctx, ca, certs); caCert != nil {
-		ca.Status.SigningSecretName = fmt.Sprintf("%s-tls", caCert.Name)
+		signingSecretName = fmt.Sprintf("%s-tls", caCert.Name)
 	}
-	meta.SetStatusCondition(&ca.Status.Conditions, metav1.Condition{
-		Type:               openvoxv1alpha1.ConditionCAReady,
-		Status:             metav1.ConditionTrue,
-		Reason:             "CAInitialized",
-		Message:            "CA is initialized and ready",
-		LastTransitionTime: metav1.Now(),
-	})
 
-	if err := r.Status().Update(ctx, ca); err != nil {
+	if err := updateStatusWithRetry(ctx, r.Client, ca, func() {
+		ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseReady
+		ca.Status.CASecretName = caSecretName
+		ca.Status.ServiceName = serviceName
+		ca.Status.NotAfter = notAfter
+		if signingSecretName != "" {
+			ca.Status.SigningSecretName = signingSecretName
+		}
+		meta.SetStatusCondition(&ca.Status.Conditions, metav1.Condition{
+			Type:               openvoxv1alpha1.ConditionCAReady,
+			Status:             metav1.ConditionTrue,
+			Reason:             "CAInitialized",
+			Message:            "CA is initialized and ready",
+			LastTransitionTime: metav1.Now(),
+		})
+	}); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -235,19 +241,21 @@ func (r *CertificateAuthorityReconciler) reconcileExternalCA(ctx context.Context
 	}
 
 	wasExternal := ca.Status.Phase == openvoxv1alpha1.CertificateAuthorityPhaseExternal
-	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseExternal
-	ca.Status.CASecretName = caSecretName
-	ca.Status.NotAfter = r.extractCANotAfter(ctx, caSecretName, ca.Namespace)
+	notAfter := r.extractCANotAfter(ctx, caSecretName, ca.Namespace)
+	extMsg := fmt.Sprintf("External CA configured at %s", ext.URL)
 
-	meta.SetStatusCondition(&ca.Status.Conditions, metav1.Condition{
-		Type:               openvoxv1alpha1.ConditionCAReady,
-		Status:             metav1.ConditionTrue,
-		Reason:             "ExternalCA",
-		Message:            fmt.Sprintf("External CA configured at %s", ext.URL),
-		LastTransitionTime: metav1.Now(),
-	})
-
-	if err := r.Status().Update(ctx, ca); err != nil {
+	if err := updateStatusWithRetry(ctx, r.Client, ca, func() {
+		ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseExternal
+		ca.Status.CASecretName = caSecretName
+		ca.Status.NotAfter = notAfter
+		meta.SetStatusCondition(&ca.Status.Conditions, metav1.Condition{
+			Type:               openvoxv1alpha1.ConditionCAReady,
+			Status:             metav1.ConditionTrue,
+			Reason:             "ExternalCA",
+			Message:            extMsg,
+			LastTransitionTime: metav1.Now(),
+		})
+	}); err != nil {
 		return ctrl.Result{}, err
 	}
 

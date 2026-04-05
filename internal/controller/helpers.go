@@ -14,12 +14,25 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
+
+// updateStatusWithRetry updates an object's status with automatic retry on conflict.
+// It re-fetches the object before each attempt so the latest resourceVersion is used.
+func updateStatusWithRetry(ctx context.Context, c client.Client, obj client.Object, mutate func()) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		if err := c.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
+			return err
+		}
+		mutate()
+		return c.Status().Update(ctx, obj)
+	})
+}
 
 // resolveSecretKey reads a specific key from a Secret.
 func resolveSecretKey(ctx context.Context, reader client.Reader, namespace, secretName, key string) (string, error) {

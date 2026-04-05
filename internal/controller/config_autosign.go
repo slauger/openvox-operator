@@ -137,26 +137,31 @@ func (r *ConfigReconciler) renderAutosignPolicyConfig(ctx context.Context, names
 
 // updateSigningPolicyStatus sets the phase and condition on a SigningPolicy.
 func (r *ConfigReconciler) updateSigningPolicyStatus(ctx context.Context, sp *openvoxv1alpha1.SigningPolicy, err error) {
+	var errMsg string
 	if err != nil {
-		sp.Status.Phase = openvoxv1alpha1.SigningPolicyPhaseError
-		meta.SetStatusCondition(&sp.Status.Conditions, metav1.Condition{
-			Type:               openvoxv1alpha1.ConditionSigningPolicyReady,
-			Status:             metav1.ConditionFalse,
-			Reason:             "Error",
-			Message:            err.Error(),
-			LastTransitionTime: metav1.Now(),
-		})
-	} else {
-		sp.Status.Phase = openvoxv1alpha1.SigningPolicyPhaseActive
-		meta.SetStatusCondition(&sp.Status.Conditions, metav1.Condition{
-			Type:               openvoxv1alpha1.ConditionSigningPolicyReady,
-			Status:             metav1.ConditionTrue,
-			Reason:             "PolicyRendered",
-			Message:            "Signing policy is active",
-			LastTransitionTime: metav1.Now(),
-		})
+		errMsg = err.Error()
 	}
-	if statusErr := r.Status().Update(ctx, sp); statusErr != nil {
+	if statusErr := updateStatusWithRetry(ctx, r.Client, sp, func() {
+		if err != nil {
+			sp.Status.Phase = openvoxv1alpha1.SigningPolicyPhaseError
+			meta.SetStatusCondition(&sp.Status.Conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionSigningPolicyReady,
+				Status:             metav1.ConditionFalse,
+				Reason:             "Error",
+				Message:            errMsg,
+				LastTransitionTime: metav1.Now(),
+			})
+		} else {
+			sp.Status.Phase = openvoxv1alpha1.SigningPolicyPhaseActive
+			meta.SetStatusCondition(&sp.Status.Conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionSigningPolicyReady,
+				Status:             metav1.ConditionTrue,
+				Reason:             "PolicyRendered",
+				Message:            "Signing policy is active",
+				LastTransitionTime: metav1.Now(),
+			})
+		}
+	}); statusErr != nil {
 		log.FromContext(ctx).Error(statusErr, "failed to update SigningPolicy status", "name", sp.Name)
 	}
 }

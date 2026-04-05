@@ -69,8 +69,9 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	// Set initial phase
 	if db.Status.Phase == "" {
-		db.Status.Phase = openvoxv1alpha1.DatabasePhasePending
-		if err := r.Status().Update(ctx, db); err != nil {
+		if err := updateStatusWithRetry(ctx, r.Client, db, func() {
+			db.Status.Phase = openvoxv1alpha1.DatabasePhasePending
+		}); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -87,8 +88,9 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	if cert.Status.Phase != openvoxv1alpha1.CertificatePhaseSigned || cert.Status.SecretName == "" {
 		logger.Info("waiting for Certificate to be signed", "certificate", cert.Name, "phase", cert.Status.Phase)
-		db.Status.Phase = openvoxv1alpha1.DatabasePhaseWaitingForCert
-		if statusErr := r.Status().Update(ctx, db); statusErr != nil {
+		if statusErr := updateStatusWithRetry(ctx, r.Client, db, func() {
+			db.Status.Phase = openvoxv1alpha1.DatabasePhaseWaitingForCert
+		}); statusErr != nil {
 			logger.Error(statusErr, "failed to update Database status", "name", db.Name)
 		}
 		return ctrl.Result{RequeueAfter: RequeueIntervalMedium}, nil
@@ -150,33 +152,28 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("reconciling NetworkPolicy: %w", err)
 	}
 
-	// Re-fetch to avoid conflict errors from concurrent reconciliations
-	if err := r.Get(ctx, req.NamespacedName, db); err != nil {
-		return ctrl.Result{}, err
-	}
-
 	// Update status
-	replicas := int32(1)
-	if db.Spec.Replicas != nil {
-		replicas = *db.Spec.Replicas
-	}
 	ready := r.getReadyReplicas(ctx, db)
-	db.Status.Desired = replicas
-	db.Status.Ready = ready
+	if err := updateStatusWithRetry(ctx, r.Client, db, func() {
+		replicas := int32(1)
+		if db.Spec.Replicas != nil {
+			replicas = *db.Spec.Replicas
+		}
+		db.Status.Desired = replicas
+		db.Status.Ready = ready
 
-	port := db.Spec.Service.Port
-	if port == 0 {
-		port = DatabaseHTTPSPort
-	}
-	db.Status.URL = fmt.Sprintf("https://%s.%s.svc.cluster.local:%d", db.Name, db.Namespace, port)
+		port := db.Spec.Service.Port
+		if port == 0 {
+			port = DatabaseHTTPSPort
+		}
+		db.Status.URL = fmt.Sprintf("https://%s.%s.svc.cluster.local:%d", db.Name, db.Namespace, port)
 
-	if ready > 0 {
-		db.Status.Phase = openvoxv1alpha1.DatabasePhaseRunning
-	} else {
-		db.Status.Phase = openvoxv1alpha1.DatabasePhasePending
-	}
-
-	if err := r.Status().Update(ctx, db); err != nil {
+		if ready > 0 {
+			db.Status.Phase = openvoxv1alpha1.DatabasePhaseRunning
+		} else {
+			db.Status.Phase = openvoxv1alpha1.DatabasePhasePending
+		}
+	}); err != nil {
 		return ctrl.Result{}, err
 	}
 

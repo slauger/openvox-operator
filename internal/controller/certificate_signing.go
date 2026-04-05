@@ -353,15 +353,17 @@ func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openv
 			if certname == "" {
 				certname = "puppet"
 			}
-			cert.Status.Phase = openvoxv1alpha1.CertificatePhaseWaitingForSigning
-			meta.SetStatusCondition(&cert.Status.Conditions, metav1.Condition{
-				Type:               openvoxv1alpha1.ConditionCertSigned,
-				Status:             metav1.ConditionFalse,
-				Reason:             "WaitingForManualSigning",
-				Message:            fmt.Sprintf("CSR submitted but not yet signed after %d attempts", attempts),
-				LastTransitionTime: metav1.Now(),
-			})
-			if statusErr := r.Status().Update(ctx, cert); statusErr != nil {
+			waitMsg := fmt.Sprintf("CSR submitted but not yet signed after %d attempts", attempts)
+			if statusErr := updateStatusWithRetry(ctx, r.Client, cert, func() {
+				cert.Status.Phase = openvoxv1alpha1.CertificatePhaseWaitingForSigning
+				meta.SetStatusCondition(&cert.Status.Conditions, metav1.Condition{
+					Type:               openvoxv1alpha1.ConditionCertSigned,
+					Status:             metav1.ConditionFalse,
+					Reason:             "WaitingForManualSigning",
+					Message:            waitMsg,
+					LastTransitionTime: metav1.Now(),
+				})
+			}); statusErr != nil {
 				logger.Error(statusErr, "failed to update Certificate status to WaitingForSigning")
 			}
 			r.Recorder.Eventf(cert, nil, corev1.EventTypeWarning, EventReasonCSRWaitingForSigning, "Reconcile",

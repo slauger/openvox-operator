@@ -221,26 +221,31 @@ func (r *ConfigReconciler) resolveConfigMapKey(ctx context.Context, namespace, c
 
 // updateReportProcessorStatus sets the phase and condition on a ReportProcessor.
 func (r *ConfigReconciler) updateReportProcessorStatus(ctx context.Context, rp *openvoxv1alpha1.ReportProcessor, err error) {
+	var errMsg string
 	if err != nil {
-		rp.Status.Phase = openvoxv1alpha1.ReportProcessorPhaseError
-		meta.SetStatusCondition(&rp.Status.Conditions, metav1.Condition{
-			Type:               openvoxv1alpha1.ConditionReportProcessorReady,
-			Status:             metav1.ConditionFalse,
-			Reason:             "Error",
-			Message:            err.Error(),
-			LastTransitionTime: metav1.Now(),
-		})
-	} else {
-		rp.Status.Phase = openvoxv1alpha1.ReportProcessorPhaseActive
-		meta.SetStatusCondition(&rp.Status.Conditions, metav1.Condition{
-			Type:               openvoxv1alpha1.ConditionReportProcessorReady,
-			Status:             metav1.ConditionTrue,
-			Reason:             "ConfigRendered",
-			Message:            "Report processor configuration is active",
-			LastTransitionTime: metav1.Now(),
-		})
+		errMsg = err.Error()
 	}
-	if statusErr := r.Status().Update(ctx, rp); statusErr != nil {
+	if statusErr := updateStatusWithRetry(ctx, r.Client, rp, func() {
+		if err != nil {
+			rp.Status.Phase = openvoxv1alpha1.ReportProcessorPhaseError
+			meta.SetStatusCondition(&rp.Status.Conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionReportProcessorReady,
+				Status:             metav1.ConditionFalse,
+				Reason:             "Error",
+				Message:            errMsg,
+				LastTransitionTime: metav1.Now(),
+			})
+		} else {
+			rp.Status.Phase = openvoxv1alpha1.ReportProcessorPhaseActive
+			meta.SetStatusCondition(&rp.Status.Conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionReportProcessorReady,
+				Status:             metav1.ConditionTrue,
+				Reason:             "ConfigRendered",
+				Message:            "Report processor configuration is active",
+				LastTransitionTime: metav1.Now(),
+			})
+		}
+	}); statusErr != nil {
 		log.FromContext(ctx).Error(statusErr, "failed to update ReportProcessor status", "name", rp.Name)
 	}
 }

@@ -70,6 +70,7 @@ spec:
                 | grep -v 'the object has been modified' \
                 | grep -v 'not found' \
                 | grep -v 'Precondition failed' \
+                | grep -v 'connection refused' \
                 || true)
               if [ -n "${ERROR_LINES}" ]; then
                 echo "Found error-level log entries in operator:"

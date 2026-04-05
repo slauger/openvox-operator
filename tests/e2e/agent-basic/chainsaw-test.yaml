@@ -81,18 +81,11 @@ spec:
                             if [ $EXIT -eq 0 ] || [ $EXIT -eq 2 ]; then exit 0; else exit $EXIT; fi
                         securityContext:
                           runAsUser: 0
-        - assert:
+        - script:
             timeout: 5m
-            resource:
-              apiVersion: batch/v1
-              kind: Job
-              metadata:
-                name: puppet-agent-basic
-                namespace: e2e-agent-basic
-              status:
-                conditions:
-                  - type: Complete
-                    status: "True"
+            content: |
+              kubectl wait --for=condition=Complete job/puppet-agent-basic \
+                -n e2e-agent-basic --timeout=300s
       finally:
         - script:
             timeout: 2m

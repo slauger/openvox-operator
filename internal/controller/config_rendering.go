@@ -104,7 +104,9 @@ func (r *ConfigReconciler) renderPuppetDBConf(ctx context.Context, cfg *openvoxv
 			return "", fmt.Errorf("looking up Database %q: %w", cfg.Spec.DatabaseRef, err)
 		}
 		if db.Status.URL == "" {
-			return "", fmt.Errorf("database %q has no status.URL yet", cfg.Spec.DatabaseRef)
+			// Database URL is not available yet; return a default config.
+			// The controller will re-reconcile when the Database status changes.
+			return "[main]\nsoft_write_failure = true\n", nil
 		}
 		return fmt.Sprintf("[main]\nserver_urls = %s\nsoft_write_failure = true\n", db.Status.URL), nil
 	}

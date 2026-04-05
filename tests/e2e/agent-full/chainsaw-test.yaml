@@ -141,7 +141,7 @@ spec:
             timeout: 30s
             content: |
               CLASSIFICATIONS=$(kubectl exec -n e2e-agent-full deploy/openvox-mock -- \
-                wget -qO- http://localhost:8080/api/classifications)
+                curl -sf http://localhost:8080/api/classifications)
               echo "Classifications: ${CLASSIFICATIONS}"
               if echo "${CLASSIFICATIONS}" | grep -q "agent-full-test"; then
                 echo "OK: Mock received classification request."
@@ -151,7 +151,7 @@ spec:
               fi
 
               REPORTS=$(kubectl exec -n e2e-agent-full deploy/openvox-mock -- \
-                wget -qO- http://localhost:8080/api/reports)
+                curl -sf http://localhost:8080/api/reports)
               echo "Reports: ${REPORTS}"
               if [ "${REPORTS}" = "null" ] || [ "${REPORTS}" = "[]" ]; then
                 echo "ERROR: Mock did not receive any reports."
@@ -160,7 +160,7 @@ spec:
               echo "OK: Mock received report(s)."
 
               PDB=$(kubectl exec -n e2e-agent-full deploy/openvox-mock -- \
-                wget -qO- http://localhost:8080/api/pdb-commands)
+                curl -sf http://localhost:8080/api/pdb-commands)
               echo "PDB Commands: ${PDB}"
               if [ "${PDB}" = "null" ] || [ "${PDB}" = "[]" ]; then
                 echo "ERROR: Mock did not receive any PDB commands."

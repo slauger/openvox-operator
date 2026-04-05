@@ -138,7 +138,7 @@ spec:
             timeout: 30s
             content: |
               REPORTS=$(kubectl exec -n e2e-agent-report deploy/openvox-mock -- \
-                wget -qO- http://localhost:8080/api/reports)
+                curl -sf http://localhost:8080/api/reports)
               echo "Reports: ${REPORTS}"
               if [ "${REPORTS}" = "null" ] || [ "${REPORTS}" = "[]" ]; then
                 echo "ERROR: Mock did not receive any reports."
@@ -147,7 +147,7 @@ spec:
               echo "Mock received report(s)."
 
               PDB=$(kubectl exec -n e2e-agent-report deploy/openvox-mock -- \
-                wget -qO- http://localhost:8080/api/pdb-commands)
+                curl -sf http://localhost:8080/api/pdb-commands)
               echo "PDB Commands: ${PDB}"
               if [ "${PDB}" = "null" ] || [ "${PDB}" = "[]" ]; then
                 echo "ERROR: Mock did not receive any PDB commands."

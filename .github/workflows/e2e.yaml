@@ -1,25 +1,13 @@
 name: E2E
 
-concurrency:
-  group: e2e
-  cancel-in-progress: false
-
 on:
-  push:
-    branches: [develop]
-    paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
-      - 'LICENSE'
-      - 'CHANGELOG*'
-      - '.github/*.md'
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'Custom image tag (default: short git SHA)'
+        description: 'Image tag for E2E images'
         required: false
         type: string
-        default: ''
+        default: 'develop'
       group:
         description: 'Test group to run'
         required: false
@@ -32,256 +20,48 @@ on:
           - gateway
           - webhooks-byo
           - webhooks-cm
-      cleanup_images:
-        description: 'Delete E2E images after test run'
-        required: false
-        type: boolean
-        default: true
-
-permissions:
-  contents: read
-  packages: write
-  id-token: write
-  attestations: write
-
-env:
-  IMAGE_TAG: ${{ inputs.image_tag || github.ref_name }}
 
 jobs:
-  # Phase 1: Build (parallel)
-
-  openvox-operator:
-    uses: ./.github/workflows/_container-build.yaml
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-      attestations: write
-    with:
-      image_name: openvox-operator
-      dockerfile: images/openvox-operator/Containerfile
-      context: '.'
-      push: true
-      image_tag: ${{ inputs.image_tag || github.ref_name }}
-
-  openvox-server:
-    uses: ./.github/workflows/_container-build.yaml
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-      attestations: write
-    with:
-      image_name: openvox-server
-      dockerfile: images/openvox-server/Containerfile
-      context: '.'
-      push: true
-      image_tag: ${{ inputs.image_tag || github.ref_name }}
-
-  openvox-e2e-code:
-    uses: ./.github/workflows/_container-build.yaml
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-      attestations: write
-    with:
-      image_name: openvox-e2e-code
-      dockerfile: images/openvox-e2e-code/Containerfile
-      context: '.'
-      push: true
-      image_tag: ${{ inputs.image_tag || github.ref_name }}
-      sign: false
-
-  openvox-agent:
-    uses: ./.github/workflows/_container-build.yaml
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-      attestations: write
-    with:
-      image_name: openvox-agent
-      dockerfile: images/openvox-agent/Containerfile
-      context: 'images/openvox-agent'
-      push: true
-      image_tag: ${{ inputs.image_tag || github.ref_name }}
-      sign: false
-
-  openvox-db:
-    uses: ./.github/workflows/_container-build.yaml
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-      attestations: write
-    with:
-      image_name: openvox-db
-      dockerfile: images/openvox-db/Containerfile
-      context: '.'
-      push: true
-      image_tag: ${{ inputs.image_tag || github.ref_name }}
-
-  openvox-mock:
-    uses: ./.github/workflows/_container-build.yaml
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-      attestations: write
-    with:
-      image_name: openvox-mock
-      dockerfile: images/openvox-mock/Containerfile
-      context: '.'
-      push: true
-      image_tag: ${{ inputs.image_tag || github.ref_name }}
-      sign: false
-
-  # Phase 1b: Cluster setup (parallel to builds)
-
-  e2e-setup:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.E2E_KUBECONFIG }}" > ~/.kube/config
-          chmod 600 ~/.kube/config
-          kubectl version --short 2>/dev/null || kubectl version
-
-      - name: Cleanup previous run
-        run: make e2e-cleanup
-
-      - name: Verify cluster connectivity
-        run: kubectl get nodes
-
-  # Phase 2: Test (sequential)
-
   e2e-base:
-    if: inputs.group == 'all' || inputs.group == 'base' || inputs.group == ''
-    needs: [e2e-setup, openvox-operator, openvox-server, openvox-e2e-code, openvox-agent, openvox-db, openvox-mock]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Setup Kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.E2E_KUBECONFIG }}" > ~/.kube/config
-          chmod 600 ~/.kube/config
-          kubectl version --short 2>/dev/null || kubectl version
-
-      - name: Run base test group
-        run: make e2e-group-base IMAGE_TAG=${{ env.IMAGE_TAG }}
+    if: inputs.group == 'all' || inputs.group == 'base'
+    uses: ./.github/workflows/_e2e-run.yaml
+    with:
+      image_tag: ${{ inputs.image_tag }}
+      group: base
+    secrets: inherit
 
   e2e-enc:
-    if: inputs.group == 'all' || inputs.group == 'enc' || inputs.group == ''
+    if: inputs.group == 'all' || inputs.group == 'enc'
     needs: [e2e-base]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Setup Kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.E2E_KUBECONFIG }}" > ~/.kube/config
-          chmod 600 ~/.kube/config
-          kubectl version --short 2>/dev/null || kubectl version
-
-      - name: Run enc test group
-        run: make e2e-group-enc IMAGE_TAG=${{ env.IMAGE_TAG }}
+    uses: ./.github/workflows/_e2e-run.yaml
+    with:
+      image_tag: ${{ inputs.image_tag }}
+      group: enc
+    secrets: inherit
 
   e2e-gateway:
-    if: inputs.group == 'all' || inputs.group == 'gateway' || inputs.group == ''
+    if: inputs.group == 'all' || inputs.group == 'gateway'
     needs: [e2e-enc]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Setup Kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.E2E_KUBECONFIG }}" > ~/.kube/config
-          chmod 600 ~/.kube/config
-          kubectl version --short 2>/dev/null || kubectl version
-
-      - name: Run gateway test group
-        run: make e2e-group-gateway IMAGE_TAG=${{ env.IMAGE_TAG }}
+    uses: ./.github/workflows/_e2e-run.yaml
+    with:
+      image_tag: ${{ inputs.image_tag }}
+      group: gateway
+    secrets: inherit
 
   e2e-webhooks-byo:
-    if: inputs.group == 'all' || inputs.group == 'webhooks-byo' || inputs.group == ''
+    if: inputs.group == 'all' || inputs.group == 'webhooks-byo'
     needs: [e2e-gateway]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Setup Kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.E2E_KUBECONFIG }}" > ~/.kube/config
-          chmod 600 ~/.kube/config
-          kubectl version --short 2>/dev/null || kubectl version
-
-      - name: Run webhooks-byo test group
-        run: make e2e-group-webhooks-byo IMAGE_TAG=${{ env.IMAGE_TAG }}
+    uses: ./.github/workflows/_e2e-run.yaml
+    with:
+      image_tag: ${{ inputs.image_tag }}
+      group: webhooks-byo
+    secrets: inherit
 
   e2e-webhooks-cm:
-    if: inputs.group == 'all' || inputs.group == 'webhooks-cm' || inputs.group == ''
+    if: inputs.group == 'all' || inputs.group == 'webhooks-cm'
     needs: [e2e-webhooks-byo]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Setup Kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.E2E_KUBECONFIG }}" > ~/.kube/config
-          chmod 600 ~/.kube/config
-          kubectl version --short 2>/dev/null || kubectl version
-
-      - name: Run webhooks-cm test group
-        run: make e2e-group-webhooks-cm IMAGE_TAG=${{ env.IMAGE_TAG }}
-
-  # Phase 3: Cleanup E2E images
-
-  cleanup:
-    if: always() && inputs.cleanup_images != false
-    needs: [e2e-base, e2e-enc, e2e-gateway, e2e-webhooks-byo, e2e-webhooks-cm]
-    uses: ./.github/workflows/_cleanup-images.yaml
-    permissions:
-      packages: write
+    uses: ./.github/workflows/_e2e-run.yaml
     with:
-      image_tag: ${{ inputs.image_tag || github.ref_name }}
+      image_tag: ${{ inputs.image_tag }}
+      group: webhooks-cm
+    secrets: inherit

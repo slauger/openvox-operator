@@ -133,3 +133,114 @@ If you have a Puppet/OpenVox CA running outside the cluster and want to keep usi
 - The `Certificate` controller accepts both `Ready` and `External` phases as "CA is available", so existing `Certificate` resources work without changes.
 - The operator does not manage the external CA's lifecycle (upgrades, backups, etc.). You are responsible for maintaining it.
 - CRL refresh still works with external CAs -- the operator fetches the CRL via the Puppet CA HTTP API and stores it in a local Secret.
+
+For the full field reference, see [ExternalCASpec](../reference/certificateauthority.md#externalcaspec).
+
+## Using Another openvox-stack as External CA
+
+In a multi-cluster or multi-namespace setup you can run one openvox-stack as the **primary CA** and point secondary stacks at it using `spec.external`. This avoids duplicate CA key material and keeps a single source of truth for certificate signing.
+
+### Steps
+
+1. In the primary stack's namespace, export the CA certificate from its Secret:
+
+    ```bash
+    # Extract the CA certificate from the primary stack
+    kubectl get secret production-ca-ca -n primary \
+      -o jsonpath='{.data.ca_crt\.pem}' | base64 -d > ca_crt.pem
+    ```
+
+2. Create the CA certificate Secret in the secondary namespace:
+
+    ```bash
+    kubectl create secret generic primary-ca-cert \
+      -n secondary \
+      --from-file=ca_crt.pem=ca_crt.pem
+    ```
+
+3. Determine the primary CA's Service URL. If the primary stack runs in the same cluster, use the internal ClusterIP Service:
+
+    ```bash
+    # Format: https://<ca-name>-internal.<namespace>.svc:8140
+    # Example:
+    https://production-ca-internal.primary.svc:8140
+    ```
+
+    If the primary stack runs in a different cluster, expose it via LoadBalancer, Ingress, or VPN and use that URL instead.
+
+4. Create the secondary `CertificateAuthority` resource:
+
+    ```yaml
+    apiVersion: openvox.voxpupuli.org/v1alpha1
+    kind: CertificateAuthority
+    metadata:
+      name: secondary-ca
+      namespace: secondary
+    spec:
+      allowSubjectAltNames: true
+      allowAuthorizationExtensions: true
+      enableInfraCRL: true
+      crlRefreshInterval: 5m
+      external:
+        url: https://production-ca-internal.primary.svc:8140
+        caSecretRef: primary-ca-cert
+    ```
+
+5. The secondary stack will now delegate all CSR signing and CRL fetching to the primary CA.
+
+## Using an Existing Puppet CA as External CA
+
+If you already run a traditional Puppet CA (on a VM or bare-metal server) and want to manage Puppet agents via the operator without migrating the CA, you can point the operator at the existing CA.
+
+### Prerequisites
+
+- The Puppet CA server is accessible from the Kubernetes cluster (e.g. `https://puppet-ca.example.com:8140`)
+- You have access to the CA certificate file (typically `/etc/puppetlabs/puppet/ssl/certs/ca.pem` on the Puppet CA server)
+- (Optional) A signed client certificate and key for mTLS if the CA requires client authentication
+
+### Steps
+
+1. Copy the CA certificate from the Puppet CA server:
+
+    ```bash
+    scp puppet-ca.example.com:/etc/puppetlabs/puppet/ssl/certs/ca.pem ca_crt.pem
+    ```
+
+2. Create the Kubernetes Secrets:
+
+    ```bash
+    # CA certificate for TLS verification
+    kubectl create secret generic puppet-ca-cert \
+      --from-file=ca_crt.pem=ca_crt.pem
+
+    # (Optional) Client certificate for mTLS
+    # Use a signed certificate from the existing Puppet CA
+    kubectl create secret generic puppet-ca-tls \
+      --from-file=tls.crt=/path/to/client.pem \
+      --from-file=tls.key=/path/to/client-key.pem
+    ```
+
+3. Create the `CertificateAuthority` resource:
+
+    ```yaml
+    apiVersion: openvox.voxpupuli.org/v1alpha1
+    kind: CertificateAuthority
+    metadata:
+      name: puppet-ca
+    spec:
+      allowSubjectAltNames: true
+      allowAuthorizationExtensions: true
+      enableInfraCRL: true
+      crlRefreshInterval: 5m
+      external:
+        url: https://puppet-ca.example.com:8140
+        caSecretRef: puppet-ca-cert
+        tlsSecretRef: puppet-ca-tls
+    ```
+
+4. Verify the CA transitions to `External` phase:
+
+    ```bash
+    kubectl get ca puppet-ca -o jsonpath='{.status.phase}'
+    # Expected: External
+    ```

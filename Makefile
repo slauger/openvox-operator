@@ -8,7 +8,10 @@ IMAGE_REGISTRY ?= ghcr.io/slauger
 CONTAINER_TOOL ?= $(shell which podman 2>/dev/null || which docker 2>/dev/null)
 CONTROLLER_GEN = go tool controller-gen
 GOVULNCHECK = go tool govulncheck
-CHAINSAW = go tool chainsaw
+
+LOCALBIN ?= $(shell pwd)/bin
+CHAINSAW_VERSION ?= v0.2.14
+CHAINSAW ?= $(LOCALBIN)/chainsaw
 
 .PHONY: all
 all: build
@@ -174,6 +177,14 @@ ci: lint vet test check-manifests vulncheck helm-lint helm-unittest ## Run all C
 
 IMAGE_TAG ?= $(LOCAL_TAG)
 
+.PHONY: chainsaw
+chainsaw: $(CHAINSAW) ## Download chainsaw binary.
+$(CHAINSAW):
+	@mkdir -p $(LOCALBIN)
+	@OS=$(shell go env GOOS) ARCH=$(shell go env GOARCH); \
+	curl -sSfL "https://github.com/kyverno/chainsaw/releases/download/$(CHAINSAW_VERSION)/chainsaw_$${OS}_$${ARCH}.tar.gz" | tar xz -C $(LOCALBIN) chainsaw
+	@chmod +x $(CHAINSAW)
+
 E2E_CHAINSAW = IMAGE_TAG=$(IMAGE_TAG) IMAGE_REGISTRY=$(IMAGE_REGISTRY) $(CHAINSAW) test --config tests/e2e/chainsaw-config.yaml
 
 WEBHOOK_CERT_SECRET ?= openvox-operator-webhook-cert
@@ -286,7 +297,7 @@ e2e-operator-webhooks-cm: e2e-cleanup ## Install operator: webhooks=true, cert-m
 		-n $(NAMESPACE) --timeout=2m
 
 .PHONY: e2e-group-base
-e2e-group-base: e2e-operator-base ## Group: base tests (stack, agent, database).
+e2e-group-base: e2e-operator-base chainsaw ## Group: base tests (stack, agent, database).
 	$(E2E_CHAINSAW) \
 		tests/e2e/single-node \
 		tests/e2e/multi-server \
@@ -299,20 +310,20 @@ e2e-group-base: e2e-operator-base ## Group: base tests (stack, agent, database).
 	EXIT=$$?; $(MAKE) e2e-cleanup; exit $$EXIT
 
 .PHONY: e2e-group-enc
-e2e-group-enc: e2e-operator-base ## Group: ENC and full agent tests.
+e2e-group-enc: e2e-operator-base chainsaw ## Group: ENC and full agent tests.
 	$(E2E_CHAINSAW) \
 		tests/e2e/agent-enc \
 		tests/e2e/agent-full; \
 	EXIT=$$?; $(MAKE) e2e-cleanup; exit $$EXIT
 
 .PHONY: e2e-group-gateway
-e2e-group-gateway: e2e-operator-gateway ## Group: Gateway API TLSRoute tests.
+e2e-group-gateway: e2e-operator-gateway chainsaw ## Group: Gateway API TLSRoute tests.
 	$(E2E_CHAINSAW) \
 		tests/e2e/pool-gateway; \
 	EXIT=$$?; $(MAKE) e2e-cleanup; exit $$EXIT
 
 .PHONY: e2e-group-webhooks-byo
-e2e-group-webhooks-byo: e2e-operator-webhooks-byo ## Group: webhook tests with BYO TLS cert.
+e2e-group-webhooks-byo: e2e-operator-webhooks-byo chainsaw ## Group: webhook tests with BYO TLS cert.
 	$(E2E_CHAINSAW) \
 		tests/e2e/webhook-validation-server \
 		tests/e2e/webhook-validation-config \
@@ -321,7 +332,7 @@ e2e-group-webhooks-byo: e2e-operator-webhooks-byo ## Group: webhook tests with B
 	EXIT=$$?; $(MAKE) e2e-cleanup; exit $$EXIT
 
 .PHONY: e2e-group-webhooks-cm
-e2e-group-webhooks-cm: e2e-operator-webhooks-cm ## Group: webhook tests with cert-manager.
+e2e-group-webhooks-cm: e2e-operator-webhooks-cm chainsaw ## Group: webhook tests with cert-manager.
 	$(E2E_CHAINSAW) \
 		tests/e2e/webhook-validation-server \
 		tests/e2e/webhook-validation-config \

@@ -11,7 +11,7 @@ config:
   puppetdb:
     serverUrls: []
   puppet:
-    environmentTimeout: unlimited
+    environmentTimeout: ""
     storeconfigs: false
     reports: store
   code:

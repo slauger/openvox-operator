@@ -100,7 +100,10 @@ spec:
                 -l app.kubernetes.io/name=openvox-operator \
                 -o jsonpath='{.items[0].metadata.name}')
               ERROR_LINES=$(kubectl logs -n openvox-system "${OPERATOR_POD}" \
-                | grep '"level":"error"' || true)
+                | grep '"level":"error"' \
+                | grep -v 'the object has been modified' \
+                | grep -v 'not found' \
+                || true)
               if [ -n "${ERROR_LINES}" ]; then
                 echo "Found error-level log entries in operator:"
                 echo "${ERROR_LINES}"

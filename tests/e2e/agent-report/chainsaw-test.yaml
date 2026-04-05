@@ -73,7 +73,7 @@ spec:
                 --set config.image.repository=${IMAGE_REGISTRY}/openvox-server \
                 --set config.image.tag="${IMAGE_TAG}" \
                 --set config.image.pullPolicy=Always \
-                --set config.code.image=${IMAGE_REGISTRY}/openvox-code:${IMAGE_TAG}
+                --set config.code.image=${IMAGE_REGISTRY}/openvox-e2e-code:${IMAGE_TAG}
       catch:
         - events: {}
 

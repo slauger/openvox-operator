@@ -64,7 +64,7 @@ jobs:
       push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
       image_tag: develop
 
-  openvox-code:
+  openvox-e2e-code:
     needs: shellcheck
     uses: ./.github/workflows/_container-build.yaml
     permissions:
@@ -73,8 +73,8 @@ jobs:
       id-token: write
       attestations: write
     with:
-      image_name: openvox-code
-      dockerfile: images/openvox-code/Containerfile
+      image_name: openvox-e2e-code
+      dockerfile: images/openvox-e2e-code/Containerfile
       context: '.'
       push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
       image_tag: develop

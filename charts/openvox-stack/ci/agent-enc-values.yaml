@@ -4,7 +4,7 @@ signingPolicies:
 
 config:
   code:
-    image: ghcr.io/slauger/openvox-code:latest
+    image: ghcr.io/slauger/openvox-e2e-code:latest
     imagePullPolicy: Always
 
 nodeClassifier:

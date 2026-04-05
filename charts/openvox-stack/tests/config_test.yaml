@@ -109,11 +109,11 @@ tests:
     set:
       config:
         code:
-          image: ghcr.io/slauger/openvox-code:latest
+          image: ghcr.io/slauger/openvox-e2e-code:latest
     asserts:
       - equal:
           path: spec.code.image
-          value: ghcr.io/slauger/openvox-code:latest
+          value: ghcr.io/slauger/openvox-e2e-code:latest
 
   - it: should not render code section when image and claimName are empty
     asserts:

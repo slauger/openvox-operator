@@ -72,7 +72,7 @@ Only the three production images and three Helm charts are released:
 | `openvox-server` | Container image | Yes |
 | `openvox-db` | Container image | Yes |
 | `openvox-agent` | Container image | No (E2E only) |
-| `openvox-code` | Container image | No (E2E only) |
+| `openvox-e2e-code` | Container image | No (E2E only) |
 | `openvox-mock` | Container image | No (E2E only) |
 | `openvox-operator` | Helm chart | Yes |
 | `openvox-stack` | Helm chart | Yes |
@@ -145,7 +145,7 @@ E2E tests require 6 container images pulled from ghcr.io at runtime:
 | `openvox-operator` | The operator itself |
 | `openvox-server` | OpenVox Server (CA + compiler) |
 | `openvox-db` | OpenVox DB (PuppetDB) |
-| `openvox-code` | OCI image with Puppet environments |
+| `openvox-e2e-code` | OCI image with Puppet environments |
 | `openvox-agent` | Puppet agent (UBI9) |
 | `openvox-mock` | Mock server for ENC, reports, OpenVox DB endpoints |
 

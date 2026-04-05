@@ -72,7 +72,7 @@ jobs:
       push: true
       image_tag: ${{ inputs.image_tag || github.ref_name }}
 
-  openvox-code:
+  openvox-e2e-code:
     uses: ./.github/workflows/_container-build.yaml
     permissions:
       contents: read
@@ -80,8 +80,8 @@ jobs:
       id-token: write
       attestations: write
     with:
-      image_name: openvox-code
-      dockerfile: images/openvox-code/Containerfile
+      image_name: openvox-e2e-code
+      dockerfile: images/openvox-e2e-code/Containerfile
       context: '.'
       push: true
       image_tag: ${{ inputs.image_tag || github.ref_name }}
@@ -156,7 +156,7 @@ jobs:
 
   e2e-base:
     if: inputs.group == 'all' || inputs.group == 'base' || inputs.group == ''
-    needs: [e2e-setup, openvox-operator, openvox-server, openvox-code, openvox-agent, openvox-db, openvox-mock]
+    needs: [e2e-setup, openvox-operator, openvox-server, openvox-e2e-code, openvox-agent, openvox-db, openvox-mock]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

@@ -185,10 +185,18 @@ e2e-setup: ## Install all E2E external dependencies (CNPG, Envoy Gateway, cert-m
 
 .PHONY: e2e-wait
 e2e-wait: ## Wait for E2E dependencies to be available (pre-installed via ArgoCD in CI).
-	kubectl wait --for=condition=Available deployment/cnpg-controller-manager -n cnpg-system --timeout=3m
-	kubectl wait --for=condition=Available deployment/envoy-gateway -n envoy-gateway-system --timeout=3m
-	kubectl wait --for=condition=Available deployment/cert-manager -n cert-manager --timeout=3m
-	kubectl wait --for=condition=Available deployment/cert-manager-webhook -n cert-manager --timeout=3m
+	@echo "Waiting for E2E dependencies (up to 5m)..."
+	@for DEP in cnpg-system/cnpg-controller-manager envoy-gateway-system/envoy-gateway cert-manager/cert-manager cert-manager/cert-manager-webhook; do \
+		NS=$${DEP%%/*}; DEPLOY=$${DEP##*/}; \
+		echo "  Waiting for deployment/$${DEPLOY} in $${NS}..."; \
+		END=$$(( $$(date +%s) + 300 )); \
+		until kubectl get deployment/"$${DEPLOY}" -n "$${NS}" >/dev/null 2>&1; do \
+			if [ $$(date +%s) -ge $${END} ]; then echo "Timed out waiting for deployment/$${DEPLOY} in $${NS}"; exit 1; fi; \
+			sleep 5; \
+		done; \
+		kubectl wait --for=condition=Available deployment/"$${DEPLOY}" -n "$${NS}" --timeout=3m; \
+	done
+	@echo "All E2E dependencies are available."
 
 .PHONY: e2e-cleanup
 e2e-cleanup: ## Remove operator and all E2E test namespaces (keeps CRDs).

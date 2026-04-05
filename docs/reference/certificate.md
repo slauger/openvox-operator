@@ -31,16 +31,35 @@ spec:
 |---|---|---|
 | `phase` | string | Current lifecycle phase |
 | `secretName` | string | Name of the Secret containing `cert.pem` and `key.pem` |
+| `notAfter` | time | Expiry time of the signed certificate |
 | `conditions` | []Condition | `CertSigned` |
 
 ## Phases
 
 | Phase | Description |
 |---|---|
-| `Pending` | Waiting for CertificateAuthority to reach `Ready` |
+| `Pending` | Waiting for CertificateAuthority to reach `Ready` or `External` |
 | `Requesting` | Certificate signing in progress |
+| `WaitingForSigning` | CSR submitted, waiting for CA to sign (backoff polling in progress) |
 | `Signed` | TLS Secret created, Servers can mount it |
 | `Error` | Certificate signing failed |
+
+### CSR Poll Backoff
+
+When the CA does not immediately sign the CSR (e.g. autosigning is disabled), the controller enters `WaitingForSigning` after 10 unsuccessful poll attempts and retries with exponential backoff:
+
+| Attempts | Interval |
+|---|---|
+| 0--2 | 5s |
+| 3--5 | 30s |
+| 6--9 | 2m |
+| 10+ | 5m |
+
+The poll attempt count is tracked via the annotation `openvox.voxpupuli.org/csr-poll-attempts` on the pending Secret `{name}-tls-pending`. To resolve manually, sign the CSR on the CA and the controller will pick it up on the next poll:
+
+```bash
+puppetserver ca sign --certname <certname>
+```
 
 ## Signing Strategy
 

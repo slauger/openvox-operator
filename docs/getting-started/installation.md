@@ -5,8 +5,17 @@
 
 ## Prerequisites
 
-- Kubernetes or OpenShift cluster
+- Kubernetes 1.28+ or OpenShift 4.15+ cluster
 - Helm 3.x
+
+### Optional Components
+
+| Component | When needed |
+|---|---|
+| Kubernetes 1.35+ | OCI Image Volumes for [code deployment](../concepts/code-deployment.md) (1.31+ with `ImageVolume` feature gate) |
+| cert-manager | Webhook TLS certificate automation |
+| Gateway API CRDs | [TLSRoute](../concepts/gateway-api.md) support in Pool |
+| CloudNativePG (CNPG) | Managed PostgreSQL for [Database](../reference/database.md) |
 
 ## Install via Helm (OCI)
 

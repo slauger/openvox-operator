@@ -8,7 +8,6 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -52,23 +51,10 @@ func (r *CertificateAuthorityReconciler) reconcileCRLRefresh(ctx context.Context
 	return ctrl.Result{RequeueAfter: interval}, nil
 }
 
-// getCAPublicCert reads the CA public certificate from the CA Secret.
-func (r *CertificateAuthorityReconciler) getCAPublicCert(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, namespace string) ([]byte, error) {
-	caSecretName := fmt.Sprintf("%s-ca", ca.Name)
-	secret := &corev1.Secret{}
-	if err := r.Get(ctx, types.NamespacedName{Name: caSecretName, Namespace: namespace}, secret); err != nil {
-		return nil, fmt.Errorf("getting CA Secret %s: %w", caSecretName, err)
-	}
-	certPEM := secret.Data["ca_crt.pem"]
-	if len(certPEM) == 0 {
-		return nil, fmt.Errorf("CA Secret %s has no ca_crt.pem data", caSecretName)
-	}
-	return certPEM, nil
-}
 
 // fetchCRL retrieves the CRL from the CA HTTP API.
 func (r *CertificateAuthorityReconciler) fetchCRL(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, caBaseURL, namespace string) ([]byte, error) {
-	httpClient, err := r.caHTTPClientForCA(ctx, ca, namespace)
+	httpClient, err := caHTTPClientForCA(ctx, r.Client, ca, namespace)
 	if err != nil {
 		return nil, fmt.Errorf("creating CA HTTP client: %w", err)
 	}
@@ -98,20 +84,6 @@ func (r *CertificateAuthorityReconciler) fetchCRL(ctx context.Context, ca *openv
 	return body, nil
 }
 
-// caHTTPClientForCA returns an HTTP client configured for the CA.
-// For external CAs, it builds an mTLS client from the referenced Secrets.
-// For internal CAs, it uses the CA public certificate.
-func (r *CertificateAuthorityReconciler) caHTTPClientForCA(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, namespace string) (*http.Client, error) {
-	if ca.Spec.External != nil {
-		return buildExternalCAHTTPClient(ctx, r.Client, ca.Spec.External, namespace)
-	}
-
-	caCertPEM, err := r.getCAPublicCert(ctx, ca, namespace)
-	if err != nil {
-		return nil, fmt.Errorf("loading CA certificate: %w", err)
-	}
-	return caHTTPClient(caCertPEM)
-}
 
 // updateCRLSecret creates or updates the CRL secret with fresh CRL data.
 func (r *CertificateAuthorityReconciler) updateCRLSecret(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, name string, crlPEM []byte) error {

@@ -32,12 +32,12 @@ import (
 // caHTTPClientForCA returns an HTTP client configured for the CA.
 // For external CAs, it builds an mTLS client from the referenced Secrets.
 // For internal CAs, it uses the CA public certificate.
-func (r *CertificateReconciler) caHTTPClientForCA(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, namespace string) (*http.Client, error) {
+func caHTTPClientForCA(ctx context.Context, reader client.Reader, ca *openvoxv1alpha1.CertificateAuthority, namespace string) (*http.Client, error) {
 	if ca.Spec.External != nil {
-		return buildExternalCAHTTPClient(ctx, r.Client, ca.Spec.External, namespace)
+		return buildExternalCAHTTPClient(ctx, reader, ca.Spec.External, namespace)
 	}
 
-	caCertPEM, err := r.getCAPublicCert(ctx, ca, namespace)
+	caCertPEM, err := getCAPublicCert(ctx, reader, ca, namespace)
 	if err != nil {
 		return nil, fmt.Errorf("loading CA certificate: %w", err)
 	}
@@ -127,19 +127,6 @@ func caHTTPClient(caCertPEM []byte) (*http.Client, error) {
 	}, nil
 }
 
-// getCAPublicCert reads the CA public certificate from the CA Secret.
-func (r *CertificateReconciler) getCAPublicCert(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, namespace string) ([]byte, error) {
-	caSecretName := fmt.Sprintf("%s-ca", ca.Name)
-	secret := &corev1.Secret{}
-	if err := r.Get(ctx, types.NamespacedName{Name: caSecretName, Namespace: namespace}, secret); err != nil {
-		return nil, fmt.Errorf("getting CA Secret %s: %w", caSecretName, err)
-	}
-	certPEM := secret.Data["ca_crt.pem"]
-	if len(certPEM) == 0 {
-		return nil, fmt.Errorf("CA Secret %s has no ca_crt.pem data", caSecretName)
-	}
-	return certPEM, nil
-}
 
 // submitCSR generates an RSA key (or reuses an existing one from a pending Secret),
 // submits the CSR to the Puppet CA, and stores the private key in a pending Secret.
@@ -213,7 +200,7 @@ func (r *CertificateReconciler) submitCSR(ctx context.Context, cert *openvoxv1al
 	}
 	csrPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER})
 
-	httpClient, err := r.caHTTPClientForCA(ctx, ca, namespace)
+	httpClient, err := caHTTPClientForCA(ctx, r.Client, ca, namespace)
 	if err != nil {
 		return ctrl.Result{RequeueAfter: RequeueIntervalShort}, fmt.Errorf("creating CA HTTP client: %w", err)
 	}
@@ -255,7 +242,7 @@ func (r *CertificateReconciler) fetchSignedCert(ctx context.Context, cert *openv
 		certname = "puppet"
 	}
 
-	httpClient, err := r.caHTTPClientForCA(ctx, ca, namespace)
+	httpClient, err := caHTTPClientForCA(ctx, r.Client, ca, namespace)
 	if err != nil {
 		return nil, fmt.Errorf("creating CA HTTP client: %w", err)
 	}
@@ -405,7 +392,7 @@ func (r *CertificateReconciler) signCSRViaAPI(ctx context.Context, cert *openvox
 	}
 
 	// Load CA public cert for TLS server verification
-	caCertPEM, err := r.getCAPublicCert(ctx, ca, namespace)
+	caCertPEM, err := getCAPublicCert(ctx, r.Client, ca, namespace)
 	if err != nil {
 		return fmt.Errorf("loading CA certificate: %w", err)
 	}

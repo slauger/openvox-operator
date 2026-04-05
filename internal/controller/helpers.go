@@ -149,6 +149,20 @@ func createOrUpdateSecret(ctx context.Context, c client.Client, scheme *runtime.
 	return c.Update(ctx, secret)
 }
 
+// getCAPublicCert reads the CA public certificate from the CA Secret.
+func getCAPublicCert(ctx context.Context, reader client.Reader, ca *openvoxv1alpha1.CertificateAuthority, namespace string) ([]byte, error) {
+	caSecretName := fmt.Sprintf("%s-ca", ca.Name)
+	secret := &corev1.Secret{}
+	if err := reader.Get(ctx, types.NamespacedName{Name: caSecretName, Namespace: namespace}, secret); err != nil {
+		return nil, fmt.Errorf("getting CA Secret %s: %w", caSecretName, err)
+	}
+	certPEM := secret.Data["ca_crt.pem"]
+	if len(certPEM) == 0 {
+		return nil, fmt.Errorf("CA Secret %s has no ca_crt.pem data", caSecretName)
+	}
+	return certPEM, nil
+}
+
 // caInternalServiceName returns the name of the internal ClusterIP Service
 // created by the CA controller for operator communication (CSR signing, CRL refresh).
 func caInternalServiceName(caName string) string {

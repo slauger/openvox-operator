@@ -30,7 +30,7 @@ make ci
 | Workflow | File | Trigger | What it does |
 |----------|------|---------|-------------|
 | CI | `ci.yaml` | Push to main/develop, PRs | Linting + all 6 image builds; pushes `:develop` tag on develop branch |
-| E2E Images | `e2e-images.yaml` | Push to develop, manual | Builds + pushes all 6 E2E images to ghcr.io |
+| E2E Images | `e2e-images.yaml` | Manual only | Builds + pushes all 6 E2E images to ghcr.io |
 | E2E | `e2e.yaml` | Manual only | Runs E2E test groups against pre-built images (sequential, with group selection) |
 | Release | `release.yaml` | Manual (main only) | semantic-release, builds operator/server/db with version tag + `:latest`, publishes Helm charts |
 
@@ -52,13 +52,12 @@ make ci
 | CI - PR | all 6 | No | - | - |
 | CI - push develop | all 6 | Yes | `:develop` | No |
 | CI - push main | all 6 | No | - | - |
-| E2E Images - push develop | all 6 | Yes | `:develop` | No |
 | E2E Images - manual | all 6 | Yes | custom `image_tag` or branch name | No |
 | Release | operator, server, db | Yes | `:x.y.z` | Yes |
 
 **Key points:**
 
-- `:develop` images are unstable, rebuilt on every push to develop (by both CI and E2E Images workflows)
+- `:develop` images are unstable, rebuilt on every push to develop (by the CI workflow)
 - `:latest` is only set by `release.yaml` and always points to the latest release
 - E2E tests run against pre-built images; no images are built or cleaned up during test runs
 
@@ -217,7 +216,7 @@ make e2e-all IMAGE_TAG=develop
 
 The E2E workflow connects to a persistent K3S cluster via `E2E_KUBECONFIG` secret. External dependencies (CNPG, Envoy Gateway, cert-manager) are managed by ArgoCD on the cluster -- the workflow only verifies they are available before starting tests. Test groups run sequentially: base, enc, gateway, webhooks-byo, webhooks-cm.
 
-Images are built by the separate `e2e-images.yaml` workflow (triggered on push to develop). The `e2e.yaml` workflow only runs tests against already-pushed images.
+Images are built by the CI workflow on push to develop (`:develop` tag) or manually via `e2e-images.yaml`. The `e2e.yaml` workflow only runs tests against already-pushed images.
 
 Manual trigger with group selection:
 

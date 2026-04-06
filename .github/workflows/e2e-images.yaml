@@ -1,14 +1,6 @@
 name: E2E Images
 
 on:
-  push:
-    branches: [develop]
-    paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
-      - 'LICENSE'
-      - 'CHANGELOG*'
-      - '.github/*.md'
   workflow_dispatch:
     inputs:
       image_tag:

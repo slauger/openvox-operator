@@ -20,6 +20,14 @@
   ],
   "packageRules": [
     {
+      "matchDepNames": [
+        "go",
+        "golang",
+        "docker.io/library/golang"
+      ],
+      "groupName": "Go version"
+    },
+    {
       "matchManagers": [
         "gomod"
       ],

@@ -4,7 +4,7 @@
 # Build:
 #   podman build -t openvox-server-reference:latest images/openvox-server-reference/
 
-FROM registry.access.redhat.com/ubi9/ubi:9.7-1774415752
+FROM registry.access.redhat.com/ubi9/ubi:9.7-1775624009
 
 RUN rpm -Uvh https://yum.voxpupuli.org/openvox8-release-el-9.noarch.rpm \
     && dnf install -y --setopt=install_weak_deps=False openvox-server \

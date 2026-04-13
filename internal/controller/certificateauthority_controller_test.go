@@ -223,18 +223,12 @@ func TestCAReconcile_JobCreation(t *testing.T) {
 
 	// Verify security context
 	podSC := job.Spec.Template.Spec.SecurityContext
-	if podSC == nil {
-		t.Fatal("pod security context is nil")
-	}
-	if podSC.RunAsUser == nil || *podSC.RunAsUser != CASetupRunAsUser {
+	if podSC == nil || podSC.RunAsUser == nil || *podSC.RunAsUser != CASetupRunAsUser {
 		t.Errorf("expected RunAsUser %d", CASetupRunAsUser)
 	}
 
 	containerSC := container.SecurityContext
-	if containerSC == nil {
-		t.Fatal("container security context is nil")
-	}
-	if containerSC.AllowPrivilegeEscalation == nil || *containerSC.AllowPrivilegeEscalation != false {
+	if containerSC == nil || containerSC.AllowPrivilegeEscalation == nil || *containerSC.AllowPrivilegeEscalation != false {
 		t.Error("expected AllowPrivilegeEscalation=false")
 	}
 

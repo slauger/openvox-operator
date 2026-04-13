@@ -85,10 +85,6 @@ func TestBuildExternalCAHTTPClient_Minimal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if httpClient == nil {
-		t.Fatal("expected non-nil HTTP client")
-	}
-
 	transport := httpClient.Transport.(*http.Transport)
 	if transport.TLSClientConfig.InsecureSkipVerify {
 		t.Error("expected InsecureSkipVerify=false")

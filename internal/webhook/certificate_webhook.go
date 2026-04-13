@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
+	"github.com/slauger/openvox-operator/internal/puppet"
 )
 
 // CertificateValidator validates Certificate resources.
@@ -50,6 +51,23 @@ func (v *CertificateValidator) validate(ctx context.Context, c *openvoxv1alpha1.
 		}
 		if msgs := validation.IsDNS1123Subdomain(strings.ToLower(san)); len(msgs) > 0 {
 			errs = append(errs, field.Invalid(specPath.Child("dnsAltNames").Index(i), san, "must be a valid DNS name or IP: "+strings.Join(msgs, "; ")))
+		}
+	}
+
+	if ext := c.Spec.CSRExtensions; ext != nil {
+		extPath := specPath.Child("csrExtensions")
+		conflicting := map[string]bool{
+			"pp_cli_auth":    true,
+			"pp_role":        true,
+			"pp_environment": true,
+		}
+		for key := range ext.CustomExtensions {
+			p := extPath.Child("customExtensions").Key(key)
+			if conflicting[key] {
+				errs = append(errs, field.Invalid(p, key, "use the dedicated field instead of customExtensions"))
+			} else if !puppet.IsKnownOID(key) {
+				errs = append(errs, field.Invalid(p, key, "unknown Puppet extension name"))
+			}
 		}
 	}
 

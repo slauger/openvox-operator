@@ -67,6 +67,28 @@ spec:
                 default: puppet
                 description: Certname is the certificate common name.
                 type: string
+              csrExtensions:
+                description: CSRExtensions defines Puppet CSR extension attributes
+                  to embed in the CSR.
+                properties:
+                  customExtensions:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      CustomExtensions allows arbitrary pp_* extensions as name/value pairs.
+                      Keys must be known Puppet extension names (e.g. pp_cost_center, pp_department).
+                    type: object
+                  ppCliAuth:
+                    description: PpCliAuth adds the pp_cli_auth extension, granting
+                      CA API signing rights.
+                    type: boolean
+                  ppEnvironment:
+                    description: PpEnvironment sets the pp_environment extension value.
+                    type: string
+                  ppRole:
+                    description: PpRole sets the pp_role extension value.
+                    type: string
+                type: object
               dnsAltNames:
                 description: DNSAltNames is a list of DNS subject alternative names
                   for the certificate.

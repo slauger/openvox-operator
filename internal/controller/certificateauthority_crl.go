@@ -51,7 +51,6 @@ func (r *CertificateAuthorityReconciler) reconcileCRLRefresh(ctx context.Context
 	return ctrl.Result{RequeueAfter: interval}, nil
 }
 
-
 // fetchCRL retrieves the CRL from the CA HTTP API.
 func (r *CertificateAuthorityReconciler) fetchCRL(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, caBaseURL, namespace string) ([]byte, error) {
 	httpClient, err := caHTTPClientForCA(ctx, r.Client, ca, namespace)
@@ -83,7 +82,6 @@ func (r *CertificateAuthorityReconciler) fetchCRL(ctx context.Context, ca *openv
 
 	return body, nil
 }
-
 
 // updateCRLSecret creates or updates the CRL secret with fresh CRL data.
 func (r *CertificateAuthorityReconciler) updateCRLSecret(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, name string, crlPEM []byte) error {

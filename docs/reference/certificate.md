@@ -24,6 +24,7 @@ spec:
 | `authorityRef` | string | **required** | Reference to the CertificateAuthority |
 | `certname` | string | `puppet` | Certificate common name (CN) |
 | `dnsAltNames` | []string | - | DNS subject alternative names |
+| `csrExtensions` | CSRExtensionsSpec | - | Puppet CSR extension attributes to embed in the CSR |
 
 ## Status
 
@@ -59,6 +60,38 @@ The poll attempt count is tracked via the annotation `openvox.voxpupuli.org/csr-
 
 ```bash
 puppetserver ca sign --certname <certname>
+```
+
+## CSR Extensions
+
+The `csrExtensions` field allows embedding Puppet CSR extension attributes in the certificate signing request. These extensions are used by the Puppet CA for authorization and metadata.
+
+| Field | Type | Description |
+|---|---|---|
+| `ppCliAuth` | bool | Adds the `pp_cli_auth` extension, granting CA API signing rights |
+| `ppRole` | string | Sets the `pp_role` extension value |
+| `ppEnvironment` | string | Sets the `pp_environment` extension value |
+| `customExtensions` | map[string]string | Arbitrary `pp_*` extensions as name/value pairs |
+
+Keys in `customExtensions` must be known Puppet extension names (e.g. `pp_cost_center`, `pp_department`). The dedicated fields (`ppCliAuth`, `ppRole`, `ppEnvironment`) must not be duplicated in `customExtensions`.
+
+### Example
+
+```yaml
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: Certificate
+metadata:
+  name: operator-signing
+spec:
+  authorityRef: production-ca
+  certname: production-ca-operator
+  csrExtensions:
+    ppCliAuth: true
+    ppRole: compiler
+    ppEnvironment: production
+    customExtensions:
+      pp_cost_center: IT
+      pp_department: Engineering
 ```
 
 ## Signing Strategy

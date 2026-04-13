@@ -21,7 +21,7 @@ import (
 func (r *CertificateAuthorityReconciler) reconcileOperatorSigningCert(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, certs []openvoxv1alpha1.Certificate) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	// Skip for external CAs — they manage their own signing credentials
+	// Skip for external CAs - they manage their own signing credentials
 	if ca.Spec.External != nil {
 		return ctrl.Result{}, nil
 	}
@@ -71,13 +71,13 @@ func (r *CertificateAuthorityReconciler) reconcileOperatorSigningCert(ctx contex
 		return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 	}
 
-	// Certificate exists but is not yet signed — let the Certificate controller handle it
+	// Certificate exists but is not yet signed - let the Certificate controller handle it
 	if signingCert.Status.Phase != openvoxv1alpha1.CertificatePhaseSigned {
 		logger.Info("operator-signing cert not yet signed, waiting", "name", certName, "phase", signingCert.Status.Phase)
 		return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 	}
 
-	// Certificate is signed — update signingSecretName and set condition
+	// Certificate is signed - update signingSecretName and set condition
 	signingSecretName := fmt.Sprintf("%s-tls", certName)
 	if ca.Status.SigningSecretName == signingSecretName &&
 		meta.IsStatusConditionTrue(ca.Status.Conditions, openvoxv1alpha1.ConditionOperatorSigningReady) {

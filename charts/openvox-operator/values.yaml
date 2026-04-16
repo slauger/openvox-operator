@@ -8,6 +8,10 @@ image:
 
 imagePullSecrets: []
 
+# Annotations applied to the operator Pod template (e.g. for log collectors,
+# Prometheus scraping, or forcing rollouts via a checksum annotation).
+podAnnotations: {}
+
 serviceAccount:
   create: true
   name: ""
@@ -15,12 +19,17 @@ serviceAccount:
 
 leaderElect: true
 
-# Operator scope configuration
-# mode: "cluster" (default) watches all namespaces with ClusterRole/ClusterRoleBinding
-# mode: "namespace" restricts the operator to a single namespace with Role/RoleBinding
+# Operator scope configuration.
+#
+# mode: "cluster" (default) -- the operator watches resources in all namespaces.
+#   RBAC is created as ClusterRole + ClusterRoleBinding.
+# mode: "namespace" -- the operator only watches a single namespace.
+#   RBAC is created as Role + RoleBinding scoped to watchNamespace.
+#
+# When mode = "namespace" and watchNamespace is empty, .Release.Namespace is used.
+# Example: scope.mode=namespace, scope.watchNamespace=openvox-prod
 scope:
   mode: cluster
-  # watchNamespace: defaults to .Release.Namespace when mode is "namespace"
   watchNamespace: ""
 
 gatewayAPI:
@@ -34,7 +43,21 @@ resources:
     cpu: 10m
     memory: 64Mi
 
-# Admission webhook configuration
+# Admission webhook configuration.
+#
+# When webhook.enabled = true the operator serves CRD validation/mutation
+# webhooks on webhook.port. The webhook needs a TLS server certificate; pick
+# ONE of the two options below:
+#
+#   1. cert-manager (default): set certManager.enabled = true. Requires
+#      cert-manager to be installed in the cluster -- otherwise the chart
+#      installs successfully but the webhook will never become Ready.
+#
+#   2. Existing Secret: set certManager.enabled = false and provide
+#      tls.certSecret with an existing Secret containing tls.crt / tls.key
+#      (and ca.crt for the apiservice CA bundle). Set tls.caBundle to the
+#      base64-encoded CA certificate that signs tls.crt; the chart writes
+#      this into the ValidatingWebhookConfiguration / MutatingWebhookConfiguration.
 webhook:
   enabled: false
   port: 9443

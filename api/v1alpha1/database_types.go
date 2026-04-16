@@ -65,6 +65,10 @@ type DatabaseSpec struct {
 	// +optional
 	NetworkPolicy *NetworkPolicySpec `json:"networkPolicy,omitempty"`
 
+	// PriorityClassName is the name of the PriorityClass for the Database pods.
+	// +optional
+	PriorityClassName string `json:"priorityClassName,omitempty"`
+
 	// Service defines the Service configuration for the Database.
 	// +optional
 	Service DatabaseServiceSpec `json:"service,omitempty"`

@@ -361,6 +361,10 @@ spec:
                 - credentialsSecretRef
                 - host
                 type: object
+              priorityClassName:
+                description: PriorityClassName is the name of the PriorityClass for
+                  the Database pods.
+                type: string
               replicas:
                 default: 1
                 description: Replicas is the number of Database instances.

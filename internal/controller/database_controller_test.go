@@ -398,6 +398,44 @@ func TestDatabaseReconcile_StatusPhase(t *testing.T) {
 	}
 }
 
+func TestDatabaseReconcile_PriorityClassName(t *testing.T) {
+	t.Run("set", func(t *testing.T) {
+		objs := append(databasePrereqs(), newDatabase("test-db", withDatabasePriorityClassName("high-priority")))
+		c := setupTestClient(objs...)
+		r := newDatabaseReconciler(c)
+
+		if _, err := r.Reconcile(testCtx(), testRequest("test-db")); err != nil {
+			t.Fatalf("reconcile error: %v", err)
+		}
+
+		deploy := &appsv1.Deployment{}
+		if err := c.Get(testCtx(), types.NamespacedName{Name: "test-db", Namespace: testNamespace}, deploy); err != nil {
+			t.Fatalf("Deployment not found: %v", err)
+		}
+		if deploy.Spec.Template.Spec.PriorityClassName != "high-priority" {
+			t.Errorf("expected PriorityClassName %q, got %q", "high-priority", deploy.Spec.Template.Spec.PriorityClassName)
+		}
+	})
+
+	t.Run("empty by default", func(t *testing.T) {
+		objs := append(databasePrereqs(), newDatabase("test-db"))
+		c := setupTestClient(objs...)
+		r := newDatabaseReconciler(c)
+
+		if _, err := r.Reconcile(testCtx(), testRequest("test-db")); err != nil {
+			t.Fatalf("reconcile error: %v", err)
+		}
+
+		deploy := &appsv1.Deployment{}
+		if err := c.Get(testCtx(), types.NamespacedName{Name: "test-db", Namespace: testNamespace}, deploy); err != nil {
+			t.Fatalf("Deployment not found: %v", err)
+		}
+		if deploy.Spec.Template.Spec.PriorityClassName != "" {
+			t.Errorf("expected empty PriorityClassName, got %q", deploy.Spec.Template.Spec.PriorityClassName)
+		}
+	})
+}
+
 func TestDatabaseReconcile_NetworkPolicyCreation(t *testing.T) {
 	objs := append(databasePrereqs(), newDatabase("test-db", withDatabaseNetworkPolicy(true)))
 	c := setupTestClient(objs...)

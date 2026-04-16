@@ -99,3 +99,14 @@ docs/                      Documentation
 - `CONTRIBUTING.md` covers developer setup and workflow
 - `docs/` contains design docs and architecture diagrams
 - No CHANGELOG - release notes are auto-generated from commit messages by semantic-release
+
+### Feature List Synchronization
+
+The canonical feature list lives in `docs/_snippets/features.md`.
+
+- **`docs/index.md`** includes it automatically via `pymdownx.snippets` (`--8<-- "docs/_snippets/features.md"`)
+- **`README.md`** contains a copy between `<!-- features -->` and `<!-- /features -->` HTML comment markers
+
+When updating features:
+1. Edit `docs/_snippets/features.md` (single source of truth)
+2. Copy the same content into the `<!-- features -->` block in `README.md`

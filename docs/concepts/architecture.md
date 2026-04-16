@@ -57,9 +57,12 @@ The Certificate Authority is managed by the CertificateAuthority controller:
    - `{name}-ca-key` -- CA private key (`ca_key.pem`, never mounted in pods)
    - `{name}-ca-crl` -- CRL data (`ca_crl.pem`, `infra_crl.pem`)
 3. The CertificateAuthority transitions to the `Ready` phase
-4. The controller periodically fetches the CRL from the internal Service and updates the CRL Secret (configurable via `crlRefreshInterval`, default `5m`)
+4. For internal CAs, the controller creates an auto-managed `{name}-operator-signing` Certificate carrying the `pp_cli_auth` extension. Once signed, its TLS Secret (`{name}-operator-signing-tls`) becomes the operator's mTLS credential for HTTP-based CSR signing. `status.signingSecretName` is populated and the `OperatorSigningReady` condition is set to `True`. External CAs skip this step.
+5. The controller periodically fetches the CRL from the internal Service and updates the CRL Secret (configurable via `crlRefreshInterval`, default `5m`)
 
 The internal Service (`{name}-internal`) is used exclusively by the operator for CSR signing and CRL refresh. Its FQDN is automatically added as a SAN to the CA server certificate. This is separate from the Pool Service, which users can configure as ClusterIP, LoadBalancer, or NodePort for external access.
+
+The operator-signing certificate is decoupled from the CA server certificate so that signing credentials can be rotated or revoked independently from the CA's identity. See [Certificate Signing](certificate-signing.md#operator-signing-certificate) for details.
 
 ## Certificate Lifecycle
 
@@ -87,7 +90,11 @@ sequenceDiagram
     CAJob->>CASec: Create ca, ca-key, ca-crl Secrets
     CAJob->>TLS: Export initial TLS Secret (cert + key)
     Op->>Srv: Create CA Deployment
-    Op->>CA: Submit CSR via HTTP API
+    Note over Op,CA: Internal CAs: auto-create {ca}-operator-signing Certificate with pp_cli_auth
+    Op->>CA: Submit operator-signing CSR (autosigned)
+    CA-->>Op: Return operator-signing cert
+    Op->>Op: Set status.signingSecretName, OperatorSigningReady
+    Op->>CA: Submit other CSRs via HTTP API (mTLS with operator-signing cert)
     CA-->>Op: Return signed certificate
     Op->>TLS: Create TLS Secret (cert + key)
     Op->>Srv: Create Server Deployment (mounts TLS + CA Secrets)

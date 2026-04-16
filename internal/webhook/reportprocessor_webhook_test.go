@@ -21,7 +21,7 @@ func TestReportProcessorValidator(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 			Spec: openvoxv1alpha1.ReportProcessorSpec{
 				ConfigRef: "production",
-				URL:       "https://puppetdb.example.com:8081/pdb/cmd/v1",
+				URL:       "https://puppetdb.example.com:8081",
 			},
 		}
 		_, err := v.ValidateCreate(context.Background(), rp)

@@ -59,6 +59,7 @@ nav:
       - Gateway API: concepts/gateway-api.md
       - External Node Classification: concepts/external-node-classification.md
       - Report Processing: concepts/report-processing.md
+      - Database: concepts/database.md
       - Configuration Rollout: concepts/config-rollout.md
       - Certificate Signing: concepts/certificate-signing.md
   - Getting Started:
@@ -82,5 +83,6 @@ nav:
       - Certificate: reference/certificate.md
       - Server: reference/server.md
       - Pool: reference/pool.md
+      - Database: reference/database.md
       - NodeClassifier: reference/nodeclassifier.md
       - ReportProcessor: reference/reportprocessor.md

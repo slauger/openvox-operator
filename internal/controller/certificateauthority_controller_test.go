@@ -708,6 +708,162 @@ func TestCAReconcile_StatusSigningSecretName_NoCert(t *testing.T) {
 	}
 }
 
+func TestCAReconcile_OperatorSigningCertCreated(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.Phase = ""
+	cfg := caPrereqs("test-ca")
+	certPEM, _ := generateTestCert(t)
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	c := setupTestClient(ca, cfg, caSecret)
+	r := newCertificateAuthorityReconciler(c)
+
+	res, err := r.Reconcile(testCtx(), testRequest("test-ca"))
+	if err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+	// Should requeue because operator-signing cert was just created
+	if res.RequeueAfter == 0 {
+		t.Error("expected requeue after creating operator-signing cert")
+	}
+
+	// Verify the operator-signing Certificate CR was created
+	signingCert := &openvoxv1alpha1.Certificate{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca-operator-signing", Namespace: testNamespace}, signingCert); err != nil {
+		t.Fatalf("operator-signing Certificate not created: %v", err)
+	}
+
+	if signingCert.Spec.AuthorityRef != "test-ca" {
+		t.Errorf("expected authorityRef %q, got %q", "test-ca", signingCert.Spec.AuthorityRef)
+	}
+	if signingCert.Spec.Certname != "test-ca-operator" {
+		t.Errorf("expected certname %q, got %q", "test-ca-operator", signingCert.Spec.Certname)
+	}
+	if signingCert.Spec.CSRExtensions == nil {
+		t.Fatal("expected csrExtensions to be set")
+	}
+	if !signingCert.Spec.CSRExtensions.PpCliAuth {
+		t.Error("expected csrExtensions.ppCliAuth=true")
+	}
+	if len(signingCert.OwnerReferences) == 0 {
+		t.Error("expected ownerReference on operator-signing cert")
+	}
+	if signingCert.OwnerReferences[0].Name != "test-ca" {
+		t.Errorf("expected ownerRef to CA %q, got %q", "test-ca", signingCert.OwnerReferences[0].Name)
+	}
+}
+
+func TestCAReconcile_OperatorSigningCertActivated(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.Phase = ""
+	ca.Status.SigningSecretName = "old-init-job-tls"
+	cfg := caPrereqs("test-ca")
+
+	certPEM, keyPEM := generateTestCert(t)
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+
+	// Operator-signing cert already exists and is Signed
+	signingCert := newCertificate("test-ca-operator-signing", "test-ca", openvoxv1alpha1.CertificatePhaseSigned)
+	signingCert.Spec.Certname = "test-ca-operator"
+	signingCert.Spec.CSRExtensions = &openvoxv1alpha1.CSRExtensionsSpec{PpCliAuth: true}
+
+	// Need the signing cert TLS secret for CRL refresh to not error
+	signingTLSSecret := newSecret("test-ca-operator-signing-tls", map[string][]byte{
+		"cert.pem": certPEM,
+		"key.pem":  keyPEM,
+	})
+
+	c := setupTestClient(ca, cfg, caSecret, signingCert, signingTLSSecret)
+	r := newCertificateAuthorityReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-ca")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	updated := &openvoxv1alpha1.CertificateAuthority{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get CA: %v", err)
+	}
+
+	if updated.Status.SigningSecretName != "test-ca-operator-signing-tls" {
+		t.Errorf("expected signingSecretName %q, got %q", "test-ca-operator-signing-tls", updated.Status.SigningSecretName)
+	}
+
+	// Verify OperatorSigningReady condition
+	found := false
+	for _, cond := range updated.Status.Conditions {
+		if cond.Type == openvoxv1alpha1.ConditionOperatorSigningReady {
+			found = true
+			if cond.Status != "True" {
+				t.Errorf("expected condition status True, got %q", cond.Status)
+			}
+		}
+	}
+	if !found {
+		t.Error("OperatorSigningReady condition not set")
+	}
+}
+
+func TestCAReconcile_OperatorSigningDoesNotOverwriteInitJobCert(t *testing.T) {
+	// When operator-signing cert is not yet active, the Init-Job cert should still be used
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.Phase = ""
+	cfg := caPrereqs("test-ca")
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": []byte("ca-cert"),
+	})
+	// Server with ca:true referencing a cert
+	server := newServer("ca-server", withCA(true), withServerRole(true))
+	server.Spec.ConfigRef = "production"
+	server.Spec.CertificateRef = "ca-cert"
+	cert := newCertificate("ca-cert", "test-ca", openvoxv1alpha1.CertificatePhasePending)
+
+	// Operator-signing cert exists but is NOT yet signed
+	signingCert := newCertificate("test-ca-operator-signing", "test-ca", openvoxv1alpha1.CertificatePhaseRequesting)
+
+	c := setupTestClient(ca, cfg, caSecret, server, cert, signingCert)
+	r := newCertificateAuthorityReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-ca")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	updated := &openvoxv1alpha1.CertificateAuthority{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get CA: %v", err)
+	}
+
+	// Should still use the Init-Job cert since operator-signing is not yet signed
+	if updated.Status.SigningSecretName != "ca-cert-tls" {
+		t.Errorf("expected signingSecretName %q (Init-Job cert), got %q", "ca-cert-tls", updated.Status.SigningSecretName)
+	}
+}
+
+func TestCAReconcile_ExternalCA_SkipsOperatorSigning(t *testing.T) {
+	ca := newCertificateAuthority("ext-ca", withExternal("https://puppet-ca.example.com:8140"))
+	ca.Status.Phase = ""
+	c := setupTestClient(ca)
+	r := newCertificateAuthorityReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("ext-ca")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	// No operator-signing cert should be created for external CA
+	certList := &openvoxv1alpha1.CertificateList{}
+	if err := c.List(testCtx(), certList); err != nil {
+		t.Fatalf("failed to list certs: %v", err)
+	}
+	for _, cert := range certList.Items {
+		if strings.Contains(cert.Name, "operator-signing") {
+			t.Errorf("unexpected operator-signing cert created for external CA: %s", cert.Name)
+		}
+	}
+}
+
 func TestCAReconcile_ExternalCA_NoConfigRequired(t *testing.T) {
 	// External CA should work without any Config object (unlike internal CA which requires it)
 	ca := newCertificateAuthority("ext-ca", withExternal("https://puppet-ca.example.com:8140"))

@@ -167,7 +167,8 @@ type CertificateAuthorityStatus struct {
 
 // Condition types for CertificateAuthority.
 const (
-	ConditionCAReady = "CAReady"
+	ConditionCAReady              = "CAReady"
+	ConditionOperatorSigningReady = "OperatorSigningReady"
 )
 
 func init() {

@@ -167,6 +167,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY api/ api/
+COPY internal/puppet/ internal/puppet/
 COPY cmd/autosign/ cmd/autosign/
 RUN CGO_ENABLED=0 go build -o /openvox-autosign ./cmd/autosign/
 

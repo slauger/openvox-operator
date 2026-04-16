@@ -83,9 +83,16 @@ spec:
 | `phase` | string | Current lifecycle phase |
 | `caSecretName` | string | Name of the Secret containing `ca_crt.pem` (public CA certificate) |
 | `serviceName` | string | Name of the internal ClusterIP Service for operator communication. Empty when `spec.external` is set. |
-| `signingSecretName` | string | Name of the TLS Secret used for mTLS authentication when signing certificates via the CA HTTP API |
+| `signingSecretName` | string | Name of the TLS Secret used for mTLS authentication when signing certificates via the CA HTTP API. Populated once the auto-managed operator-signing Certificate (`{name}-operator-signing`) reaches `Signed`. Empty for external CAs. |
 | `notAfter` | time | Expiry time of the CA certificate |
-| `conditions` | []Condition | `CAReady` |
+| `conditions` | []Condition | See [Conditions](#conditions) below |
+
+### Conditions
+
+| Type | Description |
+|---|---|
+| `CAReady` | CA Secrets are present (`{name}-ca`, `{name}-ca-key`, `{name}-ca-crl`) and the CA can sign certificates. Set when the setup Job completes successfully or when an external CA is reachable. |
+| `OperatorSigningReady` | The auto-managed `{name}-operator-signing` Certificate is signed and its TLS Secret is available for mTLS-authenticated CSR signing. Not set for external CAs (which manage their own signing credentials). |
 
 ## Phases
 
@@ -134,6 +141,32 @@ The CertificateAuthority controller creates a dedicated ClusterIP Service named 
 
 The internal Service FQDN (`{name}-internal.{namespace}.svc`) is automatically added as a SAN to the CA server certificate during setup, so TLS validation succeeds without manual configuration.
 
+## Operator Signing Certificate
+
+For internal CAs, the controller automatically creates a dedicated Certificate after the CA reaches `Ready`:
+
+```yaml
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: Certificate
+metadata:
+  name: {name}-operator-signing
+  ownerReferences:
+    - apiVersion: openvox.voxpupuli.org/v1alpha1
+      kind: CertificateAuthority
+      name: {name}
+spec:
+  authorityRef: {name}
+  certname: {name}-operator
+  csrExtensions:
+    ppCliAuth: true
+```
+
+The `pp_cli_auth` extension grants the holder permission to call the CA's certificate signing endpoint via the HTTP API. Once the Certificate controller signs it (autosigned because the CA controller submits with operator-managed credentials), `status.signingSecretName` is populated with `{name}-operator-signing-tls` and the `OperatorSigningReady` condition is set to `True`. From then on, the Certificate controller uses this Secret for all subsequent mTLS-authenticated CSR signing operations.
+
+This Certificate is owned by the CertificateAuthority -- deleting the CA removes both the operator-signing Certificate and its TLS Secret. To rotate the operator-signing credentials manually, delete the `{name}-operator-signing` Certificate; the controller recreates it on the next reconcile.
+
+External CAs (with `spec.external` set) skip this entirely -- they delegate signing to the external Puppet CA and use the configured `tlsSecretRef` for client authentication.
+
 ## Created Resources
 
 | Resource | Name | Description |
@@ -147,3 +180,5 @@ The internal Service FQDN (`{name}-internal.{namespace}.svc`) is automatically a
 | Secret | `{name}-ca` | Public CA certificate (`ca_crt.pem`) |
 | Secret | `{name}-ca-key` | CA private key (`ca_key.pem`) |
 | Secret | `{name}-ca-crl` | CRL data (`ca_crl.pem`, `infra_crl.pem`) -- periodically refreshed |
+| Certificate | `{name}-operator-signing` | Auto-managed signing Certificate with `pp_cli_auth` extension (internal CAs only) |
+| Secret | `{name}-operator-signing-tls` | TLS material for the operator-signing Certificate (created by the Certificate controller) |

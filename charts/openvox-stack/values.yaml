@@ -80,7 +80,8 @@ reportProcessors: []
 #   - name: my-webhook
 #     url: http://my-webhook:8080/reports
 #   - name: my-puppetdb
-#     url: http://my-puppetdb:8080/pdb/cmd/v1
+#     # OpenVox DB base URL only; the binary appends /pdb/cmd/v1 automatically
+#     url: https://my-puppetdb:8081
 #     processor: puppetdb
 
 signingPolicies: []

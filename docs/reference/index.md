@@ -17,17 +17,18 @@ graph TD
     Pool["Pool"]
 
     Cfg -->|authorityRef| CA
-    Cfg -->|nodeClassifierRef| NC
-    Cfg -->|configRef| RP
-    CA -->|certificateAuthorityRef| SP
-    CA -->|authorityRef| Cert
-    Cert -->|certificateRef| Srv
-    Cert -->|certificateRef| DB
-    Cfg -->|configRef| Srv
+    Cfg -.->|nodeClassifierRef| NC
+    Cfg -.->|databaseRef| DB
+    SP -.->|certificateAuthorityRef| CA
+    Cert -->|authorityRef| CA
+    Srv -->|certificateRef| Cert
+    DB -->|certificateRef| Cert
+    Srv -->|configRef| Cfg
+    RP -.->|configRef| Cfg
     Srv -->|poolRefs| Pool
 ```
 
-Each resource references its parent. The operator reconciles them in order: a Config references a CertificateAuthority via `authorityRef` and optionally a NodeClassifier via `nodeClassifierRef`, a CertificateAuthority must be `Ready` before a Certificate can be signed, and a Certificate must be `Signed` before a Server or Database creates its Deployment. SigningPolicies and NodeClassifiers can be created at any time and take effect within ~60 seconds.
+Each resource references its parent. The operator reconciles them in order: a Config references a CertificateAuthority via `authorityRef`, optionally a NodeClassifier via `nodeClassifierRef`, and optionally a Database via `databaseRef` (which auto-wires the PuppetDB connection URL). A CertificateAuthority must be `Ready` before a Certificate can be signed, and a Certificate must be `Signed` before a Server or Database creates its Deployment. SigningPolicies, NodeClassifiers, and ReportProcessors can be created at any time and take effect within ~60 seconds.
 
 ## Resources
 

@@ -6,6 +6,9 @@
   "labels": [
     "dependencies"
   ],
+  "postUpdateOptions": [
+    "gomodTidy"
+  ],
   "customManagers": [
     {
       "customType": "regex",
@@ -31,21 +34,7 @@
       "matchManagers": [
         "gomod"
       ],
-      "groupName": "Go dependencies",
-      "postUpgradeTasks": {
-        "commands": [
-          "go mod tidy",
-          "make generate manifests"
-        ],
-        "fileFilters": [
-          "go.mod",
-          "go.sum",
-          "api/**",
-          "config/crd/**",
-          "charts/openvox-operator/crds/**"
-        ],
-        "executionMode": "branch"
-      }
+      "groupName": "Go dependencies"
     },
     {
       "matchManagers": [

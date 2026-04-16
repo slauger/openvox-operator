@@ -100,6 +100,10 @@ type ServerSpec struct {
 	// +optional
 	Affinity *corev1.Affinity `json:"affinity,omitempty"`
 
+	// PriorityClassName is the name of the PriorityClass for the Server pods.
+	// +optional
+	PriorityClassName string `json:"priorityClassName,omitempty"`
+
 	// PDB defines PodDisruptionBudget settings.
 	// +optional
 	PDB *PDBSpec `json:"pdb,omitempty"`

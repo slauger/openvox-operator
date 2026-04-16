@@ -1319,6 +1319,10 @@ spec:
                 items:
                   type: string
                 type: array
+              priorityClassName:
+                description: PriorityClassName is the name of the PriorityClass for
+                  the Server pods.
+                type: string
               replicas:
                 default: 1
                 description: Replicas is the number of Server instances.

@@ -465,6 +465,7 @@ chmod 640 /ssl/private_keys/puppet.pem`
 		},
 		TopologySpreadConstraints: server.Spec.TopologySpreadConstraints,
 		Affinity:                  server.Spec.Affinity,
+		PriorityClassName:         server.Spec.PriorityClassName,
 		InitContainers:            []corev1.Container{initContainer},
 		Containers:                []corev1.Container{container},
 		Volumes:                   volumes,

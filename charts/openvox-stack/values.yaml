@@ -138,6 +138,7 @@ database:
   #   minAvailable: 1
   # networkPolicy:
   #   enabled: true
+  # priorityClassName: ""
   # service:
   #   type: ClusterIP
   #   port: 8081
@@ -196,6 +197,7 @@ servers:
     #       - weight: 100
     #         podAffinityTerm:
     #           topologyKey: kubernetes.io/hostname
+    # priorityClassName: ""
 
 gateway:
   name: ""              # shared Gateway resource name

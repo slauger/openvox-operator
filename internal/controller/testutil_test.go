@@ -514,6 +514,12 @@ func withDatabaseReplicas(r int32) databaseOption {
 	}
 }
 
+func withDatabaseJavaArgs(args string) databaseOption {
+	return func(db *openvoxv1alpha1.Database) {
+		db.Spec.JavaArgs = args
+	}
+}
+
 func withDatabaseNetworkPolicy(enabled bool) databaseOption {
 	return func(db *openvoxv1alpha1.Database) {
 		db.Spec.NetworkPolicy = &openvoxv1alpha1.NetworkPolicySpec{Enabled: enabled}

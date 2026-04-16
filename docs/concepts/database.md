@@ -48,11 +48,11 @@ The Jetty TLS material is mounted from the `Certificate`'s TLS Secret and the `C
 
 ```
 /etc/puppetlabs/puppetdb/ssl/
-├── certs/
-│   ├── ca.pem
-│   └── {certname}.pem
-└── private_keys/
-    └── {certname}.pem
+  certs/
+    ca.pem
+    {certname}.pem
+  private_keys/
+    {certname}.pem
 ```
 
 ## Config Integration

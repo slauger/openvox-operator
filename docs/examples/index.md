@@ -60,9 +60,9 @@ spec:
     port: 8140
 ```
 
-## Production - CA + Server Pool + Canary
+## Production - CA + Server Pool + Canary + Database
 
-Separate CA server, a stable server pool with 3 replicas, and a canary server running a newer version. Pools distribute traffic across matching servers.
+Separate CA server, a stable server pool with 3 replicas, a canary server running a newer version, and an OpenVox DB instance backed by external PostgreSQL. Pools distribute traffic across matching servers; the Config wires the Database connection automatically via `databaseRef`.
 
 ```yaml
 apiVersion: openvox.voxpupuli.org/v1alpha1
@@ -71,12 +71,10 @@ metadata:
   name: production
 spec:
   authorityRef: production-ca
+  databaseRef: production-db
   image:
     repository: ghcr.io/slauger/openvox-server
     tag: "8.12.1"
-  puppetdb:
-    serverUrls:
-      - https://openvoxdb:8081
   puppet:
     environmentTimeout: unlimited
     storeconfigs: true
@@ -129,6 +127,63 @@ spec:
   certname: puppet
   dnsAltNames:
     - puppet
+---
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: Certificate
+metadata:
+  name: production-db-cert
+spec:
+  authorityRef: production-ca
+  certname: production-db
+  dnsAltNames:
+    - production-db
+    - production-db.openvox.svc.cluster.local
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pg-credentials
+type: Opaque
+stringData:
+  username: openvoxdb
+  password: change-me  # provision externally (e.g. via SealedSecrets, ESO, Vault)
+---
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: Database
+metadata:
+  name: production-db
+spec:
+  certificateRef: production-db-cert
+  image:
+    repository: ghcr.io/slauger/openvox-db
+    tag: latest
+  postgres:
+    host: pg-rw.openvox.svc        # CloudNativePG read/write Service
+    port: 5432
+    database: openvoxdb
+    credentialsSecretRef: pg-credentials
+    sslMode: require
+  replicas: 2
+  pdb:
+    enabled: true
+    minAvailable: 1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      memory: 2Gi
+---
+apiVersion: openvox.voxpupuli.org/v1alpha1
+kind: ReportProcessor
+metadata:
+  name: production-reports
+spec:
+  configRef: production
+  processor: puppetdb
+  url: https://production-db:8081
+  auth:
+    mtls: true
 ---
 apiVersion: openvox.voxpupuli.org/v1alpha1
 kind: Pool

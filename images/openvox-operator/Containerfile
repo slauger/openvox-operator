@@ -9,7 +9,7 @@ COPY internal/ internal/
 ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -o manager ./cmd/main.go
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.7-1775623882
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.7-1776104705
 
 LABEL org.opencontainers.image.title="OpenVox Operator" \
       org.opencontainers.image.description="OpenVox Operator for Kubernetes/OpenShift" \

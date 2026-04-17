@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/pem"
 	"io"
 	"math/big"
@@ -18,6 +19,69 @@ import (
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
+
+func TestBuildCSRExtensions_Nil(t *testing.T) {
+	exts, err := buildCSRExtensions(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if exts != nil {
+		t.Errorf("expected nil, got %v", exts)
+	}
+}
+
+func TestBuildCSRExtensions_PpCliAuth(t *testing.T) {
+	spec := &openvoxv1alpha1.CSRExtensionsSpec{
+		PpCliAuth: true,
+	}
+	exts, err := buildCSRExtensions(spec)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(exts) != 1 {
+		t.Fatalf("expected 1 extension, got %d", len(exts))
+	}
+	// pp_cli_auth OID: 1.3.6.1.4.1.34380.1.3.39
+	expectedOID := asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 34380, 1, 3, 39}
+	if !exts[0].Id.Equal(expectedOID) {
+		t.Errorf("expected OID %v, got %v", expectedOID, exts[0].Id)
+	}
+}
+
+func TestBuildCSRExtensions_AllFields(t *testing.T) {
+	spec := &openvoxv1alpha1.CSRExtensionsSpec{
+		PpCliAuth:     true,
+		PpRole:        "compiler",
+		PpEnvironment: "production",
+		CustomExtensions: map[string]string{
+			"pp_cost_center": "IT",
+			"pp_department":  "Engineering",
+		},
+	}
+	exts, err := buildCSRExtensions(spec)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// pp_cli_auth + pp_role + pp_environment + 2 custom = 5
+	if len(exts) != 5 {
+		t.Fatalf("expected 5 extensions, got %d", len(exts))
+	}
+}
+
+func TestBuildCSRExtensions_UnknownCustomExtension(t *testing.T) {
+	spec := &openvoxv1alpha1.CSRExtensionsSpec{
+		CustomExtensions: map[string]string{
+			"unknown_extension": "value",
+		},
+	}
+	_, err := buildCSRExtensions(spec)
+	if err == nil {
+		t.Fatal("expected error for unknown extension")
+	}
+	if !strings.Contains(err.Error(), "unknown Puppet extension") {
+		t.Errorf("expected 'unknown Puppet extension' error, got: %v", err)
+	}
+}
 
 func TestCSRPollBackoff(t *testing.T) {
 	tests := []struct {
@@ -85,10 +149,6 @@ func TestBuildExternalCAHTTPClient_Minimal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if httpClient == nil {
-		t.Fatal("expected non-nil HTTP client")
-	}
-
 	transport := httpClient.Transport.(*http.Transport)
 	if transport.TLSClientConfig.InsecureSkipVerify {
 		t.Error("expected InsecureSkipVerify=false")

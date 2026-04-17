@@ -255,9 +255,10 @@ chmod 640 /ssl/private_keys/%s.pem`, certname, certname, certname)
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			},
 		},
-		InitContainers: []corev1.Container{initContainer},
-		Containers:     []corev1.Container{container},
-		Volumes:        volumes,
+		PriorityClassName: db.Spec.PriorityClassName,
+		InitContainers:    []corev1.Container{initContainer},
+		Containers:        []corev1.Container{container},
+		Volumes:           volumes,
 	}
 
 	return podSpec

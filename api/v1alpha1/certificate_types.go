@@ -32,6 +32,26 @@ type CertificateList struct {
 	Items           []Certificate `json:"items"`
 }
 
+// CSRExtensionsSpec defines Puppet CSR extension attributes to embed in the CSR.
+type CSRExtensionsSpec struct {
+	// PpCliAuth adds the pp_cli_auth extension, granting CA API signing rights.
+	// +optional
+	PpCliAuth bool `json:"ppCliAuth,omitempty"`
+
+	// PpRole sets the pp_role extension value.
+	// +optional
+	PpRole string `json:"ppRole,omitempty"`
+
+	// PpEnvironment sets the pp_environment extension value.
+	// +optional
+	PpEnvironment string `json:"ppEnvironment,omitempty"`
+
+	// CustomExtensions allows arbitrary pp_* extensions as name/value pairs.
+	// Keys must be known Puppet extension names (e.g. pp_cost_center, pp_department).
+	// +optional
+	CustomExtensions map[string]string `json:"customExtensions,omitempty"`
+}
+
 // CertificateSpec defines the desired state of Certificate.
 type CertificateSpec struct {
 	// AuthorityRef references the CertificateAuthority that signs this certificate.
@@ -45,6 +65,10 @@ type CertificateSpec struct {
 	// DNSAltNames is a list of DNS subject alternative names for the certificate.
 	// +optional
 	DNSAltNames []string `json:"dnsAltNames,omitempty"`
+
+	// CSRExtensions defines Puppet CSR extension attributes to embed in the CSR.
+	// +optional
+	CSRExtensions *CSRExtensionsSpec `json:"csrExtensions,omitempty"`
 }
 
 // CertificatePhase represents the current lifecycle phase of a Certificate.

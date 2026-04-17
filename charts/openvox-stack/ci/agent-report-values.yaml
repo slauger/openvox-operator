@@ -13,7 +13,7 @@ reportProcessors:
   - name: e2e-report-webhook
     url: http://openvox-mock:8080/reports
   - name: e2e-report-puppetdb
-    url: http://openvox-mock:8080/pdb/cmd/v1
+    url: http://openvox-mock:8080
     processor: puppetdb
 
 servers:

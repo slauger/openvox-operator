@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/slauger/openvox-operator/internal/puppet"
 )
 
 // generateCSR creates a test CSR with optional SANs and extensions.
@@ -198,7 +200,7 @@ func TestEvaluatePolicy_NoConditions(t *testing.T) {
 }
 
 func TestEvaluatePolicy_CSRAttributes(t *testing.T) {
-	oid := puppetOIDs["pp_environment"]
+	oid := puppet.PuppetOIDs["pp_environment"]
 	ext := makeExtension(t, oid, "production")
 	csr := generateCSR(t, "node1", nil, []pkix.Extension{ext})
 
@@ -270,7 +272,7 @@ func TestEvaluatePolicy_DNSAltNamesNotAllowed(t *testing.T) {
 }
 
 func TestEvaluatePolicy_ANDLogic(t *testing.T) {
-	oid := puppetOIDs["pp_role"]
+	oid := puppet.PuppetOIDs["pp_role"]
 	ext := makeExtension(t, oid, "webserver")
 	csr := generateCSR(t, "web1.prod.com", nil, []pkix.Extension{ext})
 
@@ -334,7 +336,7 @@ func TestGlobMatch(t *testing.T) {
 }
 
 func TestExtractCSRAttribute(t *testing.T) {
-	oid := puppetOIDs["pp_uuid"]
+	oid := puppet.PuppetOIDs["pp_uuid"]
 	ext := makeExtension(t, oid, "test-uuid-value")
 	csr := generateCSR(t, "node1", nil, []pkix.Extension{ext})
 
@@ -354,8 +356,8 @@ func TestExtractCSRAttribute(t *testing.T) {
 }
 
 func TestMatchCSRAttributes_MultipleAND(t *testing.T) {
-	oidEnv := puppetOIDs["pp_environment"]
-	oidRole := puppetOIDs["pp_role"]
+	oidEnv := puppet.PuppetOIDs["pp_environment"]
+	oidRole := puppet.PuppetOIDs["pp_role"]
 	csr := generateCSR(t, "node1", nil, []pkix.Extension{
 		makeExtension(t, oidEnv, "production"),
 		makeExtension(t, oidRole, "webserver"),
@@ -414,8 +416,8 @@ func TestPuppetOIDs(t *testing.T) {
 		"pp_hostname", "pp_owner", "challengePassword",
 	}
 	for _, name := range knownOIDs {
-		if _, ok := puppetOIDs[name]; !ok {
-			t.Errorf("expected OID %q to exist in puppetOIDs", name)
+		if !puppet.IsKnownOID(name) {
+			t.Errorf("expected OID %q to exist in PuppetOIDs", name)
 		}
 	}
 }

@@ -6,6 +6,9 @@
   "labels": [
     "dependencies"
   ],
+  "postUpdateOptions": [
+    "gomodTidy"
+  ],
   "customManagers": [
     {
       "customType": "regex",
@@ -20,24 +23,18 @@
   ],
   "packageRules": [
     {
+      "matchDepNames": [
+        "go",
+        "golang",
+        "docker.io/library/golang"
+      ],
+      "groupName": "Go version"
+    },
+    {
       "matchManagers": [
         "gomod"
       ],
-      "groupName": "Go dependencies",
-      "postUpgradeTasks": {
-        "commands": [
-          "go mod tidy",
-          "make generate manifests"
-        ],
-        "fileFilters": [
-          "go.mod",
-          "go.sum",
-          "api/**",
-          "config/crd/**",
-          "charts/openvox-operator/crds/**"
-        ],
-        "executionMode": "branch"
-      }
+      "groupName": "Go dependencies"
     },
     {
       "matchManagers": [

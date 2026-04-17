@@ -179,7 +179,26 @@ tests:
       - isNull:
           path: spec.networkPolicy
       - isNull:
+          path: spec.priorityClassName
+      - isNull:
           path: spec.service
+
+  - it: should propagate priorityClassName
+    set:
+      database:
+        enabled: true
+        name: my-puppetdb
+        certificate:
+          certname: puppetdb
+        postgres:
+          host: pg-cluster-rw.postgres.svc
+          credentialsSecretRef: pg-credentials
+        priorityClassName: high-priority
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.priorityClassName
+          value: high-priority
 
   - it: should propagate pdb
     set:

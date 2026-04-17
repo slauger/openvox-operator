@@ -230,6 +230,12 @@ func withAutoscaling(enabled bool) serverOption {
 	}
 }
 
+func withPriorityClassName(name string) serverOption {
+	return func(s *openvoxv1alpha1.Server) {
+		s.Spec.PriorityClassName = name
+	}
+}
+
 type poolOption func(*openvoxv1alpha1.Pool)
 
 func newPool(name string, opts ...poolOption) *openvoxv1alpha1.Pool {
@@ -514,6 +520,12 @@ func withDatabaseReplicas(r int32) databaseOption {
 	}
 }
 
+func withDatabaseJavaArgs(args string) databaseOption {
+	return func(db *openvoxv1alpha1.Database) {
+		db.Spec.JavaArgs = args
+	}
+}
+
 func withDatabaseNetworkPolicy(enabled bool) databaseOption {
 	return func(db *openvoxv1alpha1.Database) {
 		db.Spec.NetworkPolicy = &openvoxv1alpha1.NetworkPolicySpec{Enabled: enabled}
@@ -526,6 +538,12 @@ func withDatabaseNetworkPolicyAdditionalIngress(rules []networkingv1.NetworkPoli
 			db.Spec.NetworkPolicy = &openvoxv1alpha1.NetworkPolicySpec{Enabled: true}
 		}
 		db.Spec.NetworkPolicy.AdditionalIngress = rules
+	}
+}
+
+func withDatabasePriorityClassName(name string) databaseOption {
+	return func(db *openvoxv1alpha1.Database) {
+		db.Spec.PriorityClassName = name
 	}
 }
 

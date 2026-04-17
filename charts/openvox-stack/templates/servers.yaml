@@ -58,4 +58,7 @@ spec:
   affinity:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+  {{- with $entry.priorityClassName }}
+  priorityClassName: {{ . }}
+  {{- end }}
 {{- end }}

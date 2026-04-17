@@ -8,10 +8,12 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -27,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
+	"github.com/slauger/openvox-operator/internal/puppet"
 )
 
 // caHTTPClientForCA returns an HTTP client configured for the CA.
@@ -127,6 +130,59 @@ func caHTTPClient(caCertPEM []byte) (*http.Client, error) {
 	}, nil
 }
 
+// buildCSRExtensions converts a CSRExtensionsSpec into pkix.Extension values
+// suitable for inclusion in a CSR template's ExtraExtensions field.
+func buildCSRExtensions(spec *openvoxv1alpha1.CSRExtensionsSpec) ([]pkix.Extension, error) {
+	if spec == nil {
+		return nil, nil
+	}
+
+	var exts []pkix.Extension
+
+	addExt := func(name, value string) error {
+		oid, ok := puppet.OIDByName(name)
+		if !ok {
+			return fmt.Errorf("unknown Puppet extension: %s", name)
+		}
+		encoded, err := asn1.Marshal(value)
+		if err != nil {
+			return fmt.Errorf("encoding extension %s: %w", name, err)
+		}
+		exts = append(exts, pkix.Extension{Id: oid, Value: encoded})
+		return nil
+	}
+
+	if spec.PpCliAuth {
+		if err := addExt("pp_cli_auth", "true"); err != nil {
+			return nil, err
+		}
+	}
+	if spec.PpRole != "" {
+		if err := addExt("pp_role", spec.PpRole); err != nil {
+			return nil, err
+		}
+	}
+	if spec.PpEnvironment != "" {
+		if err := addExt("pp_environment", spec.PpEnvironment); err != nil {
+			return nil, err
+		}
+	}
+
+	// Sort custom extension keys for deterministic output
+	keys := make([]string, 0, len(spec.CustomExtensions))
+	for k := range spec.CustomExtensions {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		if err := addExt(k, spec.CustomExtensions[k]); err != nil {
+			return nil, err
+		}
+	}
+
+	return exts, nil
+}
 
 // submitCSR generates an RSA key (or reuses an existing one from a pending Secret),
 // submits the CSR to the Puppet CA, and stores the private key in a pending Secret.
@@ -189,10 +245,17 @@ func (r *CertificateReconciler) submitCSR(ctx context.Context, cert *openvoxv1al
 		return ctrl.Result{}, fmt.Errorf("parsing pending key: %w", err)
 	}
 
+	// Build CSR extensions from spec
+	extraExts, err := buildCSRExtensions(cert.Spec.CSRExtensions)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("building CSR extensions: %w", err)
+	}
+
 	// Build and submit CSR
 	csrTemplate := &x509.CertificateRequest{
-		Subject:  pkix.Name{CommonName: certname},
-		DNSNames: cert.Spec.DNSAltNames,
+		Subject:         pkix.Name{CommonName: certname},
+		DNSNames:        cert.Spec.DNSAltNames,
+		ExtraExtensions: extraExts,
 	}
 	csrDER, err := x509.CreateCertificateRequest(rand.Reader, csrTemplate, privateKey)
 	if err != nil {

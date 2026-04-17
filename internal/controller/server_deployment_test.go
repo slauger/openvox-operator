@@ -359,6 +359,26 @@ func TestBuildPodSpec_Probes(t *testing.T) {
 	}
 }
 
+func TestBuildPodSpec_PriorityClassName(t *testing.T) {
+	cfg := newConfig("production")
+
+	t.Run("set", func(t *testing.T) {
+		server := newServer("test-server", withPriorityClassName("high-priority"))
+		podSpec := testBuildPodSpec(server, cfg)
+		if podSpec.PriorityClassName != "high-priority" {
+			t.Errorf("expected PriorityClassName %q, got %q", "high-priority", podSpec.PriorityClassName)
+		}
+	})
+
+	t.Run("empty by default", func(t *testing.T) {
+		server := newServer("test-server")
+		podSpec := testBuildPodSpec(server, cfg)
+		if podSpec.PriorityClassName != "" {
+			t.Errorf("expected empty PriorityClassName, got %q", podSpec.PriorityClassName)
+		}
+	})
+}
+
 func TestResolveJavaArgs_Default(t *testing.T) {
 	server := &openvoxv1alpha1.Server{
 		Spec: openvoxv1alpha1.ServerSpec{},

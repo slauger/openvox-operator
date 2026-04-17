@@ -126,23 +126,34 @@ At most one authentication method may be configured.
 | Field | Type | Description |
 |---|---|---|
 | `header` | string | HTTP header name (e.g. `X-Authentication`) |
-| `secretKeyRef.name` | string | Name of the Secret |
-| `secretKeyRef.key` | string | Key within the Secret |
+| `secretKeyRef` | [SecretKeyRef](#secretkeyref) | Reference to the Secret key holding the token value |
 
 ### SecretKeySelector
 
 | Field | Type | Description |
 |---|---|---|
-| `secretKeyRef.name` | string | Name of the Secret |
-| `secretKeyRef.key` | string | Key within the Secret |
+| `secretKeyRef` | [SecretKeyRef](#secretkeyref) | Reference to the Secret key holding the bearer token |
+
+### SecretKeyRef
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | string | Name of the Secret |
+| `key` | string | Key within the Secret |
 
 ### BasicAuth
 
 | Field | Type | Description |
 |---|---|---|
-| `secretRef.name` | string | Name of the Secret |
-| `secretRef.usernameKey` | string | Key containing the username (default: `username`) |
-| `secretRef.passwordKey` | string | Key containing the password (default: `password`) |
+| `secretRef` | [BasicAuthSecretRef](#basicauthsecretref) | Reference to the Secret containing username and password |
+
+### BasicAuthSecretRef
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `name` | string | **required** | Name of the Secret |
+| `usernameKey` | string | `username` | Key within the Secret containing the username |
+| `passwordKey` | string | `password` | Key within the Secret containing the password |
 
 ### NodeClassifierCache
 

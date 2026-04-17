@@ -31,17 +31,19 @@ type CertificateAuthorityReconciler struct {
 
 // Event reasons for CertificateAuthority.
 const (
-	EventReasonCAInitialized      = "CAInitialized"
-	EventReasonCAExternal         = "CAExternal"
-	EventReasonCAWaitingForConfig = "WaitingForConfig"
-	EventReasonCRLRefreshed       = "CRLRefreshed"
-	EventReasonCRLRefreshFailed   = "CRLRefreshFailed"
+	EventReasonCAInitialized          = "CAInitialized"
+	EventReasonCAExternal             = "CAExternal"
+	EventReasonCAWaitingForConfig     = "WaitingForConfig"
+	EventReasonCRLRefreshed           = "CRLRefreshed"
+	EventReasonCRLRefreshFailed       = "CRLRefreshFailed"
+	EventReasonOperatorSigningCreated = "OperatorSigningCreated"
+	EventReasonOperatorSigningReady   = "OperatorSigningReady"
 )
 
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificateauthorities,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificateauthorities/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificateauthorities/finalizers,verbs=update
-// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificates,verbs=get;list;watch
+// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificates,verbs=get;list;watch;create;update
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=configs,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=servers,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
@@ -127,9 +129,13 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 	wasReady := ca.Status.Phase == openvoxv1alpha1.CertificateAuthorityPhaseReady
 	notAfter := r.extractCANotAfter(ctx, caSecretName, ca.Namespace)
 	serviceName := caInternalServiceName(ca.Name)
+
+	// Only use Init-Job cert as signingSecret if operator-signing cert is not yet active
 	var signingSecretName string
-	if caCert := r.findCAServerCert(ctx, ca, certs); caCert != nil {
-		signingSecretName = fmt.Sprintf("%s-tls", caCert.Name)
+	if !meta.IsStatusConditionTrue(ca.Status.Conditions, openvoxv1alpha1.ConditionOperatorSigningReady) {
+		if caCert := r.findCAServerCert(ctx, ca, certs); caCert != nil {
+			signingSecretName = fmt.Sprintf("%s-tls", caCert.Name)
+		}
 	}
 
 	if err := updateStatusWithRetry(ctx, r.Client, ca, func() {
@@ -159,6 +165,13 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 	if ca.Status.NotAfter == nil {
 		logger.Info("NotAfter not yet available, requeueing", "secret", caSecretName)
 		return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
+	}
+
+	// Ensure dedicated operator signing certificate
+	if signingResult, err := r.reconcileOperatorSigningCert(ctx, ca, certs); err != nil {
+		return ctrl.Result{}, fmt.Errorf("reconciling operator signing cert: %w", err)
+	} else if signingResult.RequeueAfter > 0 {
+		return signingResult, nil
 	}
 
 	// Periodic CRL refresh: fetch CRL from CA service and update the CRL secret

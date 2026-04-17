@@ -1,8 +1,5 @@
 # Installation
 
-!!! warning "Work in Progress"
-    The operator is under active development. CRDs and APIs may change.
-
 ## Prerequisites
 
 - Kubernetes or OpenShift cluster
@@ -58,4 +55,4 @@ In namespace mode the operator uses Role/RoleBinding instead of ClusterRole/Clus
 
 ## Next Steps
 
-Once the operator is running, follow the [Quick Start](quickstart.md) guide to deploy an OpenVox stack.
+Once the operator is running, follow the [Quick Start](quickstart.md) guide to deploy an OpenVox stack. The Quick Start uses the [`openvox-stack`](https://ghcr.io/slauger/charts/openvox-stack) Helm chart which bundles all required custom resources into a single install command.

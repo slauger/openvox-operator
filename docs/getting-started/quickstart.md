@@ -1,72 +1,132 @@
 # Quick Start
 
-This guide sets up a minimal OpenVox Server deployment with a single pod acting as both CA and server.
+This guide sets up an OpenVox Server deployment. Choose between the Helm chart (recommended) or raw YAML manifests.
 
-## Minimal Setup
+## Deploy
 
-Create a Config, CertificateAuthority, SigningPolicy, Certificate, Server, and Pool:
+=== "Helm Chart"
 
-```yaml
-apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: Config
-metadata:
-  name: lab
-spec:
-  authorityRef: lab-ca
-  image:
-    repository: ghcr.io/slauger/openvox-server
-    tag: "8.12.1"
----
-apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: CertificateAuthority
-metadata:
-  name: lab-ca
----
-apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: SigningPolicy
-metadata:
-  name: lab-autosign
-spec:
-  certificateAuthorityRef: lab-ca
-  any: true
----
-apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: Certificate
-metadata:
-  name: lab-cert
-spec:
-  authorityRef: lab-ca
-  certname: puppet
-  dnsAltNames:
-    - puppet
-    - lab-ca
----
-apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: Server
-metadata:
-  name: puppet
-spec:
-  configRef: lab
-  certificateRef: lab-cert
-  poolRefs: [puppet]
-  ca: true
-  server: true
-  replicas: 1
----
-apiVersion: openvox.voxpupuli.org/v1alpha1
-kind: Pool
-metadata:
-  name: puppet
-spec:
-  service:
-    port: 8140
-```
+    The `openvox-stack` Helm chart bundles all required resources (Config, CertificateAuthority, SigningPolicy, Certificate, Server, Pool) into a single install command.
 
-Apply it:
+    ### Single-Node (Lab)
 
-```bash
-kubectl apply -f config.yaml
-```
+    For a minimal lab setup with a single pod acting as both CA and server, create a `values.yaml`:
+
+    ```yaml
+    signingPolicies:
+      - name: autosign
+        any: true
+
+    servers:
+      - name: puppet
+        ca: true
+        server: true
+        poolRefs: [puppet]
+        certificate:
+          certname: puppet
+        replicas: 1
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            memory: 2Gi
+
+    pools:
+      - name: puppet
+        service:
+          port: 8140
+    ```
+
+    ### Multi-Node (Default)
+
+    The chart defaults deploy a dedicated CA server and a separate server pool with 2 replicas. This layout is suitable for environments that need independent scaling or rolling upgrades without CA downtime.
+
+    No custom `values.yaml` is needed for the default layout. You only need to add overrides for settings you want to change, for example a signing policy:
+
+    ```yaml
+    signingPolicies:
+      - name: autosign
+        any: true
+    ```
+
+    ### Install
+
+    ```bash
+    helm install openvox \
+      oci://ghcr.io/slauger/charts/openvox-stack \
+      --namespace openvox \
+      --create-namespace \
+      -f values.yaml
+    ```
+
+    The chart creates all required custom resources automatically.
+
+=== "Manual (kubectl)"
+
+    Create a file `config.yaml` with a Config, CertificateAuthority, SigningPolicy, Certificate, Server, and Pool:
+
+    ```yaml
+    apiVersion: openvox.voxpupuli.org/v1alpha1
+    kind: Config
+    metadata:
+      name: lab
+    spec:
+      authorityRef: lab-ca
+      image:
+        repository: ghcr.io/slauger/openvox-server
+        tag: "8.12.1"
+    ---
+    apiVersion: openvox.voxpupuli.org/v1alpha1
+    kind: CertificateAuthority
+    metadata:
+      name: lab-ca
+    ---
+    apiVersion: openvox.voxpupuli.org/v1alpha1
+    kind: SigningPolicy
+    metadata:
+      name: lab-autosign
+    spec:
+      certificateAuthorityRef: lab-ca
+      any: true
+    ---
+    apiVersion: openvox.voxpupuli.org/v1alpha1
+    kind: Certificate
+    metadata:
+      name: lab-cert
+    spec:
+      authorityRef: lab-ca
+      certname: puppet
+      dnsAltNames:
+        - puppet
+        - lab-ca
+    ---
+    apiVersion: openvox.voxpupuli.org/v1alpha1
+    kind: Server
+    metadata:
+      name: puppet
+    spec:
+      configRef: lab
+      certificateRef: lab-cert
+      poolRefs: [puppet]
+      ca: true
+      server: true
+      replicas: 1
+    ---
+    apiVersion: openvox.voxpupuli.org/v1alpha1
+    kind: Pool
+    metadata:
+      name: puppet
+    spec:
+      service:
+        port: 8140
+    ```
+
+    Apply it:
+
+    ```bash
+    kubectl apply -f config.yaml
+    ```
 
 The operator will:
 

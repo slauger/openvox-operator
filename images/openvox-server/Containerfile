@@ -148,7 +148,9 @@ RUN printf '%s\n' \
         'INSTALL_DIR="/opt/puppetlabs/server/apps/puppetserver"' \
         'CONFIG="/etc/puppetlabs/puppetserver/conf.d"' \
         > /etc/sysconfig/puppetserver \
+    && ln -s /bin/true /usr/local/bin/make \
     && puppetserver gem install --no-document openvox -v "${OPENVOX_VERSION}" \
+    && rm /usr/local/bin/make \
     && puppetserver gem install --no-document jruby-openssl -v 0.15.7
 
 # Patch openvoxserver-ca to skip cadir symlink and chown (fails rootless)

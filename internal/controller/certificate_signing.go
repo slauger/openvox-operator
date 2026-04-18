@@ -498,7 +498,9 @@ func (r *CertificateReconciler) reconcileCertRenewal(ctx context.Context, cert *
 	r.Recorder.Eventf(cert, nil, corev1.EventTypeNormal, EventReasonCertificateRenewed, "Reconcile",
 		"Certificate renewed successfully in Secret %s", tlsSecretName)
 
-	// Record renewal time and reset expiry warnings for the new cert
+	// Record renewal time and reset expiry warnings for the new cert.
+	// If the patch fails, requeue with cooldown interval to avoid a tight
+	// re-renewal loop (the cooldown annotation would be missing).
 	patch := client.MergeFrom(cert.DeepCopy())
 	if cert.Annotations == nil {
 		cert.Annotations = make(map[string]string)
@@ -506,14 +508,15 @@ func (r *CertificateReconciler) reconcileCertRenewal(ctx context.Context, cert *
 	cert.Annotations[AnnotationLastRenewalTime] = time.Now().UTC().Format(time.RFC3339)
 	delete(cert.Annotations, AnnotationExpiryWarned)
 	if patchErr := r.Patch(ctx, cert, patch); patchErr != nil {
-		logger.Error(patchErr, "failed to update renewal annotations")
+		logger.Error(patchErr, "failed to update renewal annotations, requeueing with cooldown")
+		return ctrl.Result{RequeueAfter: minRenewalCooldown}, nil
 	}
 
 	logger.Info("certificate renewed successfully", "certname", cert.Spec.Certname)
 	if notAfter == nil {
 		return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 	}
-	return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+	return ctrl.Result{RequeueAfter: minRenewalCooldown}, nil
 }
 
 // renewCertificate performs certificate renewal via the Puppet CA HTTP API.
@@ -525,6 +528,7 @@ func (r *CertificateReconciler) renewCertificate(ctx context.Context, cert *open
 	certname := cert.Spec.Certname
 	if certname == "" {
 		certname = "puppet"
+		logger.Info("certname is empty, using default", "certname", certname)
 	}
 
 	tlsSecretName := fmt.Sprintf("%s-tls", cert.Name)

@@ -17,6 +17,9 @@ import (
 	"testing"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
 
@@ -528,6 +531,91 @@ func TestCleanCertViaAPI_EmptyCertname(t *testing.T) {
 	if !strings.Contains(err.Error(), "certname is empty") {
 		t.Errorf("expected 'certname is empty' error, got: %v", err)
 	}
+}
+
+func TestReconcileCertRenewal_Success(t *testing.T) {
+	certPEM, keyPEM := generateTestCertWithExpiry(t, 24*time.Hour)
+	newCertPEM, newKeyPEM := generateTestCertWithExpiry(t, 90*24*time.Hour)
+
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(newCertPEM)
+	}))
+	defer server.Close()
+
+	caSecret := newSecret("ext-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	tlsSecret := newSecret("my-cert-tls", map[string][]byte{
+		"cert.pem": certPEM,
+		"key.pem":  keyPEM,
+	})
+
+	ca := newCertificateAuthority("ext-ca", withExternal(server.URL))
+	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseExternal
+
+	cert := newCertificate("my-cert", "ext-ca", openvoxv1alpha1.CertificatePhaseRenewing)
+	cert.Spec.Certname = "test-certname"
+
+	c := setupTestClient(ca, cert, caSecret, tlsSecret)
+	r := newCertificateReconciler(c)
+
+	res, err := r.reconcileCertRenewal(testCtx(), cert, ca)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify phase transitioned to Signed
+	updated := &openvoxv1alpha1.Certificate{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "my-cert", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get Certificate: %v", err)
+	}
+	if updated.Status.Phase != openvoxv1alpha1.CertificatePhaseSigned {
+		t.Errorf("expected phase %q, got %q", openvoxv1alpha1.CertificatePhaseSigned, updated.Status.Phase)
+	}
+	if updated.Status.SecretName != "my-cert-tls" {
+		t.Errorf("expected SecretName %q, got %q", "my-cert-tls", updated.Status.SecretName)
+	}
+
+	// Verify CertSigned condition with reason CertificateRenewed
+	found := false
+	for _, cond := range updated.Status.Conditions {
+		if cond.Type == openvoxv1alpha1.ConditionCertSigned && cond.Reason == "CertificateRenewed" {
+			found = true
+			if cond.Status != "True" {
+				t.Errorf("expected condition status True, got %q", cond.Status)
+			}
+		}
+	}
+	if !found {
+		t.Error("CertSigned condition with reason CertificateRenewed not set")
+	}
+
+	// Verify renewal annotation was set
+	if updated.Annotations == nil || updated.Annotations[AnnotationLastRenewalTime] == "" {
+		t.Error("expected last-renewal-time annotation to be set")
+	}
+
+	// Verify expiry-warned annotation was cleared
+	if warned, ok := updated.Annotations[AnnotationExpiryWarned]; ok && warned != "" {
+		t.Errorf("expected expiry-warned annotation to be cleared, got %q", warned)
+	}
+
+	// Verify RequeueAfter is set (scheduleRenewalCheck called)
+	if res.RequeueAfter == 0 {
+		t.Error("expected RequeueAfter > 0 after successful renewal")
+	}
+
+	// Verify the TLS secret was updated with new cert
+	tlsUpdated := &corev1.Secret{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "my-cert-tls", Namespace: testNamespace}, tlsUpdated); err != nil {
+		t.Fatalf("failed to get TLS Secret: %v", err)
+	}
+	if string(tlsUpdated.Data["cert.pem"]) == string(certPEM) {
+		t.Error("expected TLS secret cert.pem to be updated with new cert")
+	}
+
+	_ = newKeyPEM // new key is generated internally
 }
 
 func TestRenewCertificate_Success(t *testing.T) {

@@ -777,23 +777,9 @@ func (r *CertificateReconciler) signCSRViaAPI(ctx context.Context, cert *openvox
 	}
 
 	// Build mTLS HTTP client
-	pool := x509.NewCertPool()
-	if !pool.AppendCertsFromPEM(caCertPEM) {
-		return fmt.Errorf("failed to parse CA certificate PEM")
-	}
-	clientCert, err := tls.X509KeyPair(clientCertPEM, clientKeyPEM)
+	httpClient, err := mTLSHTTPClient(caCertPEM, clientCertPEM, clientKeyPEM)
 	if err != nil {
-		return fmt.Errorf("parsing signing certificate: %w", err)
-	}
-	httpClient := &http.Client{
-		Timeout: HTTPClientTimeout,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				MinVersion:   tls.VersionTLS12,
-				RootCAs:      pool,
-				Certificates: []tls.Certificate{clientCert},
-			},
-		},
+		return err
 	}
 
 	// PUT /puppet-ca/v1/certificate_status/{certname}?environment=production

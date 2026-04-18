@@ -114,8 +114,9 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 					return ctrl.Result{RequeueAfter: RequeueIntervalLong}, nil
 				}
 			}
+			patch := client.MergeFrom(cert.DeepCopy())
 			controllerutil.RemoveFinalizer(cert, certificateFinalizer)
-			if err := r.Update(ctx, cert); err != nil {
+			if err := r.Patch(ctx, cert, patch); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
@@ -124,8 +125,9 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Ensure finalizer is set
 	if !controllerutil.ContainsFinalizer(cert, certificateFinalizer) {
+		patch := client.MergeFrom(cert.DeepCopy())
 		controllerutil.AddFinalizer(cert, certificateFinalizer)
-		if err := r.Update(ctx, cert); err != nil {
+		if err := r.Patch(ctx, cert, patch); err != nil {
 			return ctrl.Result{}, err
 		}
 	}

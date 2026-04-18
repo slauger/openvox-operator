@@ -428,6 +428,126 @@ func TestSignCSRViaAPI_DefaultCertname(t *testing.T) {
 	}
 }
 
+func TestCleanCertViaAPI_Success(t *testing.T) {
+	certPEM, keyPEM := generateTestCert(t)
+
+	var requestedPath string
+	var requestBody string
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Errorf("expected PUT, got %s", r.Method)
+		}
+		requestedPath = r.URL.Path
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
+		}
+		body, _ := io.ReadAll(r.Body)
+		requestBody = string(body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	signingSecret := newSecret("ca-cert-tls", map[string][]byte{
+		"cert.pem": certPEM,
+		"key.pem":  keyPEM,
+	})
+
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.SigningSecretName = "ca-cert-tls"
+
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseSigned)
+	cert.Spec.Certname = "test-certname"
+
+	c := setupTestClient(ca, cert, caSecret, signingSecret)
+	r := newCertificateReconciler(c)
+
+	err := r.cleanCertViaAPI(testCtx(), cert, ca, server.URL, testNamespace)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(requestedPath, "/puppet-ca/v1/clean") {
+		t.Errorf("expected path containing /puppet-ca/v1/clean, got: %s", requestedPath)
+	}
+	if !strings.Contains(requestBody, `"test-certname"`) {
+		t.Errorf("expected certname in body, got: %s", requestBody)
+	}
+}
+
+func TestCleanCertViaAPI_CARejects(t *testing.T) {
+	certPEM, keyPEM := generateTestCert(t)
+
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte("Not Authorized"))
+	}))
+	defer server.Close()
+
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	signingSecret := newSecret("ca-cert-tls", map[string][]byte{
+		"cert.pem": certPEM,
+		"key.pem":  keyPEM,
+	})
+
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.SigningSecretName = "ca-cert-tls"
+
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseSigned)
+	cert.Spec.Certname = "test-certname"
+
+	c := setupTestClient(ca, cert, caSecret, signingSecret)
+	r := newCertificateReconciler(c)
+
+	err := r.cleanCertViaAPI(testCtx(), cert, ca, server.URL, testNamespace)
+	if err == nil {
+		t.Fatal("expected error when CA rejects clean request")
+	}
+	if !strings.Contains(err.Error(), "HTTP 403") {
+		t.Errorf("expected HTTP 403 error, got: %v", err)
+	}
+}
+
+func TestCleanCertViaAPI_DefaultCertname(t *testing.T) {
+	certPEM, keyPEM := generateTestCert(t)
+
+	var requestBody string
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		requestBody = string(body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	signingSecret := newSecret("ca-cert-tls", map[string][]byte{
+		"cert.pem": certPEM,
+		"key.pem":  keyPEM,
+	})
+
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.SigningSecretName = "ca-cert-tls"
+
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseSigned)
+	cert.Spec.Certname = "" // should default to "puppet"
+
+	c := setupTestClient(ca, cert, caSecret, signingSecret)
+	r := newCertificateReconciler(c)
+
+	err := r.cleanCertViaAPI(testCtx(), cert, ca, server.URL, testNamespace)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(requestBody, `"puppet"`) {
+		t.Errorf("expected default certname 'puppet' in body, got: %s", requestBody)
+	}
+}
+
 func TestRenewCertificate_Success(t *testing.T) {
 	certPEM, keyPEM := generateTestCertWithExpiry(t, 24*time.Hour)
 

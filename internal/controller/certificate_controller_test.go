@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	clocktesting "k8s.io/utils/clock/testing"
@@ -375,6 +376,97 @@ func TestScheduleRenewalCheck_CooldownPreventsLoop(t *testing.T) {
 	}
 	if updated.Status.Phase != openvoxv1alpha1.CertificatePhaseSigned {
 		t.Errorf("expected phase %q during cooldown, got %q", openvoxv1alpha1.CertificatePhaseSigned, updated.Status.Phase)
+	}
+}
+
+func TestCertReconcile_FinalizerAdded(t *testing.T) {
+	cert := newCertificate("my-cert", "test-ca", "")
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhasePending
+
+	c := setupTestClient(cert, ca)
+	r := newCertificateReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("my-cert")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	updated := &openvoxv1alpha1.Certificate{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "my-cert", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get Certificate: %v", err)
+	}
+
+	found := false
+	for _, f := range updated.Finalizers {
+		if f == certificateFinalizer {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected finalizer to be added to Certificate")
+	}
+}
+
+func TestCertReconcile_DeletionCleansUp(t *testing.T) {
+	certPEM, keyPEM := generateTestCert(t)
+
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseSigned)
+	cert.Spec.Certname = "test-certname"
+	now := metav1.Now()
+	cert.DeletionTimestamp = &now
+	cert.Finalizers = []string{certificateFinalizer}
+
+	ca := newCertificateAuthority("test-ca")
+	// No signing secret -> cleanup should be skipped gracefully
+	ca.Status.SigningSecretName = ""
+
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+
+	_ = keyPEM // not needed when cleanup is skipped
+	c := setupTestClient(cert, ca, caSecret)
+	r := newCertificateReconciler(c)
+
+	res, err := r.Reconcile(testCtx(), testRequest("my-cert"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.RequeueAfter != 0 {
+		t.Errorf("expected no requeue after deletion, got %v", res.RequeueAfter)
+	}
+
+	// Object should be gone (fake client deletes once last finalizer is removed)
+	updated := &openvoxv1alpha1.Certificate{}
+	err = c.Get(testCtx(), types.NamespacedName{Name: "my-cert", Namespace: testNamespace}, updated)
+	if !errors.IsNotFound(err) {
+		t.Errorf("expected Certificate to be deleted, got err: %v", err)
+	}
+}
+
+func TestCertReconcile_DeletionCANotFound(t *testing.T) {
+	cert := newCertificate("my-cert", "missing-ca", openvoxv1alpha1.CertificatePhaseSigned)
+	now := metav1.Now()
+	cert.DeletionTimestamp = &now
+	cert.Finalizers = []string{certificateFinalizer}
+
+	c := setupTestClient(cert)
+	r := newCertificateReconciler(c)
+
+	res, err := r.Reconcile(testCtx(), testRequest("my-cert"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.RequeueAfter != 0 {
+		t.Errorf("expected no requeue when CA not found during deletion, got %v", res.RequeueAfter)
+	}
+
+	// Object should be gone (CA missing -> cleanup skipped -> finalizer removed)
+	updated := &openvoxv1alpha1.Certificate{}
+	err = c.Get(testCtx(), types.NamespacedName{Name: "my-cert", Namespace: testNamespace}, updated)
+	if !errors.IsNotFound(err) {
+		t.Errorf("expected Certificate to be deleted, got err: %v", err)
 	}
 }
 

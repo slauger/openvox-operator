@@ -699,6 +699,62 @@ func (r *CertificateReconciler) ensurePendingKey(ctx context.Context, cert *open
 	return keyPEM, nil
 }
 
+// cleanCertViaAPI calls the Puppet CA clean endpoint to revoke and remove a certificate.
+// It authenticates via mTLS with the CA server's signing certificate.
+func (r *CertificateReconciler) cleanCertViaAPI(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, caBaseURL, namespace string) error {
+	certname := cert.Spec.Certname
+	if certname == "" {
+		certname = "puppet"
+	}
+
+	// Load CA public cert for TLS server verification
+	caCertPEM, err := getCAPublicCert(ctx, r.Client, ca, namespace)
+	if err != nil {
+		return fmt.Errorf("loading CA certificate: %w", err)
+	}
+
+	// Load signing secret (CA server cert + key) for mTLS client auth
+	signingSecret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: ca.Status.SigningSecretName, Namespace: namespace}, signingSecret); err != nil {
+		return fmt.Errorf("getting signing Secret %s: %w", ca.Status.SigningSecretName, err)
+	}
+
+	clientCertPEM := signingSecret.Data["cert.pem"]
+	clientKeyPEM := signingSecret.Data["key.pem"]
+	if len(clientCertPEM) == 0 || len(clientKeyPEM) == 0 {
+		return fmt.Errorf("signing Secret %s missing cert.pem or key.pem", ca.Status.SigningSecretName)
+	}
+
+	httpClient, err := mTLSHTTPClient(caCertPEM, clientCertPEM, clientKeyPEM)
+	if err != nil {
+		return err
+	}
+
+	// PUT /puppet-ca/v1/clean
+	cleanURL := fmt.Sprintf("%s/puppet-ca/v1/clean?environment=production", caBaseURL)
+	body := strings.NewReader(fmt.Sprintf(`{"certnames": [%q]}`, certname))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, cleanURL, body)
+	if err != nil {
+		return fmt.Errorf("building clean request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("calling clean API: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, HTTPBodyLimit))
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("CA rejected clean request (HTTP %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	log.FromContext(ctx).Info("certificate cleaned via CA API", "certname", certname)
+	return nil
+}
+
 // signCSRViaAPI signs a pending CSR via the Puppet CA HTTP API using mTLS with the
 // CA server's own certificate (which has the pp_cli_auth extension required by auth.conf).
 func (r *CertificateReconciler) signCSRViaAPI(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, caBaseURL, namespace string) error {

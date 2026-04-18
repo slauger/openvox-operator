@@ -9,11 +9,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/utils/clock"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
+	"k8s.io/utils/clock"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -30,6 +30,9 @@ type CertificateReconciler struct {
 	Clock    clock.PassiveClock
 }
 
+// Finalizer for Certificate cleanup on the Puppet CA.
+const certificateFinalizer = "openvox.voxpupuli.org/certificate-cleanup"
+
 // Event reasons for Certificate.
 const (
 	EventReasonCertificateSigned           = "CertificateSigned"
@@ -37,6 +40,7 @@ const (
 	EventReasonCertificateRenewalTriggered = "CertificateRenewalTriggered"
 	EventReasonCertificateRenewed          = "CertificateRenewed"
 	EventReasonCertificateExpiringSoon     = "CertificateExpiringSoon"
+	EventReasonCertificateCleaned          = "CertificateCleaned"
 )
 
 // Maximum requeue interval for renewal checks (caps the time-based backoff).
@@ -72,6 +76,29 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
+	}
+
+	// Handle deletion: clean the certificate on the Puppet CA before removing the finalizer.
+	if !cert.DeletionTimestamp.IsZero() {
+		if controllerutil.ContainsFinalizer(cert, certificateFinalizer) {
+			if err := r.handleCertificateCleanup(ctx, cert); err != nil {
+				logger.Error(err, "certificate cleanup failed, will retry")
+				return ctrl.Result{RequeueAfter: RequeueIntervalLong}, nil
+			}
+			controllerutil.RemoveFinalizer(cert, certificateFinalizer)
+			if err := r.Update(ctx, cert); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Ensure finalizer is set
+	if !controllerutil.ContainsFinalizer(cert, certificateFinalizer) {
+		controllerutil.AddFinalizer(cert, certificateFinalizer)
+		if err := r.Update(ctx, cert); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	// Set initial phase
@@ -398,4 +425,36 @@ func (r *CertificateReconciler) emitExpiryWarnings(ctx context.Context, cert *op
 	if err := r.Patch(ctx, cert, patch); err != nil {
 		log.FromContext(ctx).Error(err, "failed to update expiry-warned annotation")
 	}
+}
+
+// handleCertificateCleanup calls the Puppet CA clean API to revoke and remove the certificate.
+func (r *CertificateReconciler) handleCertificateCleanup(ctx context.Context, cert *openvoxv1alpha1.Certificate) error {
+	logger := log.FromContext(ctx)
+
+	// Resolve CertificateAuthority
+	ca := &openvoxv1alpha1.CertificateAuthority{}
+	if err := r.Get(ctx, types.NamespacedName{Name: cert.Spec.AuthorityRef, Namespace: cert.Namespace}, ca); err != nil {
+		if errors.IsNotFound(err) {
+			logger.Info("CertificateAuthority not found, skipping cleanup", "authorityRef", cert.Spec.AuthorityRef)
+			return nil
+		}
+		return err
+	}
+
+	// Skip cleanup for external CAs without a signing secret (no admin access)
+	if ca.Spec.External != nil || ca.Status.SigningSecretName == "" {
+		logger.Info("skipping CA cleanup (external CA or no signing secret)", "ca", ca.Name)
+		return nil
+	}
+
+	// Resolve CA base URL
+	caBaseURL := fmt.Sprintf("https://%s.%s.svc:8140", caInternalServiceName(ca.Name), cert.Namespace)
+
+	if err := r.cleanCertViaAPI(ctx, cert, ca, caBaseURL, cert.Namespace); err != nil {
+		return err
+	}
+
+	r.Recorder.Eventf(cert, nil, corev1.EventTypeNormal, EventReasonCertificateCleaned, "Reconcile",
+		"Certificate %s cleaned from Puppet CA", cert.Spec.Certname)
+	return nil
 }

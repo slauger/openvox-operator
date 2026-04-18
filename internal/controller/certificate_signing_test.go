@@ -116,6 +116,12 @@ func TestCSRPollBackoff(t *testing.T) {
 // The cert includes 127.0.0.1 as an IP SAN for use with httptest.NewTLSServer.
 func generateTestCert(t *testing.T) ([]byte, []byte) {
 	t.Helper()
+	return generateTestCertWithExpiry(t, 24*time.Hour)
+}
+
+// generateTestCertWithExpiry creates a self-signed certificate with a specific validity duration.
+func generateTestCertWithExpiry(t *testing.T, validity time.Duration) ([]byte, []byte) {
+	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generating test key: %v", err)
@@ -124,7 +130,7 @@ func generateTestCert(t *testing.T) ([]byte, []byte) {
 		SerialNumber: big.NewInt(1),
 		Subject:      pkix.Name{CommonName: "test-ca"},
 		NotBefore:    time.Now().Add(-time.Hour),
-		NotAfter:     time.Now().Add(24 * time.Hour),
+		NotAfter:     time.Now().Add(validity),
 		IsCA:         true,
 		KeyUsage:     x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
@@ -419,6 +425,131 @@ func TestSignCSRViaAPI_DefaultCertname(t *testing.T) {
 	}
 	if !strings.Contains(requestedPath, "/puppet-ca/v1/certificate_status/puppet") {
 		t.Errorf("expected path with default certname 'puppet', got: %s", requestedPath)
+	}
+}
+
+func TestRenewCertificate_Success(t *testing.T) {
+	certPEM, keyPEM := generateTestCertWithExpiry(t, 24*time.Hour)
+
+	// Start test HTTPS server that accepts the renewal request and returns a new cert
+	newCertPEM, _ := generateTestCertWithExpiry(t, 90*24*time.Hour)
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		if !strings.Contains(r.URL.Path, "/puppet-ca/v1/certificate_renewal") {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		if r.Header.Get("Content-Type") != "text/plain" {
+			t.Errorf("expected Content-Type text/plain, got %s", r.Header.Get("Content-Type"))
+		}
+		// Read CSR body
+		body, _ := io.ReadAll(r.Body)
+		if len(body) == 0 {
+			t.Error("expected CSR in request body")
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(newCertPEM)
+	}))
+	defer server.Close()
+
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	tlsSecret := newSecret("my-cert-tls", map[string][]byte{
+		"cert.pem": certPEM,
+		"key.pem":  keyPEM,
+	})
+
+	ca := newCertificateAuthority("test-ca")
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseRenewing)
+	cert.Spec.Certname = "test-certname"
+
+	c := setupTestClient(ca, cert, caSecret, tlsSecret)
+	r := newCertificateReconciler(c)
+
+	err := r.renewCertificate(testCtx(), cert, ca, server.URL, testNamespace)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRenewCertificate_CADown(t *testing.T) {
+	certPEM, keyPEM := generateTestCertWithExpiry(t, 24*time.Hour)
+
+	// Server returns an error
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte("Service Unavailable"))
+	}))
+	defer server.Close()
+
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	tlsSecret := newSecret("my-cert-tls", map[string][]byte{
+		"cert.pem": certPEM,
+		"key.pem":  keyPEM,
+	})
+
+	ca := newCertificateAuthority("test-ca")
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseRenewing)
+	cert.Spec.Certname = "test-certname"
+
+	c := setupTestClient(ca, cert, caSecret, tlsSecret)
+	r := newCertificateReconciler(c)
+
+	err := r.renewCertificate(testCtx(), cert, ca, server.URL, testNamespace)
+	if err == nil {
+		t.Fatal("expected error when CA returns error")
+	}
+	if !strings.Contains(err.Error(), "HTTP 503") {
+		t.Errorf("expected HTTP 503 error, got: %v", err)
+	}
+}
+
+func TestRenewCertificate_mTLSAuth(t *testing.T) {
+	certPEM, keyPEM := generateTestCertWithExpiry(t, 24*time.Hour)
+
+	newCertPEM, _ := generateTestCertWithExpiry(t, 90*24*time.Hour)
+
+	// Verify that the client presents a certificate (mTLS)
+	var clientCertPresented bool
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
+			clientCertPresented = true
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(newCertPEM)
+	}))
+	// Enable client cert verification on the server
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(certPEM)
+	server.TLS.ClientAuth = tls.VerifyClientCertIfGiven
+	server.TLS.ClientCAs = caCertPool
+	defer server.Close()
+
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	tlsSecret := newSecret("my-cert-tls", map[string][]byte{
+		"cert.pem": certPEM,
+		"key.pem":  keyPEM,
+	})
+
+	ca := newCertificateAuthority("test-ca")
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseRenewing)
+	cert.Spec.Certname = "test-certname"
+
+	c := setupTestClient(ca, cert, caSecret, tlsSecret)
+	r := newCertificateReconciler(c)
+
+	err := r.renewCertificate(testCtx(), cert, ca, server.URL, testNamespace)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !clientCertPresented {
+		t.Error("expected client certificate to be presented for mTLS authentication")
 	}
 }
 

@@ -95,6 +95,12 @@ spec:
                 items:
                   type: string
                 type: array
+              renewBefore:
+                default: 60d
+                description: |-
+                  RenewBefore is the duration before expiration when the certificate should be renewed.
+                  Uses duration format: "60d", "30d", "720h".
+                type: string
             required:
             - authorityRef
             type: object
@@ -169,6 +175,7 @@ spec:
                 - Requesting
                 - WaitingForSigning
                 - Signed
+                - Renewing
                 - Error
                 type: string
               secretName:

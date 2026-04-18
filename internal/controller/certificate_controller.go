@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -28,9 +29,18 @@ type CertificateReconciler struct {
 
 // Event reasons for Certificate.
 const (
-	EventReasonCertificateSigned    = "CertificateSigned"
-	EventReasonCSRWaitingForSigning = "CSRWaitingForSigning"
+	EventReasonCertificateSigned           = "CertificateSigned"
+	EventReasonCSRWaitingForSigning        = "CSRWaitingForSigning"
+	EventReasonCertificateRenewalTriggered = "CertificateRenewalTriggered"
+	EventReasonCertificateRenewed          = "CertificateRenewed"
+	EventReasonCertificateExpiringSoon     = "CertificateExpiringSoon"
 )
+
+// Maximum requeue interval for renewal checks (caps the time-based backoff).
+const maxRenewalCheckInterval = 12 * time.Hour
+
+// defaultRenewBeforeSeconds is the fallback renewBefore value (60 days).
+const defaultRenewBeforeSeconds = 60 * 24 * 3600
 
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificates/status,verbs=get;update;patch
@@ -106,7 +116,12 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if cert.Status.NotAfter == nil {
 			return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 		}
-		return ctrl.Result{}, nil
+		return r.scheduleRenewalCheck(ctx, cert)
+	}
+
+	// Handle renewal phase
+	if cert.Status.Phase == openvoxv1alpha1.CertificatePhaseRenewing {
+		return r.reconcileCertRenewal(ctx, cert, ca)
 	}
 
 	// Sign certificate via CA HTTP API
@@ -189,7 +204,7 @@ func (r *CertificateReconciler) reconcileCertSigning(ctx context.Context, cert *
 	if cert.Status.NotAfter == nil {
 		return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 	}
-	return ctrl.Result{}, nil
+	return r.scheduleRenewalCheck(ctx, cert)
 }
 
 // createOrUpdateTLSSecret creates or updates a Secret containing cert.pem and key.pem.
@@ -232,4 +247,78 @@ func (r *CertificateReconciler) extractNotAfter(ctx context.Context, secretName,
 		return nil
 	}
 	return parseCertNotAfter(ctx, secret.Data["cert.pem"])
+}
+
+// parseCertRenewBefore parses the RenewBefore spec field and returns the duration.
+// Falls back to 60 days if the field is empty or unparseable.
+func parseCertRenewBefore(cert *openvoxv1alpha1.Certificate) time.Duration {
+	if cert.Spec.RenewBefore == "" {
+		return time.Duration(defaultRenewBeforeSeconds) * time.Second
+	}
+	secs, err := openvoxv1alpha1.ParseDurationToSeconds(cert.Spec.RenewBefore)
+	if err != nil || secs <= 0 {
+		return time.Duration(defaultRenewBeforeSeconds) * time.Second
+	}
+	return time.Duration(secs) * time.Second
+}
+
+// scheduleRenewalCheck computes when to next check for renewal and emits warning
+// events at 30d/7d/1d thresholds. If the certificate is within the renewal window,
+// it transitions to the Renewing phase and requeues immediately.
+func (r *CertificateReconciler) scheduleRenewalCheck(ctx context.Context, cert *openvoxv1alpha1.Certificate) (ctrl.Result, error) {
+	if cert.Status.NotAfter == nil {
+		return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
+	}
+
+	now := time.Now()
+	notAfter := cert.Status.NotAfter.Time
+	timeUntilExpiry := notAfter.Sub(now)
+
+	renewBefore := parseCertRenewBefore(cert)
+	renewalTime := notAfter.Add(-renewBefore)
+	timeUntilRenewal := renewalTime.Sub(now)
+
+	// Emit warning events at thresholds
+	r.emitExpiryWarnings(cert, timeUntilExpiry)
+
+	// If within the renewal window, trigger renewal
+	if timeUntilRenewal <= 0 {
+		logger := log.FromContext(ctx)
+		logger.Info("certificate within renewal window, triggering renewal",
+			"certname", cert.Spec.Certname,
+			"notAfter", notAfter,
+			"renewBefore", renewBefore)
+
+		if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
+			cert.Status.Phase = openvoxv1alpha1.CertificatePhaseRenewing
+		}); err != nil {
+			return ctrl.Result{}, err
+		}
+		r.Recorder.Eventf(cert, nil, corev1.EventTypeNormal, EventReasonCertificateRenewalTriggered, "Reconcile",
+			"Certificate renewal triggered, expires %s", notAfter.Format(time.RFC3339))
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// Schedule next check: half the time until renewal, capped at 12h
+	requeueAfter := timeUntilRenewal / 2
+	if requeueAfter > maxRenewalCheckInterval {
+		requeueAfter = maxRenewalCheckInterval
+	}
+
+	return ctrl.Result{RequeueAfter: requeueAfter}, nil
+}
+
+// emitExpiryWarnings emits warning events when the certificate is approaching expiry.
+func (r *CertificateReconciler) emitExpiryWarnings(cert *openvoxv1alpha1.Certificate, timeUntilExpiry time.Duration) {
+	switch {
+	case timeUntilExpiry <= 24*time.Hour:
+		r.Recorder.Eventf(cert, nil, corev1.EventTypeWarning, EventReasonCertificateExpiringSoon, "Reconcile",
+			"Certificate expires in less than 1 day")
+	case timeUntilExpiry <= 7*24*time.Hour:
+		r.Recorder.Eventf(cert, nil, corev1.EventTypeWarning, EventReasonCertificateExpiringSoon, "Reconcile",
+			"Certificate expires in less than 7 days")
+	case timeUntilExpiry <= 30*24*time.Hour:
+		r.Recorder.Eventf(cert, nil, corev1.EventTypeWarning, EventReasonCertificateExpiringSoon, "Reconcile",
+			"Certificate expires in less than 30 days")
+	}
 }

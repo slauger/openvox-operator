@@ -328,3 +328,74 @@ func TestScheduleRenewalCheck_NotAfterNil(t *testing.T) {
 		t.Errorf("expected RequeueAfter %v, got %v", RequeueIntervalShort, res.RequeueAfter)
 	}
 }
+
+func TestScheduleRenewalCheck_CooldownPreventsLoop(t *testing.T) {
+	// Simulate: renewBefore=365d but cert only lives 30d, recently renewed
+	certPEM, keyPEM := generateTestCertWithExpiry(t, 30*24*time.Hour)
+	_ = keyPEM
+
+	notAfter := parseCertNotAfter(testCtx(), certPEM)
+	cert := &openvoxv1alpha1.Certificate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-cert",
+			Namespace: testNamespace,
+			Annotations: map[string]string{
+				AnnotationLastRenewalTime: time.Now().UTC().Format(time.RFC3339),
+			},
+		},
+		Spec: openvoxv1alpha1.CertificateSpec{
+			AuthorityRef: "test-ca",
+			Certname:     "puppet",
+			RenewBefore:  "365d",
+		},
+	}
+	cert.Status.Phase = openvoxv1alpha1.CertificatePhaseSigned
+	cert.Status.NotAfter = notAfter
+
+	c := setupTestClient(cert)
+	r := newCertificateReconciler(c)
+
+	res, err := r.scheduleRenewalCheck(testCtx(), cert)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should NOT trigger renewal (cooldown active), should requeue after cooldown
+	if res.RequeueAfter != minRenewalCooldown {
+		t.Errorf("expected RequeueAfter %v (cooldown), got %v", minRenewalCooldown, res.RequeueAfter)
+	}
+
+	// Phase should remain Signed (not Renewing)
+	updated := &openvoxv1alpha1.Certificate{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "my-cert", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get Certificate: %v", err)
+	}
+	if updated.Status.Phase != openvoxv1alpha1.CertificatePhaseSigned {
+		t.Errorf("expected phase %q during cooldown, got %q", openvoxv1alpha1.CertificatePhaseSigned, updated.Status.Phase)
+	}
+}
+
+func TestIsWithinRenewalCooldown(t *testing.T) {
+	c := setupTestClient()
+	r := newCertificateReconciler(c)
+
+	// No annotation -> not in cooldown
+	cert := &openvoxv1alpha1.Certificate{}
+	if r.isWithinRenewalCooldown(cert) {
+		t.Error("expected no cooldown without annotation")
+	}
+
+	// Recent annotation -> in cooldown
+	cert.Annotations = map[string]string{
+		AnnotationLastRenewalTime: time.Now().UTC().Format(time.RFC3339),
+	}
+	if !r.isWithinRenewalCooldown(cert) {
+		t.Error("expected cooldown with recent renewal annotation")
+	}
+
+	// Old annotation -> not in cooldown
+	cert.Annotations[AnnotationLastRenewalTime] = time.Now().Add(-2 * time.Hour).UTC().Format(time.RFC3339)
+	if r.isWithinRenewalCooldown(cert) {
+		t.Error("expected no cooldown with old renewal annotation")
+	}
+}

@@ -497,6 +497,17 @@ func (r *CertificateReconciler) reconcileCertRenewal(ctx context.Context, cert *
 	r.Recorder.Eventf(cert, nil, corev1.EventTypeNormal, EventReasonCertificateRenewed, "Reconcile",
 		"Certificate renewed successfully in Secret %s", tlsSecretName)
 
+	// Record renewal time and reset expiry warnings for the new cert
+	patch := client.MergeFrom(cert.DeepCopy())
+	if cert.Annotations == nil {
+		cert.Annotations = make(map[string]string)
+	}
+	cert.Annotations[AnnotationLastRenewalTime] = time.Now().UTC().Format(time.RFC3339)
+	delete(cert.Annotations, AnnotationExpiryWarned)
+	if patchErr := r.Patch(ctx, cert, patch); patchErr != nil {
+		logger.Error(patchErr, "failed to update renewal annotations")
+	}
+
 	logger.Info("certificate renewed successfully", "certname", cert.Spec.Certname)
 	if notAfter == nil {
 		return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
@@ -612,6 +623,7 @@ func (r *CertificateReconciler) renewCertificate(ctx context.Context, cert *open
 		Timeout: HTTPClientTimeout,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
+				MinVersion:   tls.VersionTLS12,
 				RootCAs:      pool,
 				Certificates: []tls.Certificate{clientCert},
 			},

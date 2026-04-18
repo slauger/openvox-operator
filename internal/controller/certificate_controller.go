@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -41,6 +42,18 @@ const maxRenewalCheckInterval = 12 * time.Hour
 
 // defaultRenewBeforeSeconds is the fallback renewBefore value (60 days).
 const defaultRenewBeforeSeconds = 60 * 24 * 3600
+
+// minRenewalCooldown prevents renewal loops when renewBefore exceeds the cert lifetime.
+const minRenewalCooldown = 1 * time.Hour
+
+// Annotation keys for renewal tracking.
+const (
+	// AnnotationLastRenewalTime records when the cert was last renewed (RFC3339).
+	AnnotationLastRenewalTime = "openvox.voxpupuli.org/last-renewal-time"
+
+	// AnnotationExpiryWarned records which expiry warning thresholds have been emitted.
+	AnnotationExpiryWarned = "openvox.voxpupuli.org/expiry-warned"
+)
 
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificates/status,verbs=get;update;patch
@@ -278,11 +291,20 @@ func (r *CertificateReconciler) scheduleRenewalCheck(ctx context.Context, cert *
 	renewalTime := notAfter.Add(-renewBefore)
 	timeUntilRenewal := renewalTime.Sub(now)
 
-	// Emit warning events at thresholds
-	r.emitExpiryWarnings(cert, timeUntilExpiry)
-
-	// If within the renewal window, trigger renewal
+	// If within the renewal window, trigger renewal (with cooldown protection)
 	if timeUntilRenewal <= 0 {
+		// Prevent renewal loops: if the cert was renewed recently, skip
+		if r.isWithinRenewalCooldown(cert) {
+			logger := log.FromContext(ctx)
+			logger.Info("certificate within renewal window but recently renewed, skipping",
+				"certname", cert.Spec.Certname,
+				"renewBefore", renewBefore,
+				"timeUntilExpiry", timeUntilExpiry)
+			r.Recorder.Eventf(cert, nil, corev1.EventTypeWarning, EventReasonCertificateExpiringSoon, "Reconcile",
+				"Certificate renewBefore (%s) exceeds remaining lifetime; renewal skipped to avoid loop", renewBefore)
+			return ctrl.Result{RequeueAfter: minRenewalCooldown}, nil
+		}
+
 		logger := log.FromContext(ctx)
 		logger.Info("certificate within renewal window, triggering renewal",
 			"certname", cert.Spec.Certname,
@@ -299,6 +321,9 @@ func (r *CertificateReconciler) scheduleRenewalCheck(ctx context.Context, cert *
 		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 	}
 
+	// Emit warning events at thresholds (only outside the renewal window)
+	r.emitExpiryWarnings(ctx, cert, timeUntilExpiry)
+
 	// Schedule next check: half the time until renewal, capped at 12h
 	requeueAfter := timeUntilRenewal / 2
 	if requeueAfter > maxRenewalCheckInterval {
@@ -308,17 +333,64 @@ func (r *CertificateReconciler) scheduleRenewalCheck(ctx context.Context, cert *
 	return ctrl.Result{RequeueAfter: requeueAfter}, nil
 }
 
+// isWithinRenewalCooldown checks if the certificate was renewed recently
+// (within minRenewalCooldown). This prevents infinite renewal loops when
+// renewBefore exceeds the certificate's total lifetime.
+func (r *CertificateReconciler) isWithinRenewalCooldown(cert *openvoxv1alpha1.Certificate) bool {
+	if cert.Annotations == nil {
+		return false
+	}
+	lastRenewal, ok := cert.Annotations[AnnotationLastRenewalTime]
+	if !ok {
+		return false
+	}
+	t, err := time.Parse(time.RFC3339, lastRenewal)
+	if err != nil {
+		return false
+	}
+	return time.Since(t) < minRenewalCooldown
+}
+
 // emitExpiryWarnings emits warning events when the certificate is approaching expiry.
-func (r *CertificateReconciler) emitExpiryWarnings(cert *openvoxv1alpha1.Certificate, timeUntilExpiry time.Duration) {
+// Each threshold is emitted only once, tracked via an annotation on the Certificate.
+func (r *CertificateReconciler) emitExpiryWarnings(ctx context.Context, cert *openvoxv1alpha1.Certificate, timeUntilExpiry time.Duration) {
+	var threshold string
 	switch {
 	case timeUntilExpiry <= 24*time.Hour:
-		r.Recorder.Eventf(cert, nil, corev1.EventTypeWarning, EventReasonCertificateExpiringSoon, "Reconcile",
-			"Certificate expires in less than 1 day")
+		threshold = "1d"
 	case timeUntilExpiry <= 7*24*time.Hour:
-		r.Recorder.Eventf(cert, nil, corev1.EventTypeWarning, EventReasonCertificateExpiringSoon, "Reconcile",
-			"Certificate expires in less than 7 days")
+		threshold = "7d"
 	case timeUntilExpiry <= 30*24*time.Hour:
-		r.Recorder.Eventf(cert, nil, corev1.EventTypeWarning, EventReasonCertificateExpiringSoon, "Reconcile",
-			"Certificate expires in less than 30 days")
+		threshold = "30d"
+	default:
+		return
+	}
+
+	// Check if this threshold was already warned
+	warned := ""
+	if cert.Annotations != nil {
+		warned = cert.Annotations[AnnotationExpiryWarned]
+	}
+	if strings.Contains(warned, threshold) {
+		return
+	}
+
+	// Emit the warning
+	r.Recorder.Eventf(cert, nil, corev1.EventTypeWarning, EventReasonCertificateExpiringSoon, "Reconcile",
+		"Certificate expires in less than %s", threshold)
+
+	// Track the threshold in an annotation
+	if warned != "" {
+		warned += "," + threshold
+	} else {
+		warned = threshold
+	}
+	patch := client.MergeFrom(cert.DeepCopy())
+	if cert.Annotations == nil {
+		cert.Annotations = make(map[string]string)
+	}
+	cert.Annotations[AnnotationExpiryWarned] = warned
+	if err := r.Patch(ctx, cert, patch); err != nil {
+		log.FromContext(ctx).Error(err, "failed to update expiry-warned annotation")
 	}
 }

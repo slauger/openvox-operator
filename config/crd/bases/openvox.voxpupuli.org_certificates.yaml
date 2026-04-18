@@ -100,7 +100,7 @@ spec:
                 description: |-
                   RenewBefore is the duration before expiration when the certificate should be renewed.
                   Uses duration format: "60d", "30d", "720h".
-                pattern: ^\d+[smhdy]?$
+                pattern: ^\d+[smhdy]$
                 type: string
             required:
             - authorityRef

@@ -247,23 +247,11 @@ func (r *CertificateReconciler) submitCSR(ctx context.Context, cert *openvoxv1al
 		return ctrl.Result{}, fmt.Errorf("parsing pending key: %w", err)
 	}
 
-	// Build CSR extensions from spec
-	extraExts, err := buildCSRExtensions(cert.Spec.CSRExtensions)
+	// Build CSR
+	csrPEM, err := buildCSR(certname, cert.Spec.DNSAltNames, cert.Spec.CSRExtensions, privateKey)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("building CSR extensions: %w", err)
+		return ctrl.Result{}, err
 	}
-
-	// Build and submit CSR
-	csrTemplate := &x509.CertificateRequest{
-		Subject:         pkix.Name{CommonName: certname},
-		DNSNames:        cert.Spec.DNSAltNames,
-		ExtraExtensions: extraExts,
-	}
-	csrDER, err := x509.CreateCertificateRequest(rand.Reader, csrTemplate, privateKey)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("creating CSR: %w", err)
-	}
-	csrPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER})
 
 	httpClient, err := caHTTPClientForCA(ctx, r.Client, ca, namespace)
 	if err != nil {

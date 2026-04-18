@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -52,6 +53,10 @@ const defaultRenewBeforeSeconds = 60 * 24 * 3600
 // minRenewalCooldown prevents renewal loops when renewBefore exceeds the cert lifetime.
 const minRenewalCooldown = 1 * time.Hour
 
+// maxCleanupAttempts is the number of times the controller retries CA cleanup
+// before removing the finalizer anyway (to avoid blocking deletion indefinitely).
+const maxCleanupAttempts = 5
+
 // Annotation keys for renewal tracking.
 const (
 	// AnnotationLastRenewalTime records when the cert was last renewed (RFC3339).
@@ -59,6 +64,9 @@ const (
 
 	// AnnotationExpiryWarned records which expiry warning thresholds have been emitted.
 	AnnotationExpiryWarned = "openvox.voxpupuli.org/expiry-warned"
+
+	// AnnotationCleanupAttempts tracks how many times cleanup was attempted during deletion.
+	AnnotationCleanupAttempts = "openvox.voxpupuli.org/cleanup-attempts"
 )
 
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificates,verbs=get;list;watch;create;update;patch;delete
@@ -82,8 +90,29 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if !cert.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(cert, certificateFinalizer) {
 			if err := r.handleCertificateCleanup(ctx, cert); err != nil {
-				logger.Error(err, "certificate cleanup failed, will retry")
-				return ctrl.Result{RequeueAfter: RequeueIntervalLong}, nil
+				attempts := 0
+				if cert.Annotations != nil {
+					if v, ok := cert.Annotations[AnnotationCleanupAttempts]; ok {
+						attempts, _ = strconv.Atoi(v)
+					}
+				}
+				attempts++
+				if attempts >= maxCleanupAttempts {
+					logger.Info("cleanup failed after max attempts, removing finalizer anyway",
+						"attempts", attempts, "error", err)
+				} else {
+					logger.Error(err, "certificate cleanup failed, will retry",
+						"attempt", attempts, "maxAttempts", maxCleanupAttempts)
+					patch := client.MergeFrom(cert.DeepCopy())
+					if cert.Annotations == nil {
+						cert.Annotations = make(map[string]string)
+					}
+					cert.Annotations[AnnotationCleanupAttempts] = strconv.Itoa(attempts)
+					if patchErr := r.Patch(ctx, cert, patch); patchErr != nil {
+						logger.Error(patchErr, "failed to update cleanup attempt annotation")
+					}
+					return ctrl.Result{RequeueAfter: RequeueIntervalLong}, nil
+				}
 			}
 			controllerutil.RemoveFinalizer(cert, certificateFinalizer)
 			if err := r.Update(ctx, cert); err != nil {

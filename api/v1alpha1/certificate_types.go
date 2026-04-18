@@ -73,7 +73,7 @@ type CertificateSpec struct {
 	// RenewBefore is the duration before expiration when the certificate should be renewed.
 	// Uses duration format: "60d", "30d", "720h".
 	// +kubebuilder:default="60d"
-	// +kubebuilder:validation:Pattern=`^\d+[smhdy]?$`
+	// +kubebuilder:validation:Pattern=`^\d+[smhdy]$`
 	// +optional
 	RenewBefore string `json:"renewBefore,omitempty"`
 }

@@ -332,8 +332,7 @@ func TestScheduleRenewalCheck_NotAfterNil(t *testing.T) {
 
 func TestScheduleRenewalCheck_CooldownPreventsLoop(t *testing.T) {
 	// Simulate: renewBefore=365d but cert only lives 30d, recently renewed
-	certPEM, keyPEM := generateTestCertWithExpiry(t, 30*24*time.Hour)
-	_ = keyPEM
+	certPEM, _ := generateTestCertWithExpiry(t, 30*24*time.Hour)
 
 	notAfter := parseCertNotAfter(testCtx(), certPEM)
 	if notAfter == nil {

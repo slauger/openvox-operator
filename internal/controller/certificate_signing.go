@@ -513,10 +513,7 @@ func (r *CertificateReconciler) reconcileCertRenewal(ctx context.Context, cert *
 	}
 
 	logger.Info("certificate renewed successfully", "certname", cert.Spec.Certname)
-	if notAfter == nil {
-		return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
-	}
-	return ctrl.Result{RequeueAfter: minRenewalCooldown}, nil
+	return r.scheduleRenewalCheck(ctx, cert)
 }
 
 // mTLSHTTPClient builds an HTTP client that authenticates with clientCertPEM/clientKeyPEM

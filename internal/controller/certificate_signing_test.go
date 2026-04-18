@@ -511,40 +511,22 @@ func TestCleanCertViaAPI_CARejects(t *testing.T) {
 	}
 }
 
-func TestCleanCertViaAPI_DefaultCertname(t *testing.T) {
-	certPEM, keyPEM := generateTestCert(t)
-
-	var requestBody string
-	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		requestBody = string(body)
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	caSecret := newSecret("test-ca-ca", map[string][]byte{
-		"ca_crt.pem": certPEM,
-	})
-	signingSecret := newSecret("ca-cert-tls", map[string][]byte{
-		"cert.pem": certPEM,
-		"key.pem":  keyPEM,
-	})
-
+func TestCleanCertViaAPI_EmptyCertname(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
 	ca.Status.SigningSecretName = "ca-cert-tls"
 
 	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseSigned)
-	cert.Spec.Certname = "" // should default to "puppet"
+	cert.Spec.Certname = ""
 
-	c := setupTestClient(ca, cert, caSecret, signingSecret)
+	c := setupTestClient(ca, cert)
 	r := newCertificateReconciler(c)
 
-	err := r.cleanCertViaAPI(testCtx(), cert, ca, server.URL, testNamespace)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	err := r.cleanCertViaAPI(testCtx(), cert, ca, "https://localhost:8140", testNamespace)
+	if err == nil {
+		t.Fatal("expected error when certname is empty")
 	}
-	if !strings.Contains(requestBody, `"puppet"`) {
-		t.Errorf("expected default certname 'puppet' in body, got: %s", requestBody)
+	if !strings.Contains(err.Error(), "certname is empty") {
+		t.Errorf("expected 'certname is empty' error, got: %v", err)
 	}
 }
 

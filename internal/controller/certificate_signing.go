@@ -554,8 +554,7 @@ func (r *CertificateReconciler) renewCertificate(ctx context.Context, cert *open
 
 	certname := cert.Spec.Certname
 	if certname == "" {
-		certname = "puppet"
-		logger.Info("certname is empty, using default", "certname", certname)
+		return fmt.Errorf("certname is empty, cannot renew certificate %s", cert.Name)
 	}
 
 	tlsSecretName := fmt.Sprintf("%s-tls", cert.Name)
@@ -696,7 +695,7 @@ func (r *CertificateReconciler) ensurePendingKey(ctx context.Context, cert *open
 func (r *CertificateReconciler) cleanCertViaAPI(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, caBaseURL, namespace string) error {
 	certname := cert.Spec.Certname
 	if certname == "" {
-		certname = "puppet"
+		return fmt.Errorf("certname is empty, cannot clean certificate %s", cert.Name)
 	}
 
 	// Load CA public cert for TLS server verification

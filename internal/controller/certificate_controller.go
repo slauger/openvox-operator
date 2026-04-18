@@ -412,39 +412,44 @@ func (r *CertificateReconciler) isWithinRenewalCooldown(cert *openvoxv1alpha1.Ce
 	return r.Clock.Since(t) < minRenewalCooldown
 }
 
-// emitExpiryWarnings emits warning events when the certificate is approaching expiry.
-// Each threshold is emitted only once, tracked via an annotation on the Certificate.
-func (r *CertificateReconciler) emitExpiryWarnings(ctx context.Context, cert *openvoxv1alpha1.Certificate, timeUntilExpiry time.Duration) {
-	var threshold string
-	switch {
-	case timeUntilExpiry <= 24*time.Hour:
-		threshold = "1d"
-	case timeUntilExpiry <= 7*24*time.Hour:
-		threshold = "7d"
-	case timeUntilExpiry <= 30*24*time.Hour:
-		threshold = "30d"
-	default:
-		return
-	}
+// expiryThresholds defines the warning thresholds for certificate expiry.
+var expiryThresholds = []struct {
+	dur   time.Duration
+	label string
+}{
+	{24 * time.Hour, "1d"},
+	{7 * 24 * time.Hour, "7d"},
+	{30 * 24 * time.Hour, "30d"},
+}
 
-	// Check if this threshold was already warned
+// emitExpiryWarnings emits warning events when the certificate is approaching expiry.
+// All crossed thresholds are emitted at once, tracked via an annotation on the Certificate.
+func (r *CertificateReconciler) emitExpiryWarnings(ctx context.Context, cert *openvoxv1alpha1.Certificate, timeUntilExpiry time.Duration) {
 	warned := ""
 	if cert.Annotations != nil {
 		warned = cert.Annotations[AnnotationExpiryWarned]
 	}
-	if strings.Contains(warned, threshold) {
+
+	var newWarnings []string
+	for _, th := range expiryThresholds {
+		if timeUntilExpiry <= th.dur && !strings.Contains(warned, th.label) {
+			r.Recorder.Eventf(cert, nil, corev1.EventTypeWarning, EventReasonCertificateExpiringSoon, "Reconcile",
+				"Certificate expires in less than %s", th.label)
+			newWarnings = append(newWarnings, th.label)
+		}
+	}
+
+	if len(newWarnings) == 0 {
 		return
 	}
 
-	// Emit the warning
-	r.Recorder.Eventf(cert, nil, corev1.EventTypeWarning, EventReasonCertificateExpiringSoon, "Reconcile",
-		"Certificate expires in less than %s", threshold)
-
-	// Track the threshold in an annotation
-	if warned != "" {
-		warned += "," + threshold
-	} else {
-		warned = threshold
+	// Track the thresholds in an annotation
+	for _, w := range newWarnings {
+		if warned != "" {
+			warned += "," + w
+		} else {
+			warned = w
+		}
 	}
 	patch := client.MergeFrom(cert.DeepCopy())
 	if cert.Annotations == nil {

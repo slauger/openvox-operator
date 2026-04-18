@@ -50,6 +50,7 @@ func caHTTPClientForCA(ctx context.Context, reader client.Reader, ca *openvoxv1a
 // buildExternalCAHTTPClient creates an HTTP client for an external CA with optional mTLS and CA verification.
 func buildExternalCAHTTPClient(ctx context.Context, reader client.Reader, ext *openvoxv1alpha1.ExternalCASpec, namespace string) (*http.Client, error) {
 	tlsConfig := &tls.Config{
+		MinVersion:         tls.VersionTLS12,
 		InsecureSkipVerify: ext.InsecureSkipVerify, //nolint:gosec // user-controlled option for external CAs
 	}
 
@@ -125,7 +126,7 @@ func caHTTPClient(caCertPEM []byte) (*http.Client, error) {
 	return &http.Client{
 		Timeout: HTTPClientTimeout,
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{RootCAs: pool},
+			TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: pool},
 		},
 	}, nil
 }
@@ -717,6 +718,7 @@ func (r *CertificateReconciler) signCSRViaAPI(ctx context.Context, cert *openvox
 		Timeout: HTTPClientTimeout,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
+				MinVersion:   tls.VersionTLS12,
 				RootCAs:      pool,
 				Certificates: []tls.Certificate{clientCert},
 			},

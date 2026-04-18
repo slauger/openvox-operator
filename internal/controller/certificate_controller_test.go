@@ -6,6 +6,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	clocktesting "k8s.io/utils/clock/testing"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
@@ -376,8 +377,12 @@ func TestScheduleRenewalCheck_CooldownPreventsLoop(t *testing.T) {
 }
 
 func TestIsWithinRenewalCooldown(t *testing.T) {
+	now := time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC)
+	fakeClock := clocktesting.NewFakePassiveClock(now)
+
 	c := setupTestClient()
 	r := newCertificateReconciler(c)
+	r.Clock = fakeClock
 
 	// No annotation -> not in cooldown
 	cert := &openvoxv1alpha1.Certificate{}
@@ -385,16 +390,16 @@ func TestIsWithinRenewalCooldown(t *testing.T) {
 		t.Error("expected no cooldown without annotation")
 	}
 
-	// Recent annotation -> in cooldown
+	// Renewed 10 minutes ago -> in cooldown
 	cert.Annotations = map[string]string{
-		AnnotationLastRenewalTime: time.Now().UTC().Format(time.RFC3339),
+		AnnotationLastRenewalTime: now.Add(-10 * time.Minute).Format(time.RFC3339),
 	}
 	if !r.isWithinRenewalCooldown(cert) {
 		t.Error("expected cooldown with recent renewal annotation")
 	}
 
-	// Old annotation -> not in cooldown
-	cert.Annotations[AnnotationLastRenewalTime] = time.Now().Add(-2 * time.Hour).UTC().Format(time.RFC3339)
+	// Renewed 2 hours ago -> not in cooldown
+	cert.Annotations[AnnotationLastRenewalTime] = now.Add(-2 * time.Hour).Format(time.RFC3339)
 	if r.isWithinRenewalCooldown(cert) {
 		t.Error("expected no cooldown with old renewal annotation")
 	}

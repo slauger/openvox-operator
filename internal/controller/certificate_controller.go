@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	clock "k8s.io/utils/clock"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -26,6 +27,7 @@ type CertificateReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder events.EventRecorder
+	Clock    clock.PassiveClock
 }
 
 // Event reasons for Certificate.
@@ -142,6 +144,9 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 }
 
 func (r *CertificateReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.Clock == nil {
+		r.Clock = clock.RealClock{}
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&openvoxv1alpha1.Certificate{}).
 		Owns(&corev1.Secret{}).
@@ -283,7 +288,7 @@ func (r *CertificateReconciler) scheduleRenewalCheck(ctx context.Context, cert *
 		return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 	}
 
-	now := time.Now()
+	now := r.Clock.Now()
 	notAfter := cert.Status.NotAfter.Time
 	timeUntilExpiry := notAfter.Sub(now)
 
@@ -348,7 +353,7 @@ func (r *CertificateReconciler) isWithinRenewalCooldown(cert *openvoxv1alpha1.Ce
 	if err != nil {
 		return false
 	}
-	return time.Since(t) < minRenewalCooldown
+	return r.Clock.Since(t) < minRenewalCooldown
 }
 
 // emitExpiryWarnings emits warning events when the certificate is approaching expiry.

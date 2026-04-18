@@ -183,8 +183,8 @@ func TestCertReconcile_RenewalScheduled(t *testing.T) {
 	}
 
 	// Should have a RequeueAfter > 0 (renewal check scheduled)
-	if res.RequeueAfter == 0 && !res.Requeue {
-		t.Error("expected RequeueAfter > 0 or Requeue for signed cert with NotAfter")
+	if res.RequeueAfter == 0 {
+		t.Error("expected RequeueAfter > 0 for signed cert with NotAfter")
 	}
 	// Should not trigger renewal yet (90d > 60d renewBefore)
 	updated := &openvoxv1alpha1.Certificate{}
@@ -220,8 +220,8 @@ func TestCertReconcile_RenewalTriggered(t *testing.T) {
 	}
 
 	// Should trigger immediate requeue (renewal triggered)
-	if !res.Requeue {
-		t.Error("expected Requeue=true when renewal is triggered")
+	if res.RequeueAfter == 0 {
+		t.Error("expected RequeueAfter > 0 when renewal is triggered")
 	}
 
 	updated := &openvoxv1alpha1.Certificate{}
@@ -254,7 +254,7 @@ func TestCertReconcile_SignedCertNoRequeue_BecomesRequeue(t *testing.T) {
 	}
 
 	// Must have a requeue -- no longer returning empty Result
-	if res.RequeueAfter == 0 && !res.Requeue {
+	if res.RequeueAfter == 0 {
 		t.Error("expected RequeueAfter > 0 for signed cert with NotAfter set")
 	}
 }

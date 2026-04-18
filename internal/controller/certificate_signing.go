@@ -501,7 +501,7 @@ func (r *CertificateReconciler) reconcileCertRenewal(ctx context.Context, cert *
 	if notAfter == nil {
 		return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 	}
-	return ctrl.Result{Requeue: true}, nil
+	return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 }
 
 // renewCertificate performs certificate renewal via the Puppet CA HTTP API.

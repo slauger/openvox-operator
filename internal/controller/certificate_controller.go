@@ -296,7 +296,7 @@ func (r *CertificateReconciler) scheduleRenewalCheck(ctx context.Context, cert *
 		}
 		r.Recorder.Eventf(cert, nil, corev1.EventTypeNormal, EventReasonCertificateRenewalTriggered, "Reconcile",
 			"Certificate renewal triggered, expires %s", notAfter.Format(time.RFC3339))
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 	}
 
 	// Schedule next check: half the time until renewal, capped at 12h

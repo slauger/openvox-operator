@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
@@ -670,6 +671,9 @@ func (r *CertificateReconciler) ensurePendingKey(ctx context.Context, cert *open
 	if err == nil && len(pendingSecret.Data["key.pem"]) > 0 {
 		return pendingSecret.Data["key.pem"], nil
 	}
+	if err != nil && !errors.IsNotFound(err) {
+		return nil, fmt.Errorf("checking pending Secret: %w", err)
+	}
 
 	privateKey, err := rsa.GenerateKey(rand.Reader, RSAKeySize)
 	if err != nil {
@@ -732,7 +736,11 @@ func (r *CertificateReconciler) cleanCertViaAPI(ctx context.Context, cert *openv
 
 	// PUT /puppet-ca/v1/clean
 	cleanURL := fmt.Sprintf("%s/puppet-ca/v1/clean?environment=production", caBaseURL)
-	body := strings.NewReader(fmt.Sprintf(`{"certnames": [%q]}`, certname))
+	payload, err := json.Marshal(map[string][]string{"certnames": {certname}})
+	if err != nil {
+		return fmt.Errorf("marshalling clean request body: %w", err)
+	}
+	body := bytes.NewReader(payload)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, cleanURL, body)
 	if err != nil {

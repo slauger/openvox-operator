@@ -336,6 +336,9 @@ func TestScheduleRenewalCheck_CooldownPreventsLoop(t *testing.T) {
 	_ = keyPEM
 
 	notAfter := parseCertNotAfter(testCtx(), certPEM)
+	if notAfter == nil {
+		t.Fatal("failed to parse NotAfter from test certificate")
+	}
 	cert := &openvoxv1alpha1.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-cert",

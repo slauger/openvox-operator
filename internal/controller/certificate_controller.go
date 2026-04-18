@@ -419,9 +419,9 @@ var expiryThresholds = []struct {
 	dur   time.Duration
 	label string
 }{
-	{24 * time.Hour, "1d"},
-	{7 * 24 * time.Hour, "7d"},
 	{30 * 24 * time.Hour, "30d"},
+	{7 * 24 * time.Hour, "7d"},
+	{24 * time.Hour, "1d"},
 }
 
 // emitExpiryWarnings emits warning events when the certificate is approaching expiry.

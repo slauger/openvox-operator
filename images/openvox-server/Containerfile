@@ -13,7 +13,7 @@ ARG OPENVOXSERVER_VERSION=8.12.1
 # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
 ARG OPENVOXDB_TERMINI_VERSION=8.12.1
 # renovate: datasource=github-releases depName=OpenVoxProject/openvox
-ARG OPENVOX_VERSION=8.26.1
+ARG OPENVOX_VERSION=8.26.2
 ################################################################################
 # Stage: base — JRE + minimal runtime deps (no Ruby)
 ################################################################################
@@ -148,9 +148,7 @@ RUN printf '%s\n' \
         'INSTALL_DIR="/opt/puppetlabs/server/apps/puppetserver"' \
         'CONFIG="/etc/puppetlabs/puppetserver/conf.d"' \
         > /etc/sysconfig/puppetserver \
-    && ln -s /bin/true /usr/local/bin/make \
     && puppetserver gem install --no-document openvox -v "${OPENVOX_VERSION}" \
-    && rm /usr/local/bin/make \
     && puppetserver gem install --no-document jruby-openssl -v 0.15.7
 
 # Patch openvoxserver-ca to skip cadir symlink and chown (fails rootless)

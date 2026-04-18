@@ -335,6 +335,9 @@ func TestScheduleRenewalCheck_CooldownPreventsLoop(t *testing.T) {
 	// Simulate: renewBefore=365d but cert only lives 30d, recently renewed
 	certPEM, _ := generateTestCertWithExpiry(t, 30*24*time.Hour)
 
+	now := time.Date(2026, 4, 19, 12, 0, 0, 0, time.UTC)
+	fakeClock := clocktesting.NewFakePassiveClock(now)
+
 	notAfter := parseCertNotAfter(testCtx(), certPEM)
 	if notAfter == nil {
 		t.Fatal("failed to parse NotAfter from test certificate")
@@ -344,7 +347,7 @@ func TestScheduleRenewalCheck_CooldownPreventsLoop(t *testing.T) {
 			Name:      "my-cert",
 			Namespace: testNamespace,
 			Annotations: map[string]string{
-				AnnotationLastRenewalTime: time.Now().UTC().Format(time.RFC3339),
+				AnnotationLastRenewalTime: now.Add(-10 * time.Minute).Format(time.RFC3339),
 			},
 		},
 		Spec: openvoxv1alpha1.CertificateSpec{
@@ -358,6 +361,7 @@ func TestScheduleRenewalCheck_CooldownPreventsLoop(t *testing.T) {
 
 	c := setupTestClient(cert)
 	r := newCertificateReconciler(c)
+	r.Clock = fakeClock
 
 	res, err := r.scheduleRenewalCheck(testCtx(), cert)
 	if err != nil {

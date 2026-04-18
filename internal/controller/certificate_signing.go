@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
@@ -50,6 +51,7 @@ func caHTTPClientForCA(ctx context.Context, reader client.Reader, ca *openvoxv1a
 // buildExternalCAHTTPClient creates an HTTP client for an external CA with optional mTLS and CA verification.
 func buildExternalCAHTTPClient(ctx context.Context, reader client.Reader, ext *openvoxv1alpha1.ExternalCASpec, namespace string) (*http.Client, error) {
 	tlsConfig := &tls.Config{
+		MinVersion:         tls.VersionTLS12,
 		InsecureSkipVerify: ext.InsecureSkipVerify, //nolint:gosec // user-controlled option for external CAs
 	}
 
@@ -125,7 +127,7 @@ func caHTTPClient(caCertPEM []byte) (*http.Client, error) {
 	return &http.Client{
 		Timeout: HTTPClientTimeout,
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{RootCAs: pool},
+			TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: pool},
 		},
 	}, nil
 }
@@ -245,23 +247,11 @@ func (r *CertificateReconciler) submitCSR(ctx context.Context, cert *openvoxv1al
 		return ctrl.Result{}, fmt.Errorf("parsing pending key: %w", err)
 	}
 
-	// Build CSR extensions from spec
-	extraExts, err := buildCSRExtensions(cert.Spec.CSRExtensions)
+	// Build CSR
+	csrPEM, err := buildCSR(certname, cert.Spec.DNSAltNames, cert.Spec.CSRExtensions, privateKey)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("building CSR extensions: %w", err)
+		return ctrl.Result{}, err
 	}
-
-	// Build and submit CSR
-	csrTemplate := &x509.CertificateRequest{
-		Subject:         pkix.Name{CommonName: certname},
-		DNSNames:        cert.Spec.DNSAltNames,
-		ExtraExtensions: extraExts,
-	}
-	csrDER, err := x509.CreateCertificateRequest(rand.Reader, csrTemplate, privateKey)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("creating CSR: %w", err)
-	}
-	csrPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER})
 
 	httpClient, err := caHTTPClientForCA(ctx, r.Client, ca, namespace)
 	if err != nil {
@@ -446,6 +436,320 @@ func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openv
 	return ctrl.Result{}, nil
 }
 
+// reconcileCertRenewal handles the Renewing phase by calling renewCertificate.
+func (r *CertificateReconciler) reconcileCertRenewal(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
+	// Resolve CA base URL
+	var caBaseURL string
+	if ca.Spec.External != nil {
+		caBaseURL = ca.Spec.External.URL
+	} else {
+		caBaseURL = fmt.Sprintf("https://%s.%s.svc:8140", caInternalServiceName(ca.Name), cert.Namespace)
+	}
+
+	if err := r.renewCertificate(ctx, cert, ca, caBaseURL, cert.Namespace); err != nil {
+		logger.Error(err, "certificate renewal failed, will retry")
+		errMsg := err.Error()
+		if statusErr := updateStatusWithRetry(ctx, r.Client, cert, func() {
+			cert.Status.Phase = openvoxv1alpha1.CertificatePhaseRenewing
+			meta.SetStatusCondition(&cert.Status.Conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionCertSigned,
+				Status:             metav1.ConditionFalse,
+				Reason:             "RenewalFailed",
+				Message:            errMsg,
+				LastTransitionTime: metav1.Now(),
+			})
+		}); statusErr != nil {
+			logger.Error(statusErr, "failed to update Certificate status", "name", cert.Name)
+		}
+		return ctrl.Result{RequeueAfter: RequeueIntervalLong}, nil
+	}
+
+	// Renewal succeeded -- update status to Signed
+	tlsSecretName := fmt.Sprintf("%s-tls", cert.Name)
+	notAfter := r.extractNotAfter(ctx, tlsSecretName, cert.Namespace)
+	if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
+		cert.Status.Phase = openvoxv1alpha1.CertificatePhaseSigned
+		cert.Status.SecretName = tlsSecretName
+		cert.Status.NotAfter = notAfter
+		meta.SetStatusCondition(&cert.Status.Conditions, metav1.Condition{
+			Type:               openvoxv1alpha1.ConditionCertSigned,
+			Status:             metav1.ConditionTrue,
+			Reason:             "CertificateRenewed",
+			Message:            "Certificate has been renewed",
+			LastTransitionTime: metav1.Now(),
+		})
+	}); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	r.Recorder.Eventf(cert, nil, corev1.EventTypeNormal, EventReasonCertificateRenewed, "Reconcile",
+		"Certificate renewed successfully in Secret %s", tlsSecretName)
+
+	// Record renewal time and reset expiry warnings for the new cert.
+	// If the patch fails, requeue with cooldown interval to avoid a tight
+	// re-renewal loop (the cooldown annotation would be missing).
+	patch := client.MergeFrom(cert.DeepCopy())
+	if cert.Annotations == nil {
+		cert.Annotations = make(map[string]string)
+	}
+	cert.Annotations[AnnotationLastRenewalTime] = r.Clock.Now().UTC().Format(time.RFC3339)
+	delete(cert.Annotations, AnnotationExpiryWarned)
+	if patchErr := r.Patch(ctx, cert, patch); patchErr != nil {
+		logger.Error(patchErr, "failed to update renewal annotations, requeueing with cooldown")
+		return ctrl.Result{RequeueAfter: minRenewalCooldown}, nil
+	}
+
+	logger.Info("certificate renewed successfully", "certname", cert.Spec.Certname)
+	return r.scheduleRenewalCheck(ctx, cert)
+}
+
+// mTLSHTTPClient builds an HTTP client that authenticates with clientCertPEM/clientKeyPEM
+// and verifies the server using caCertPEM.
+func mTLSHTTPClient(caCertPEM, clientCertPEM, clientKeyPEM []byte) (*http.Client, error) {
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(caCertPEM) {
+		return nil, fmt.Errorf("failed to parse CA certificate PEM")
+	}
+	clientCert, err := tls.X509KeyPair(clientCertPEM, clientKeyPEM)
+	if err != nil {
+		return nil, fmt.Errorf("parsing client certificate for mTLS: %w", err)
+	}
+	return &http.Client{
+		Timeout: HTTPClientTimeout,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				MinVersion:   tls.VersionTLS12,
+				RootCAs:      pool,
+				Certificates: []tls.Certificate{clientCert},
+			},
+		},
+	}, nil
+}
+
+// buildCSR generates a PEM-encoded CSR using the given private key.
+func buildCSR(certname string, dnsAltNames []string, extensions *openvoxv1alpha1.CSRExtensionsSpec, privateKey *rsa.PrivateKey) ([]byte, error) {
+	extraExts, err := buildCSRExtensions(extensions)
+	if err != nil {
+		return nil, fmt.Errorf("building CSR extensions: %w", err)
+	}
+	csrTemplate := &x509.CertificateRequest{
+		Subject:         pkix.Name{CommonName: certname},
+		DNSNames:        dnsAltNames,
+		ExtraExtensions: extraExts,
+	}
+	csrDER, err := x509.CreateCertificateRequest(rand.Reader, csrTemplate, privateKey)
+	if err != nil {
+		return nil, fmt.Errorf("creating CSR: %w", err)
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER}), nil
+}
+
+// renewCertificate performs certificate renewal via the Puppet CA HTTP API.
+// It generates a new key+CSR, authenticates with the existing cert via mTLS,
+// and POSTs the CSR to the certificate_renewal endpoint.
+func (r *CertificateReconciler) renewCertificate(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, caBaseURL, namespace string) error {
+	logger := log.FromContext(ctx)
+
+	certname := cert.Spec.Certname
+	if certname == "" {
+		return fmt.Errorf("certname is empty, cannot renew certificate %s", cert.Name)
+	}
+
+	tlsSecretName := fmt.Sprintf("%s-tls", cert.Name)
+	pendingSecretName := fmt.Sprintf("%s-tls-pending", cert.Name)
+
+	// Read existing cert+key from TLS Secret for mTLS authentication
+	existingSecret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: tlsSecretName, Namespace: namespace}, existingSecret); err != nil {
+		return fmt.Errorf("reading existing TLS Secret %s: %w", tlsSecretName, err)
+	}
+	existingCertPEM := existingSecret.Data["cert.pem"]
+	existingKeyPEM := existingSecret.Data["key.pem"]
+	if len(existingCertPEM) == 0 || len(existingKeyPEM) == 0 {
+		return fmt.Errorf("TLS Secret %s missing cert.pem or key.pem", tlsSecretName)
+	}
+
+	// Ensure a pending key exists (reuse from previous attempt or generate new)
+	newKeyPEM, err := r.ensurePendingKey(ctx, cert, pendingSecretName, namespace)
+	if err != nil {
+		return err
+	}
+
+	// Parse new private key to build CSR
+	block, _ := pem.Decode(newKeyPEM)
+	if block == nil {
+		return fmt.Errorf("invalid PEM in pending key")
+	}
+	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		return fmt.Errorf("parsing pending key: %w", err)
+	}
+
+	csrPEM, err := buildCSR(certname, cert.Spec.DNSAltNames, cert.Spec.CSRExtensions, privateKey)
+	if err != nil {
+		return err
+	}
+
+	// Build mTLS HTTP client using existing cert for authentication
+	caCertPEM, err := getCAPublicCert(ctx, r.Client, ca, namespace)
+	if err != nil {
+		return fmt.Errorf("loading CA certificate: %w", err)
+	}
+	httpClient, err := mTLSHTTPClient(caCertPEM, existingCertPEM, existingKeyPEM)
+	if err != nil {
+		return err
+	}
+
+	// POST /puppet-ca/v1/certificate_renewal
+	renewURL := fmt.Sprintf("%s/puppet-ca/v1/certificate_renewal?environment=production", caBaseURL)
+	logger.Info("submitting certificate renewal request", "url", renewURL, "certname", certname)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, renewURL, bytes.NewReader(csrPEM))
+	if err != nil {
+		return fmt.Errorf("building renewal request: %w", err)
+	}
+	req.Header.Set("Content-Type", "text/plain")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("submitting renewal request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, HTTPBodyLimit))
+	if err != nil {
+		logger.Error(err, "failed to read renewal response body")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("CA rejected renewal request (HTTP %d): %s", resp.StatusCode, string(body))
+	}
+
+	// Validate the response is a PEM certificate
+	pemBlock, _ := pem.Decode(body)
+	if pemBlock == nil || pemBlock.Type != "CERTIFICATE" {
+		return fmt.Errorf("renewal response is not a valid PEM certificate")
+	}
+
+	// Update TLS Secret with new cert and key
+	if err := r.createOrUpdateTLSSecret(ctx, cert, ca, tlsSecretName, body, newKeyPEM); err != nil {
+		return fmt.Errorf("updating TLS Secret with renewed cert: %w", err)
+	}
+
+	// Clean up pending Secret
+	pendingSecret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: pendingSecretName, Namespace: namespace}, pendingSecret); err == nil {
+		if err := r.Delete(ctx, pendingSecret); err != nil && !errors.IsNotFound(err) {
+			logger.Info("failed to delete pending Secret", "error", err)
+		}
+	}
+
+	logger.Info("certificate renewed via CA API", "certname", certname)
+	return nil
+}
+
+// ensurePendingKey returns the PEM-encoded private key from the pending Secret,
+// generating and persisting a new one if it doesn't exist yet.
+func (r *CertificateReconciler) ensurePendingKey(ctx context.Context, cert *openvoxv1alpha1.Certificate, pendingSecretName, namespace string) ([]byte, error) {
+	pendingSecret := &corev1.Secret{}
+	err := r.Get(ctx, types.NamespacedName{Name: pendingSecretName, Namespace: namespace}, pendingSecret)
+	if err == nil && len(pendingSecret.Data["key.pem"]) > 0 {
+		return pendingSecret.Data["key.pem"], nil
+	}
+	if err != nil && !errors.IsNotFound(err) {
+		return nil, fmt.Errorf("checking pending Secret: %w", err)
+	}
+
+	privateKey, err := rsa.GenerateKey(rand.Reader, RSAKeySize)
+	if err != nil {
+		return nil, fmt.Errorf("generating RSA key: %w", err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
+	})
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pendingSecretName,
+			Namespace: namespace,
+			Labels: map[string]string{
+				"openvox.voxpupuli.org/certificate": cert.Name,
+			},
+		},
+		Data: map[string][]byte{"key.pem": keyPEM},
+	}
+	if err := controllerutil.SetControllerReference(cert, secret, r.Scheme); err != nil {
+		return nil, err
+	}
+	if err := r.Create(ctx, secret); err != nil && !errors.IsAlreadyExists(err) {
+		return nil, fmt.Errorf("creating pending Secret: %w", err)
+	}
+	return keyPEM, nil
+}
+
+// cleanCertViaAPI calls the Puppet CA clean endpoint to revoke and remove a certificate.
+// It authenticates via mTLS with the CA server's signing certificate.
+func (r *CertificateReconciler) cleanCertViaAPI(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, caBaseURL, namespace string) error {
+	certname := cert.Spec.Certname
+	if certname == "" {
+		return fmt.Errorf("certname is empty, cannot clean certificate %s", cert.Name)
+	}
+
+	// Load CA public cert for TLS server verification
+	caCertPEM, err := getCAPublicCert(ctx, r.Client, ca, namespace)
+	if err != nil {
+		return fmt.Errorf("loading CA certificate: %w", err)
+	}
+
+	// Load signing secret (CA server cert + key) for mTLS client auth
+	signingSecret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: ca.Status.SigningSecretName, Namespace: namespace}, signingSecret); err != nil {
+		return fmt.Errorf("getting signing Secret %s: %w", ca.Status.SigningSecretName, err)
+	}
+
+	clientCertPEM := signingSecret.Data["cert.pem"]
+	clientKeyPEM := signingSecret.Data["key.pem"]
+	if len(clientCertPEM) == 0 || len(clientKeyPEM) == 0 {
+		return fmt.Errorf("signing Secret %s missing cert.pem or key.pem", ca.Status.SigningSecretName)
+	}
+
+	httpClient, err := mTLSHTTPClient(caCertPEM, clientCertPEM, clientKeyPEM)
+	if err != nil {
+		return err
+	}
+
+	// PUT /puppet-ca/v1/clean
+	cleanURL := fmt.Sprintf("%s/puppet-ca/v1/clean?environment=production", caBaseURL)
+	payload, err := json.Marshal(map[string][]string{"certnames": {certname}})
+	if err != nil {
+		return fmt.Errorf("marshalling clean request body: %w", err)
+	}
+	body := bytes.NewReader(payload)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, cleanURL, body)
+	if err != nil {
+		return fmt.Errorf("building clean request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("calling clean API: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, HTTPBodyLimit))
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("CA rejected clean request (HTTP %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	log.FromContext(ctx).Info("certificate cleaned via CA API", "certname", certname)
+	return nil
+}
+
 // signCSRViaAPI signs a pending CSR via the Puppet CA HTTP API using mTLS with the
 // CA server's own certificate (which has the pp_cli_auth extension required by auth.conf).
 func (r *CertificateReconciler) signCSRViaAPI(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, caBaseURL, namespace string) error {
@@ -473,22 +777,9 @@ func (r *CertificateReconciler) signCSRViaAPI(ctx context.Context, cert *openvox
 	}
 
 	// Build mTLS HTTP client
-	pool := x509.NewCertPool()
-	if !pool.AppendCertsFromPEM(caCertPEM) {
-		return fmt.Errorf("failed to parse CA certificate PEM")
-	}
-	clientCert, err := tls.X509KeyPair(clientCertPEM, clientKeyPEM)
+	httpClient, err := mTLSHTTPClient(caCertPEM, clientCertPEM, clientKeyPEM)
 	if err != nil {
-		return fmt.Errorf("parsing signing certificate: %w", err)
-	}
-	httpClient := &http.Client{
-		Timeout: HTTPClientTimeout,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				RootCAs:      pool,
-				Certificates: []tls.Certificate{clientCert},
-			},
-		},
+		return err
 	}
 
 	// PUT /puppet-ca/v1/certificate_status/{certname}?environment=production

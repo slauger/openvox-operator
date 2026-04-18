@@ -17,6 +17,9 @@ import (
 	"testing"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
 
@@ -116,6 +119,12 @@ func TestCSRPollBackoff(t *testing.T) {
 // The cert includes 127.0.0.1 as an IP SAN for use with httptest.NewTLSServer.
 func generateTestCert(t *testing.T) ([]byte, []byte) {
 	t.Helper()
+	return generateTestCertWithExpiry(t, 24*time.Hour)
+}
+
+// generateTestCertWithExpiry creates a self-signed certificate with a specific validity duration.
+func generateTestCertWithExpiry(t *testing.T, validity time.Duration) ([]byte, []byte) {
+	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generating test key: %v", err)
@@ -124,7 +133,7 @@ func generateTestCert(t *testing.T) ([]byte, []byte) {
 		SerialNumber: big.NewInt(1),
 		Subject:      pkix.Name{CommonName: "test-ca"},
 		NotBefore:    time.Now().Add(-time.Hour),
-		NotAfter:     time.Now().Add(24 * time.Hour),
+		NotAfter:     time.Now().Add(validity),
 		IsCA:         true,
 		KeyUsage:     x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
@@ -419,6 +428,318 @@ func TestSignCSRViaAPI_DefaultCertname(t *testing.T) {
 	}
 	if !strings.Contains(requestedPath, "/puppet-ca/v1/certificate_status/puppet") {
 		t.Errorf("expected path with default certname 'puppet', got: %s", requestedPath)
+	}
+}
+
+func TestCleanCertViaAPI_Success(t *testing.T) {
+	certPEM, keyPEM := generateTestCert(t)
+
+	var requestedPath string
+	var requestBody string
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Errorf("expected PUT, got %s", r.Method)
+		}
+		requestedPath = r.URL.Path
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
+		}
+		body, _ := io.ReadAll(r.Body)
+		requestBody = string(body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	signingSecret := newSecret("ca-cert-tls", map[string][]byte{
+		"cert.pem": certPEM,
+		"key.pem":  keyPEM,
+	})
+
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.SigningSecretName = "ca-cert-tls"
+
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseSigned)
+	cert.Spec.Certname = "test-certname"
+
+	c := setupTestClient(ca, cert, caSecret, signingSecret)
+	r := newCertificateReconciler(c)
+
+	err := r.cleanCertViaAPI(testCtx(), cert, ca, server.URL, testNamespace)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(requestedPath, "/puppet-ca/v1/clean") {
+		t.Errorf("expected path containing /puppet-ca/v1/clean, got: %s", requestedPath)
+	}
+	if !strings.Contains(requestBody, `"test-certname"`) {
+		t.Errorf("expected certname in body, got: %s", requestBody)
+	}
+}
+
+func TestCleanCertViaAPI_CARejects(t *testing.T) {
+	certPEM, keyPEM := generateTestCert(t)
+
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte("Not Authorized"))
+	}))
+	defer server.Close()
+
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	signingSecret := newSecret("ca-cert-tls", map[string][]byte{
+		"cert.pem": certPEM,
+		"key.pem":  keyPEM,
+	})
+
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.SigningSecretName = "ca-cert-tls"
+
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseSigned)
+	cert.Spec.Certname = "test-certname"
+
+	c := setupTestClient(ca, cert, caSecret, signingSecret)
+	r := newCertificateReconciler(c)
+
+	err := r.cleanCertViaAPI(testCtx(), cert, ca, server.URL, testNamespace)
+	if err == nil {
+		t.Fatal("expected error when CA rejects clean request")
+	}
+	if !strings.Contains(err.Error(), "HTTP 403") {
+		t.Errorf("expected HTTP 403 error, got: %v", err)
+	}
+}
+
+func TestCleanCertViaAPI_EmptyCertname(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.SigningSecretName = "ca-cert-tls"
+
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseSigned)
+	cert.Spec.Certname = ""
+
+	c := setupTestClient(ca, cert)
+	r := newCertificateReconciler(c)
+
+	err := r.cleanCertViaAPI(testCtx(), cert, ca, "https://localhost:8140", testNamespace)
+	if err == nil {
+		t.Fatal("expected error when certname is empty")
+	}
+	if !strings.Contains(err.Error(), "certname is empty") {
+		t.Errorf("expected 'certname is empty' error, got: %v", err)
+	}
+}
+
+func TestReconcileCertRenewal_Success(t *testing.T) {
+	certPEM, keyPEM := generateTestCertWithExpiry(t, 24*time.Hour)
+	newCertPEM, newKeyPEM := generateTestCertWithExpiry(t, 90*24*time.Hour)
+
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(newCertPEM)
+	}))
+	defer server.Close()
+
+	caSecret := newSecret("ext-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	tlsSecret := newSecret("my-cert-tls", map[string][]byte{
+		"cert.pem": certPEM,
+		"key.pem":  keyPEM,
+	})
+
+	ca := newCertificateAuthority("ext-ca", withExternal(server.URL))
+	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseExternal
+
+	cert := newCertificate("my-cert", "ext-ca", openvoxv1alpha1.CertificatePhaseRenewing)
+	cert.Spec.Certname = "test-certname"
+
+	c := setupTestClient(ca, cert, caSecret, tlsSecret)
+	r := newCertificateReconciler(c)
+
+	res, err := r.reconcileCertRenewal(testCtx(), cert, ca)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify phase transitioned to Signed
+	updated := &openvoxv1alpha1.Certificate{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "my-cert", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get Certificate: %v", err)
+	}
+	if updated.Status.Phase != openvoxv1alpha1.CertificatePhaseSigned {
+		t.Errorf("expected phase %q, got %q", openvoxv1alpha1.CertificatePhaseSigned, updated.Status.Phase)
+	}
+	if updated.Status.SecretName != "my-cert-tls" {
+		t.Errorf("expected SecretName %q, got %q", "my-cert-tls", updated.Status.SecretName)
+	}
+
+	// Verify CertSigned condition with reason CertificateRenewed
+	found := false
+	for _, cond := range updated.Status.Conditions {
+		if cond.Type == openvoxv1alpha1.ConditionCertSigned && cond.Reason == "CertificateRenewed" {
+			found = true
+			if cond.Status != "True" {
+				t.Errorf("expected condition status True, got %q", cond.Status)
+			}
+		}
+	}
+	if !found {
+		t.Error("CertSigned condition with reason CertificateRenewed not set")
+	}
+
+	// Verify renewal annotation was set
+	if updated.Annotations == nil || updated.Annotations[AnnotationLastRenewalTime] == "" {
+		t.Error("expected last-renewal-time annotation to be set")
+	}
+
+	// Verify expiry-warned annotation was cleared
+	if warned, ok := updated.Annotations[AnnotationExpiryWarned]; ok && warned != "" {
+		t.Errorf("expected expiry-warned annotation to be cleared, got %q", warned)
+	}
+
+	// Verify RequeueAfter is set (scheduleRenewalCheck called)
+	if res.RequeueAfter == 0 {
+		t.Error("expected RequeueAfter > 0 after successful renewal")
+	}
+
+	// Verify the TLS secret was updated with new cert
+	tlsUpdated := &corev1.Secret{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "my-cert-tls", Namespace: testNamespace}, tlsUpdated); err != nil {
+		t.Fatalf("failed to get TLS Secret: %v", err)
+	}
+	if string(tlsUpdated.Data["cert.pem"]) == string(certPEM) {
+		t.Error("expected TLS secret cert.pem to be updated with new cert")
+	}
+
+	_ = newKeyPEM // new key is generated internally
+}
+
+func TestRenewCertificate_Success(t *testing.T) {
+	certPEM, keyPEM := generateTestCertWithExpiry(t, 24*time.Hour)
+
+	// Start test HTTPS server that accepts the renewal request and returns a new cert
+	newCertPEM, _ := generateTestCertWithExpiry(t, 90*24*time.Hour)
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		if !strings.Contains(r.URL.Path, "/puppet-ca/v1/certificate_renewal") {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		if r.Header.Get("Content-Type") != "text/plain" {
+			t.Errorf("expected Content-Type text/plain, got %s", r.Header.Get("Content-Type"))
+		}
+		// Read CSR body
+		body, _ := io.ReadAll(r.Body)
+		if len(body) == 0 {
+			t.Error("expected CSR in request body")
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(newCertPEM)
+	}))
+	defer server.Close()
+
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	tlsSecret := newSecret("my-cert-tls", map[string][]byte{
+		"cert.pem": certPEM,
+		"key.pem":  keyPEM,
+	})
+
+	ca := newCertificateAuthority("test-ca")
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseRenewing)
+	cert.Spec.Certname = "test-certname"
+
+	c := setupTestClient(ca, cert, caSecret, tlsSecret)
+	r := newCertificateReconciler(c)
+
+	err := r.renewCertificate(testCtx(), cert, ca, server.URL, testNamespace)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRenewCertificate_CADown(t *testing.T) {
+	certPEM, keyPEM := generateTestCertWithExpiry(t, 24*time.Hour)
+
+	// Server returns an error
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte("Service Unavailable"))
+	}))
+	defer server.Close()
+
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	tlsSecret := newSecret("my-cert-tls", map[string][]byte{
+		"cert.pem": certPEM,
+		"key.pem":  keyPEM,
+	})
+
+	ca := newCertificateAuthority("test-ca")
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseRenewing)
+	cert.Spec.Certname = "test-certname"
+
+	c := setupTestClient(ca, cert, caSecret, tlsSecret)
+	r := newCertificateReconciler(c)
+
+	err := r.renewCertificate(testCtx(), cert, ca, server.URL, testNamespace)
+	if err == nil {
+		t.Fatal("expected error when CA returns error")
+	}
+	if !strings.Contains(err.Error(), "HTTP 503") {
+		t.Errorf("expected HTTP 503 error, got: %v", err)
+	}
+}
+
+func TestRenewCertificate_mTLSAuth(t *testing.T) {
+	certPEM, keyPEM := generateTestCertWithExpiry(t, 24*time.Hour)
+
+	newCertPEM, _ := generateTestCertWithExpiry(t, 90*24*time.Hour)
+
+	// Verify that the client presents a certificate (mTLS)
+	var clientCertPresented bool
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
+			clientCertPresented = true
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(newCertPEM)
+	}))
+	// Enable client cert verification on the server
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(certPEM)
+	server.TLS.ClientAuth = tls.VerifyClientCertIfGiven
+	server.TLS.ClientCAs = caCertPool
+	defer server.Close()
+
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	tlsSecret := newSecret("my-cert-tls", map[string][]byte{
+		"cert.pem": certPEM,
+		"key.pem":  keyPEM,
+	})
+
+	ca := newCertificateAuthority("test-ca")
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseRenewing)
+	cert.Spec.Certname = "test-certname"
+
+	c := setupTestClient(ca, cert, caSecret, tlsSecret)
+	r := newCertificateReconciler(c)
+
+	err := r.renewCertificate(testCtx(), cert, ca, server.URL, testNamespace)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !clientCertPresented {
+		t.Error("expected client certificate to be presented for mTLS authentication")
 	}
 }
 

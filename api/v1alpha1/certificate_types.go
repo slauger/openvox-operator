@@ -69,10 +69,17 @@ type CertificateSpec struct {
 	// CSRExtensions defines Puppet CSR extension attributes to embed in the CSR.
 	// +optional
 	CSRExtensions *CSRExtensionsSpec `json:"csrExtensions,omitempty"`
+
+	// RenewBefore is the duration before expiration when the certificate should be renewed.
+	// Uses duration format: "60d", "30d", "720h".
+	// +kubebuilder:default="60d"
+	// +kubebuilder:validation:Pattern=`^\d+[smhdy]$`
+	// +optional
+	RenewBefore string `json:"renewBefore,omitempty"`
 }
 
 // CertificatePhase represents the current lifecycle phase of a Certificate.
-// +kubebuilder:validation:Enum=Pending;Requesting;WaitingForSigning;Signed;Error
+// +kubebuilder:validation:Enum=Pending;Requesting;WaitingForSigning;Signed;Renewing;Error
 type CertificatePhase string
 
 const (
@@ -80,6 +87,7 @@ const (
 	CertificatePhaseRequesting        CertificatePhase = "Requesting"
 	CertificatePhaseWaitingForSigning CertificatePhase = "WaitingForSigning"
 	CertificatePhaseSigned            CertificatePhase = "Signed"
+	CertificatePhaseRenewing          CertificatePhase = "Renewing"
 	CertificatePhaseError             CertificatePhase = "Error"
 )
 

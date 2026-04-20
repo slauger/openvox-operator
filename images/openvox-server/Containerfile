@@ -156,7 +156,8 @@ RUN printf '%s\n' \
 # when not running as root, eliminating the need for our sed patches).
 RUN curl -fsSL https://raw.githubusercontent.com/dotconfig404/openvoxserver-ca/016db7f606ebaac614bd92a597249cb256c6c514/lib/puppetserver/ca/utils/file_system.rb \
       -o /tmp/file_system.rb \
-    && cp /tmp/file_system.rb /opt/puppetlabs/server/data/puppetserver/vendored-jruby-gems/gems/openvoxserver-ca-*/lib/puppetserver/ca/utils/file_system.rb
+    && find / -path '*/openvoxserver-ca-*/lib/puppetserver/ca/utils/file_system.rb' \
+         -exec cp /tmp/file_system.rb {} \; 2>/dev/null
 
 ################################################################################
 # Stage: autosign — compile the openvox-autosign Go binary

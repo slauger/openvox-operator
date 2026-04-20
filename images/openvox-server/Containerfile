@@ -151,9 +151,7 @@ RUN printf '%s\n' \
     && puppetserver gem install --no-document openvox -v "${OPENVOX_VERSION}" \
     && puppetserver gem install --no-document jruby-openssl -v 0.15.7
 
-# Replace openvoxserver-ca file_system.rb with upstream fix from
-# OpenVoxProject/openvoxserver-ca#33 (ensure_ownership helper skips chown
-# when not running as root, eliminating the need for our sed patches).
+# Patch openvoxserver-ca to skip chown in rootless containers (OpenVoxProject/openvoxserver-ca#33)
 RUN curl -fsSL https://raw.githubusercontent.com/dotconfig404/openvoxserver-ca/016db7f606ebaac614bd92a597249cb256c6c514/lib/puppetserver/ca/utils/file_system.rb \
       -o /tmp/file_system.rb \
     && find / -path '*/openvoxserver-ca-*/lib/puppetserver/ca/utils/file_system.rb' \

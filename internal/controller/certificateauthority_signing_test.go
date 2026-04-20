@@ -39,8 +39,8 @@ func TestReconcileOperatorSigningCert_CreatesWhenMissing(t *testing.T) {
 	if cert.Spec.Certname != "test-ca-operator" {
 		t.Errorf("expected certname 'test-ca-operator', got %q", cert.Spec.Certname)
 	}
-	if cert.Spec.CSRExtensions == nil || !cert.Spec.CSRExtensions.PpCliAuth {
-		t.Error("expected csrExtensions.ppCliAuth=true")
+	if cert.Spec.CSRExtensions != nil {
+		t.Error("expected no csrExtensions on operator-signing cert")
 	}
 	if len(cert.OwnerReferences) == 0 {
 		t.Error("expected ownerReference to be set")

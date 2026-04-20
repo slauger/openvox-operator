@@ -740,11 +740,8 @@ func TestCAReconcile_OperatorSigningCertCreated(t *testing.T) {
 	if signingCert.Spec.Certname != "test-ca-operator" {
 		t.Errorf("expected certname %q, got %q", "test-ca-operator", signingCert.Spec.Certname)
 	}
-	if signingCert.Spec.CSRExtensions == nil {
-		t.Fatal("expected csrExtensions to be set")
-	}
-	if !signingCert.Spec.CSRExtensions.PpCliAuth {
-		t.Error("expected csrExtensions.ppCliAuth=true")
+	if signingCert.Spec.CSRExtensions != nil {
+		t.Error("expected no csrExtensions on operator-signing cert")
 	}
 	if len(signingCert.OwnerReferences) == 0 {
 		t.Error("expected ownerReference on operator-signing cert")

@@ -16,8 +16,8 @@ import (
 )
 
 // reconcileOperatorSigningCert ensures a dedicated operator-signing Certificate CR
-// exists for internal CAs. This certificate carries the pp_cli_auth extension and
-// is used for mTLS authentication when signing CSRs via the CA HTTP API.
+// exists for internal CAs. This certificate is used for mTLS authentication when
+// signing CSRs via the CA HTTP API; access is granted by CN-based auth.conf rules.
 func (r *CertificateAuthorityReconciler) reconcileOperatorSigningCert(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, certs []openvoxv1alpha1.Certificate) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -48,9 +48,6 @@ func (r *CertificateAuthorityReconciler) reconcileOperatorSigningCert(ctx contex
 			Spec: openvoxv1alpha1.CertificateSpec{
 				AuthorityRef: ca.Name,
 				Certname:     certname,
-				CSRExtensions: &openvoxv1alpha1.CSRExtensionsSpec{
-					PpCliAuth: true,
-				},
 			},
 		}
 		if err := controllerutil.SetControllerReference(ca, newCert, r.Scheme); err != nil {

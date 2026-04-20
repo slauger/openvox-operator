@@ -148,7 +148,7 @@ func (r *ConfigReconciler) reconcileConfigMap(ctx context.Context, cfg *openvoxv
 		"webserver.conf":    r.renderWebserverConf(cfg),
 		"webserver-ca.conf": r.renderWebserverConfCA(cfg),
 		"puppetserver.conf": r.renderPuppetserverConf(cfg),
-		"auth.conf":         r.renderAuthConf(cfg),
+		"auth.conf":         r.renderAuthConf(cfg, ca),
 		"ca.conf":           r.renderCAConf(ca),
 		"product.conf":      "product: {\n    check-for-updates: false\n}\n",
 		"logback.xml":       r.renderLogbackXML(cfg),

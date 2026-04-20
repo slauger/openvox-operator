@@ -154,7 +154,7 @@ RUN printf '%s\n' \
 # Replace openvoxserver-ca file_system.rb with upstream fix from
 # OpenVoxProject/openvoxserver-ca#33 (ensure_ownership helper skips chown
 # when not running as root, eliminating the need for our sed patches).
-RUN curl -fsSL https://raw.githubusercontent.com/dotconfig404/openvoxserver-ca/fix/chown-in-rootless-containers/lib/puppetserver/ca/utils/file_system.rb \
+RUN curl -fsSL https://raw.githubusercontent.com/dotconfig404/openvoxserver-ca/016db7f606ebaac614bd92a597249cb256c6c514/lib/puppetserver/ca/utils/file_system.rb \
       -o /tmp/file_system.rb \
     && cp /tmp/file_system.rb /opt/puppetlabs/server/data/puppetserver/vendored-jruby-gems/gems/openvoxserver-ca-*/lib/puppetserver/ca/utils/file_system.rb
 

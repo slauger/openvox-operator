@@ -14,7 +14,7 @@ ARG OPENVOXDB_VERSION=8.12.1
 ################################################################################
 # Stage: base — JRE + minimal runtime deps
 ################################################################################
-FROM registry.access.redhat.com/ubi9/ubi:9.7-1776315208 AS base
+FROM registry.access.redhat.com/ubi9/ubi:9.7-1776645994 AS base
 
 ARG JDK_VERSION=17
 

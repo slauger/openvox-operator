@@ -144,6 +144,42 @@ func TestCertificateValidator(t *testing.T) {
 		}
 	})
 
+	t.Run("valid renewBefore", func(t *testing.T) {
+		for _, val := range []string{"60d", "30d", "720h", "90d", ""} {
+			c := setupTestClient(ca)
+			v := &CertificateValidator{Client: c}
+			cert := &openvoxv1alpha1.Certificate{
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec: openvoxv1alpha1.CertificateSpec{
+					AuthorityRef: "my-ca",
+					Certname:     "puppet",
+					RenewBefore:  val,
+				},
+			}
+			_, err := v.ValidateCreate(context.Background(), cert)
+			if err != nil {
+				t.Errorf("expected no error for renewBefore=%q, got %v", val, err)
+			}
+		}
+	})
+
+	t.Run("invalid renewBefore", func(t *testing.T) {
+		c := setupTestClient(ca)
+		v := &CertificateValidator{Client: c}
+		cert := &openvoxv1alpha1.Certificate{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			Spec: openvoxv1alpha1.CertificateSpec{
+				AuthorityRef: "my-ca",
+				Certname:     "puppet",
+				RenewBefore:  "invalid",
+			},
+		}
+		_, err := v.ValidateCreate(context.Background(), cert)
+		if err == nil {
+			t.Error("expected error for invalid renewBefore")
+		}
+	})
+
 	t.Run("delete always succeeds", func(t *testing.T) {
 		v := &CertificateValidator{Client: setupTestClient()}
 		_, err := v.ValidateDelete(context.Background(), &openvoxv1alpha1.Certificate{})

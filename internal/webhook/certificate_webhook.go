@@ -54,6 +54,10 @@ func (v *CertificateValidator) validate(ctx context.Context, c *openvoxv1alpha1.
 		}
 	}
 
+	if err := validateDuration(c.Spec.RenewBefore, "renewBefore"); err != nil {
+		errs = append(errs, field.Invalid(specPath.Child("renewBefore"), c.Spec.RenewBefore, err.Error()))
+	}
+
 	if ext := c.Spec.CSRExtensions; ext != nil {
 		extPath := specPath.Child("csrExtensions")
 		conflicting := map[string]bool{

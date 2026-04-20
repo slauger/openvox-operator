@@ -1,11 +1,6 @@
 # Importing or Connecting an External CA
 
-This guide covers two approaches for using an existing Puppet or OpenVox CA with the operator:
-
-1. **CA Import** -- copy existing CA data into the operator-managed PVC (one-time migration)
-2. **External CA** -- point the operator at a running CA outside the cluster (ongoing delegation)
-
-## Option A: CA Import (One-Time Migration)
+## CA Import (One-Time Migration)
 
 If you have an existing CA and want the operator to manage it going forward, you can import the CA data into the operator's PVC.
 
@@ -68,7 +63,7 @@ If you have an existing CA and want the operator to manage it going forward, you
 
 3. The CA setup Job will detect existing data and skip regeneration. The operator will create the corresponding Secrets and transition to `Ready`.
 
-## Option B: External CA (Ongoing Delegation)
+## External CA (Ongoing Delegation)
 
 If you have a Puppet/OpenVox CA running outside the cluster and want to keep using it, configure `spec.external` on the `CertificateAuthority` resource. The operator will delegate CSR signing and CRL fetching to the external CA URL.
 
@@ -78,6 +73,12 @@ If you have a Puppet/OpenVox CA running outside the cluster and want to keep usi
 - The CA's public certificate (`ca_crt.pem`)
 - (Optional) A client certificate and key for mTLS authentication
 
+!!! tip "Using an existing Puppet CA"
+    On a traditional Puppet CA server, the CA certificate is typically located at `/etc/puppetlabs/puppet/ssl/certs/ca.pem`. You can copy it with:
+    ```bash
+    scp puppet-ca.example.com:/etc/puppetlabs/puppet/ssl/certs/ca.pem ca_crt.pem
+    ```
+
 ### Steps
 
 1. Create Secrets with the CA certificate and optional client credentials:
@@ -85,7 +86,7 @@ If you have a Puppet/OpenVox CA running outside the cluster and want to keep usi
     ```bash
     # CA certificate for TLS verification
     kubectl create secret generic external-ca-cert \
-      --from-file=ca_crt.pem=/path/to/ca_crt.pem
+      --from-file=ca_crt.pem=ca_crt.pem
 
     # (Optional) Client certificate for mTLS
     kubectl create secret generic external-ca-tls \
@@ -117,6 +118,13 @@ If you have a Puppet/OpenVox CA running outside the cluster and want to keep usi
    - Set the CA phase to `External`
    - Periodically fetch the CRL from the external CA
    - Route CSR signing requests to the external CA
+
+4. Verify the CA transitions to `External` phase:
+
+    ```bash
+    kubectl get ca external-ca -o jsonpath='{.status.phase}'
+    # Expected: External
+    ```
 
 ### External CA Fields
 
@@ -187,60 +195,3 @@ In a multi-cluster or multi-namespace setup you can run one openvox-stack as the
     ```
 
 5. The secondary stack will now delegate all CSR signing and CRL fetching to the primary CA.
-
-## Using an Existing Puppet CA as External CA
-
-If you already run a traditional Puppet CA (on a VM or bare-metal server) and want to manage Puppet agents via the operator without migrating the CA, you can point the operator at the existing CA.
-
-### Prerequisites
-
-- The Puppet CA server is accessible from the Kubernetes cluster (e.g. `https://puppet-ca.example.com:8140`)
-- You have access to the CA certificate file (typically `/etc/puppetlabs/puppet/ssl/certs/ca.pem` on the Puppet CA server)
-- (Optional) A signed client certificate and key for mTLS if the CA requires client authentication
-
-### Steps
-
-1. Copy the CA certificate from the Puppet CA server:
-
-    ```bash
-    scp puppet-ca.example.com:/etc/puppetlabs/puppet/ssl/certs/ca.pem ca_crt.pem
-    ```
-
-2. Create the Kubernetes Secrets:
-
-    ```bash
-    # CA certificate for TLS verification
-    kubectl create secret generic puppet-ca-cert \
-      --from-file=ca_crt.pem=ca_crt.pem
-
-    # (Optional) Client certificate for mTLS
-    # Use a signed certificate from the existing Puppet CA
-    kubectl create secret generic puppet-ca-tls \
-      --from-file=tls.crt=/path/to/client.pem \
-      --from-file=tls.key=/path/to/client-key.pem
-    ```
-
-3. Create the `CertificateAuthority` resource:
-
-    ```yaml
-    apiVersion: openvox.voxpupuli.org/v1alpha1
-    kind: CertificateAuthority
-    metadata:
-      name: puppet-ca
-    spec:
-      allowSubjectAltNames: true
-      allowAuthorizationExtensions: true
-      enableInfraCRL: true
-      crlRefreshInterval: 5m
-      external:
-        url: https://puppet-ca.example.com:8140
-        caSecretRef: puppet-ca-cert
-        tlsSecretRef: puppet-ca-tls
-    ```
-
-4. Verify the CA transitions to `External` phase:
-
-    ```bash
-    kubectl get ca puppet-ca -o jsonpath='{.status.phase}'
-    # Expected: External
-    ```

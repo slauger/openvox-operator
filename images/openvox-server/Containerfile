@@ -151,12 +151,12 @@ RUN printf '%s\n' \
     && puppetserver gem install --no-document openvox -v "${OPENVOX_VERSION}" \
     && puppetserver gem install --no-document jruby-openssl -v 0.15.7
 
-# Patch openvoxserver-ca to skip cadir symlink and chown (fails rootless)
-RUN find / -path '*/openvoxserver-ca-*/lib/puppetserver/ca/action/setup.rb' \
-         -exec sed -i '/Puppetserver::Ca::Utils::Config\.symlink_to_old_cadir/ s/^/# /' {} + 2>/dev/null \
-    ; find / -path '*/openvoxserver-ca-*/lib/puppetserver/ca/utils/file_system.rb' \
-         -exec sed -i 's/FileUtils\.chown/# FileUtils.chown/' {} + 2>/dev/null \
-    ; true
+# Replace openvoxserver-ca file_system.rb with upstream fix from
+# OpenVoxProject/openvoxserver-ca#33 (ensure_ownership helper skips chown
+# when not running as root, eliminating the need for our sed patches).
+RUN curl -fsSL https://raw.githubusercontent.com/OpenVoxProject/openvoxserver-ca/fix/chown-in-rootless-containers/lib/puppetserver/ca/utils/file_system.rb \
+      -o /tmp/file_system.rb \
+    && cp /tmp/file_system.rb /opt/puppetlabs/server/data/puppetserver/vendored-jruby-gems/gems/openvoxserver-ca-*/lib/puppetserver/ca/utils/file_system.rb
 
 ################################################################################
 # Stage: autosign — compile the openvox-autosign Go binary

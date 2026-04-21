@@ -209,9 +209,9 @@ e2e-wait: ## Wait for E2E dependencies to be available (pre-installed via ArgoCD
 
 .PHONY: e2e-cleanup
 e2e-cleanup: ## Remove operator and all E2E test namespaces (keeps CRDs).
+	@echo "Cleaning up leftover E2E namespaces (operator still running to process finalizers)..."
+	@kubectl get namespaces -o name | grep '^namespace/e2e-' | xargs -r kubectl delete --timeout=120s --ignore-not-found 2>/dev/null || true
 	helm uninstall openvox-operator --namespace $(NAMESPACE) --wait 2>/dev/null || true
-	@echo "Cleaning up leftover E2E namespaces..."
-	@kubectl get namespaces -o name | grep '^namespace/e2e-' | xargs -r kubectl delete --ignore-not-found 2>/dev/null || true
 	kubectl delete namespace $(NAMESPACE) --ignore-not-found 2>/dev/null || true
 
 .PHONY: e2e-cleanup-full

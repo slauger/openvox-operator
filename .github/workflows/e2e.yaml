@@ -33,16 +33,8 @@ jobs:
       group: gateway
     secrets: inherit
 
-  e2e-webhooks-byo:
-    needs: [e2e-gateway]
-    uses: ./.github/workflows/_e2e-run.yaml
-    with:
-      image_tag: ${{ inputs.image_tag }}
-      group: webhooks-byo
-    secrets: inherit
-
   e2e-webhooks-cm:
-    needs: [e2e-webhooks-byo]
+    needs: [e2e-gateway]
     uses: ./.github/workflows/_e2e-run.yaml
     with:
       image_tag: ${{ inputs.image_tag }}

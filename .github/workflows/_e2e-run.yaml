@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       group:
-        description: 'Test group to run (base, enc, gateway, webhooks-byo, webhooks-cm)'
+        description: 'Test group to run (base, enc, gateway, webhooks-cm)'
         required: true
         type: string
 

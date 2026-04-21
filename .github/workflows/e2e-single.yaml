@@ -16,7 +16,6 @@ on:
           - base
           - enc
           - gateway
-          - webhooks-byo
           - webhooks-cm
 
 jobs:

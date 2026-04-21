@@ -159,7 +159,6 @@ Tests are organized into groups. Each group installs the operator with specific 
 | base | webhook=false, gatewayAPI=false | single-node, multi-server, agent-basic, agent-broken, agent-idempotent, agent-concurrent, agent-report, database-cnpg | `make e2e-group-base` |
 | enc | webhook=false, gatewayAPI=false | agent-enc, agent-full | `make e2e-group-enc` |
 | gateway | webhook=false, gatewayAPI=true | pool-gateway | `make e2e-group-gateway` |
-| webhooks-byo | webhook=true, BYO TLS cert | webhook-validation-server, webhook-validation-config, webhook-validation-database, webhook-smoke | `make e2e-group-webhooks-byo` |
 | webhooks-cm | webhook=true, cert-manager | webhook-validation-server, webhook-validation-config, webhook-validation-database, webhook-smoke | `make e2e-group-webhooks-cm` |
 
 Run all groups sequentially:
@@ -214,15 +213,15 @@ make e2e-all IMAGE_TAG=develop
 
 ### Running in CI
 
-The E2E workflow connects to a persistent K3S cluster via `E2E_KUBECONFIG` secret. External dependencies (CNPG, Envoy Gateway, cert-manager) are managed by ArgoCD on the cluster -- the workflow only verifies they are available before starting tests. Test groups run sequentially: base, enc, gateway, webhooks-byo, webhooks-cm.
+The E2E workflow connects to a persistent K3S cluster via `E2E_KUBECONFIG` secret. External dependencies (CNPG, Envoy Gateway, cert-manager) are managed by ArgoCD on the cluster -- the workflow only verifies they are available before starting tests. Test groups run sequentially: base, enc, gateway, webhooks-cm.
 
 Images are built by the CI workflow on push to develop (`:develop` tag) or manually via `e2e-images.yaml`. The `e2e.yaml` workflow only runs tests against already-pushed images.
 
 Manual trigger with group selection:
 
 ```bash
-gh workflow run e2e.yaml -f group=webhooks-byo -f image_tag=develop
-gh workflow run e2e.yaml -f group=all -f image_tag=develop
+gh workflow run e2e-single.yaml -f group=webhooks-cm -f image_tag=develop
+gh workflow run e2e.yaml -f image_tag=develop
 ```
 
 ### Chainsaw Configuration

@@ -1,0 +1,38 @@
+signingPolicies:
+  - name: autosign-any
+    any: true
+
+ca:
+  allowAutoRenewal: true
+
+config:
+  code:
+    image: ghcr.io/slauger/openvox-e2e-code:latest
+    imagePullPolicy: Always
+
+servers:
+  - name: ca
+    ca: true
+    server: true
+    poolRefs: [ca, server]
+    certificate:
+      certname: puppet
+      dnsAltNames:
+        - e2e-cert-rotation-server
+    replicas: 1
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+
+pools:
+  - name: ca
+    service:
+      type: ClusterIP
+      port: 8140
+  - name: server
+    service:
+      type: ClusterIP
+      port: 8140

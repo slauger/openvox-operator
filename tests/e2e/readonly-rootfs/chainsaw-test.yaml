@@ -1,0 +1,98 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: readonly-rootfs
+spec:
+  namespace: e2e-readonly-rootfs
+  bindings:
+    - name: registry
+      value: (env('IMAGE_REGISTRY') || 'ghcr.io/slauger')
+    - name: imageTag
+      value: (env('IMAGE_TAG') || 'latest')
+  steps:
+    - name: Install openvox-stack
+      try:
+        - script:
+            timeout: 2m
+            content: |
+              REPO_ROOT=$(git rev-parse --show-toplevel)
+              IMAGE_TAG=${IMAGE_TAG:-$(git describe --always)}
+              IMAGE_REGISTRY=${IMAGE_REGISTRY:-ghcr.io/slauger}
+              helm upgrade --install e2e-readonly-rootfs "${REPO_ROOT}/charts/openvox-stack" \
+                --namespace e2e-readonly-rootfs --create-namespace \
+                --values "${REPO_ROOT}/charts/openvox-stack/ci/readonly-rootfs-values.yaml" \
+                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server \
+                --set config.image.tag="${IMAGE_TAG}" \
+                --set config.image.pullPolicy=Always \
+                --set config.code.image=${IMAGE_REGISTRY}/openvox-e2e-code:${IMAGE_TAG}
+      catch:
+        - events: {}
+
+    - name: Assert Server is Running
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: e2e-readonly-rootfs-ca
+              status:
+                phase: Running
+                ready: 1
+                desired: 1
+
+    - name: Verify readOnlyRootFilesystem is set on pod
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              READONLY=$(kubectl get pods -n e2e-readonly-rootfs \
+                -l openvox.voxpupuli.org/server=e2e-readonly-rootfs-ca \
+                -o jsonpath='{.items[0].spec.containers[0].securityContext.readOnlyRootFilesystem}')
+              echo "readOnlyRootFilesystem=${READONLY}"
+              if [ "${READONLY}" != "true" ]; then
+                echo "ERROR: readOnlyRootFilesystem is not true"
+                exit 1
+              fi
+
+    - name: Run Puppet agent
+      try:
+        - apply:
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: puppet-agent-readonly
+                namespace: e2e-readonly-rootfs
+              spec:
+                backoffLimit: 0
+                template:
+                  spec:
+                    restartPolicy: Never
+                    containers:
+                      - name: puppet-agent
+                        image: (join('', [$registry, '/openvox-agent:', $imageTag]))
+                        imagePullPolicy: Always
+                        command: ["sh", "-c"]
+                        args:
+                          - |
+                            puppet agent --test \
+                              --server e2e-readonly-rootfs-server \
+                              --waitforcert 30 \
+                              --certname agent-readonly-test;
+                            EXIT=$?;
+                            if [ $EXIT -eq 0 ] || [ $EXIT -eq 2 ]; then exit 0; else exit $EXIT; fi
+                        securityContext:
+                          runAsUser: 0
+        - script:
+            timeout: 5m
+            content: |
+              kubectl wait --for=condition=Complete job/puppet-agent-readonly \
+                -n e2e-readonly-rootfs --timeout=300s
+      finally:
+        - script:
+            timeout: 2m
+            content: |
+              kubectl logs -n e2e-readonly-rootfs job/puppet-agent-readonly || true
+              helm uninstall e2e-readonly-rootfs --namespace e2e-readonly-rootfs --wait 2>/dev/null || true
+              kubectl delete namespace e2e-readonly-rootfs --ignore-not-found 2>/dev/null || true

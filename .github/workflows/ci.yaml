@@ -9,6 +9,8 @@ on:
       - 'LICENSE'
       - 'CHANGELOG*'
       - '.github/*.md'
+      - 'mkdocs.yml'
+      - 'renovate.json'
   pull_request:
     branches: [main, develop]
     paths-ignore:
@@ -17,6 +19,8 @@ on:
       - 'LICENSE'
       - 'CHANGELOG*'
       - '.github/*.md'
+      - 'mkdocs.yml'
+      - 'renovate.json'
 
 jobs:
   unicode:

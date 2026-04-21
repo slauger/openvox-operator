@@ -1,0 +1,155 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: external-ca
+spec:
+  namespace: e2e-ext-ca-a
+  bindings:
+    - name: registry
+      value: (env('IMAGE_REGISTRY') || 'ghcr.io/slauger')
+    - name: imageTag
+      value: (env('IMAGE_TAG') || 'latest')
+  steps:
+    - name: Install Stack A (CA provider)
+      try:
+        - script:
+            timeout: 2m
+            content: |
+              REPO_ROOT=$(git rev-parse --show-toplevel)
+              IMAGE_TAG=${IMAGE_TAG:-$(git describe --always)}
+              IMAGE_REGISTRY=${IMAGE_REGISTRY:-ghcr.io/slauger}
+              helm upgrade --install e2e-ext-ca-a "${REPO_ROOT}/charts/openvox-stack" \
+                --namespace e2e-ext-ca-a --create-namespace \
+                --values "${REPO_ROOT}/charts/openvox-stack/ci/external-ca-stack-a-values.yaml" \
+                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server \
+                --set config.image.tag="${IMAGE_TAG}" \
+                --set config.image.pullPolicy=Always \
+                --set config.code.image=${IMAGE_REGISTRY}/openvox-e2e-code:${IMAGE_TAG}
+      catch:
+        - events: {}
+
+    - name: Assert Stack A CA is Ready
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: CertificateAuthority
+              metadata:
+                name: e2e-ext-ca-a-ca
+              status:
+                phase: Ready
+
+    - name: Assert Stack A Server is Running
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: e2e-ext-ca-a-ca
+              status:
+                phase: Running
+                ready: 1
+                desired: 1
+
+    - name: Copy CA Secret to Stack B namespace
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              kubectl create namespace e2e-ext-ca-b --dry-run=client -o yaml | kubectl apply -f -
+              CA_SECRET_NAME=$(kubectl get certificateauthority e2e-ext-ca-a-ca \
+                -n e2e-ext-ca-a -o jsonpath='{.status.caSecretName}')
+              echo "CA Secret: ${CA_SECRET_NAME}"
+              kubectl get secret "${CA_SECRET_NAME}" -n e2e-ext-ca-a -o json \
+                | jq 'del(.metadata.namespace,.metadata.resourceVersion,.metadata.uid,.metadata.creationTimestamp,.metadata.ownerReferences)' \
+                | jq '.metadata.name = "external-ca-cert"' \
+                | kubectl apply -n e2e-ext-ca-b -f -
+
+    - name: Install Stack B (external CA consumer)
+      try:
+        - script:
+            timeout: 2m
+            content: |
+              REPO_ROOT=$(git rev-parse --show-toplevel)
+              IMAGE_TAG=${IMAGE_TAG:-$(git describe --always)}
+              IMAGE_REGISTRY=${IMAGE_REGISTRY:-ghcr.io/slauger}
+              helm upgrade --install e2e-ext-ca-b "${REPO_ROOT}/charts/openvox-stack" \
+                --namespace e2e-ext-ca-b \
+                --values "${REPO_ROOT}/charts/openvox-stack/ci/external-ca-stack-b-values.yaml" \
+                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server \
+                --set config.image.tag="${IMAGE_TAG}" \
+                --set config.image.pullPolicy=Always \
+                --set config.code.image=${IMAGE_REGISTRY}/openvox-e2e-code:${IMAGE_TAG}
+      catch:
+        - events: {}
+
+    - name: Assert Stack B CA phase is External
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: CertificateAuthority
+              metadata:
+                name: e2e-ext-ca-b-ca
+                namespace: e2e-ext-ca-b
+              status:
+                phase: External
+
+    - name: Assert Stack B Server is Running
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: e2e-ext-ca-b-ca
+                namespace: e2e-ext-ca-b
+              status:
+                phase: Running
+                ready: 1
+                desired: 1
+
+    - name: Run Puppet agent against Stack B server
+      try:
+        - apply:
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: puppet-agent-ext-ca
+                namespace: e2e-ext-ca-b
+              spec:
+                backoffLimit: 0
+                template:
+                  spec:
+                    restartPolicy: Never
+                    containers:
+                      - name: puppet-agent
+                        image: (join('', [$registry, '/openvox-agent:', $imageTag]))
+                        imagePullPolicy: Always
+                        command: ["sh", "-c"]
+                        args:
+                          - |
+                            puppet agent --test \
+                              --server e2e-ext-ca-b-server \
+                              --waitforcert 30 \
+                              --certname agent-ext-ca-test;
+                            EXIT=$?;
+                            if [ $EXIT -eq 0 ] || [ $EXIT -eq 2 ]; then exit 0; else exit $EXIT; fi
+                        securityContext:
+                          runAsUser: 0
+        - script:
+            timeout: 5m
+            content: |
+              kubectl wait --for=condition=Complete job/puppet-agent-ext-ca \
+                -n e2e-ext-ca-b --timeout=300s
+      finally:
+        - script:
+            timeout: 2m
+            content: |
+              kubectl logs -n e2e-ext-ca-b job/puppet-agent-ext-ca || true
+              helm uninstall e2e-ext-ca-b --namespace e2e-ext-ca-b --wait 2>/dev/null || true
+              helm uninstall e2e-ext-ca-a --namespace e2e-ext-ca-a --wait 2>/dev/null || true
+              kubectl delete namespace e2e-ext-ca-b --ignore-not-found 2>/dev/null || true
+              kubectl delete namespace e2e-ext-ca-a --ignore-not-found 2>/dev/null || true

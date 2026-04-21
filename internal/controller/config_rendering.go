@@ -197,12 +197,18 @@ func (r *ConfigReconciler) renderPuppetserverConf(cfg *openvoxv1alpha1.Config) s
 	return sb.String()
 }
 
-func (r *ConfigReconciler) renderAuthConf(cfg *openvoxv1alpha1.Config) string {
+func (r *ConfigReconciler) renderAuthConf(cfg *openvoxv1alpha1.Config, ca *openvoxv1alpha1.CertificateAuthority) string {
+	// Derive the operator-signing certname when an internal CA exists.
+	var operatorCertname string
+	if ca != nil && ca.Spec.External == nil {
+		operatorCertname = fmt.Sprintf("%s-operator", ca.Name)
+	}
+
 	var sb strings.Builder
 	sb.WriteString("authorization: {\n    version: 1\n    rules: [\n")
 
 	// Built-in rules (always included)
-	sb.WriteString(r.builtinAuthRules())
+	sb.WriteString(r.builtinAuthRules(operatorCertname))
 
 	// Custom authorization rules (inserted before the deny-all rule)
 	for _, rule := range cfg.Spec.PuppetServer.AuthorizationRules {
@@ -254,8 +260,32 @@ func (r *ConfigReconciler) renderAuthConf(cfg *openvoxv1alpha1.Config) string {
 }
 
 // builtinAuthRules returns the built-in auth.conf rules as HOCON (without the deny-all).
-func (r *ConfigReconciler) builtinAuthRules() string {
-	return `        {
+// When operatorCertname is non-empty, CA admin rules emit a combined allow list that
+// permits both the pp_cli_auth extension and the operator-signing certificate CN.
+func (r *ConfigReconciler) builtinAuthRules(operatorCertname string) string {
+	// ppCliAuthAllow returns the HOCON allow block for CA admin endpoints.
+	// With an operator certname it emits a list allowing both pp_cli_auth and the CN.
+	ppCliAuthAllow := func() string {
+		if operatorCertname != "" {
+			return fmt.Sprintf(`            allow: [
+                {
+                    extensions: {
+                        pp_cli_auth: "true"
+                    }
+                },
+                %q
+            ]`, operatorCertname)
+		}
+		return `            allow: {
+               extensions: {
+                   pp_cli_auth: "true"
+               }
+            }`
+	}
+
+	caAdminAllow := ppCliAuthAllow()
+
+	return fmt.Sprintf(`        {
             match-request: {
                 path: "^/puppet/v3/catalog/([^/]+)$"
                 type: regex
@@ -321,11 +351,7 @@ func (r *ConfigReconciler) builtinAuthRules() string {
                 type: path
                 method: [get, put, delete]
             }
-            allow: {
-               extensions: {
-                   pp_cli_auth: "true"
-               }
-            }
+%s
             sort-order: 500
             name: "puppetlabs cert status"
         },
@@ -335,11 +361,7 @@ func (r *ConfigReconciler) builtinAuthRules() string {
                 type: regex
                 method: put
             }
-            allow: {
-               extensions: {
-                   pp_cli_auth: "true"
-               }
-            }
+%s
             sort-order: 500
             name: "puppetlabs CRL update"
         },
@@ -349,11 +371,7 @@ func (r *ConfigReconciler) builtinAuthRules() string {
                 type: path
                 method: get
             }
-            allow: {
-               extensions: {
-                   pp_cli_auth: "true"
-               }
-            }
+%s
             sort-order: 500
             name: "puppetlabs cert statuses"
         },
@@ -373,11 +391,7 @@ func (r *ConfigReconciler) builtinAuthRules() string {
                 type: path
                 method: put
             }
-            allow: {
-               extensions: {
-                   pp_cli_auth: "true"
-               }
-            }
+%s
             sort-order: 500
             name: "puppetlabs cert clean"
         },
@@ -387,11 +401,7 @@ func (r *ConfigReconciler) builtinAuthRules() string {
                 type: path
                 method: post
             }
-            allow: {
-               extensions: {
-                   pp_cli_auth: "true"
-               }
-            }
+%s
             sort-order: 500
             name: "puppetlabs cert sign"
         },
@@ -401,11 +411,7 @@ func (r *ConfigReconciler) builtinAuthRules() string {
                 type: path
                 method: post
             }
-            allow: {
-               extensions: {
-                   pp_cli_auth: "true"
-               }
-            }
+%s
             sort-order: 500
             name: "puppetlabs cert sign all"
         },
@@ -538,7 +544,7 @@ func (r *ConfigReconciler) builtinAuthRules() string {
             sort-order: 500
             name: "puppet tasks information"
         },
-`
+`, caAdminAllow, caAdminAllow, caAdminAllow, caAdminAllow, caAdminAllow, caAdminAllow)
 }
 
 // renderLogbackXML generates logback.xml from LoggingSpec.

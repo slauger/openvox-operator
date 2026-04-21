@@ -142,6 +142,62 @@ func TestRenderWebserverConfCA(t *testing.T) {
 	}
 }
 
+func TestRenderAuthConf(t *testing.T) {
+	r := newConfigReconciler(setupTestClient())
+	cfg := newConfig("test")
+
+	t.Run("no CA emits pp_cli_auth only", func(t *testing.T) {
+		out := r.renderAuthConf(cfg, nil)
+
+		if !strings.Contains(out, `pp_cli_auth: "true"`) {
+			t.Error("expected pp_cli_auth rule in output")
+		}
+		// Must not contain any CN-based allow list
+		if strings.Contains(out, "test-ca-operator") {
+			t.Error("unexpected operator certname in output without CA")
+		}
+	})
+
+	t.Run("external CA emits pp_cli_auth only", func(t *testing.T) {
+		ca := newCertificateAuthority("test-ca", withExternal("https://puppet-ca.example.com:8140"))
+		out := r.renderAuthConf(cfg, ca)
+
+		if !strings.Contains(out, `pp_cli_auth: "true"`) {
+			t.Error("expected pp_cli_auth rule in output")
+		}
+		if strings.Contains(out, "test-ca-operator") {
+			t.Error("unexpected operator certname for external CA")
+		}
+	})
+
+	t.Run("internal CA emits combined CN and pp_cli_auth allow", func(t *testing.T) {
+		ca := newCertificateAuthority("my-ca")
+		out := r.renderAuthConf(cfg, ca)
+
+		// Must contain both pp_cli_auth and the operator certname
+		if !strings.Contains(out, `pp_cli_auth: "true"`) {
+			t.Error("expected pp_cli_auth in combined allow")
+		}
+		if !strings.Contains(out, `"my-ca-operator"`) {
+			t.Errorf("expected operator certname in combined allow, got:\n%s", out)
+		}
+
+		// Verify the combined allow appears for CA admin endpoints
+		for _, ruleName := range []string{
+			"puppetlabs cert status",
+			"puppetlabs CRL update",
+			"puppetlabs cert statuses",
+			"puppetlabs cert clean",
+			"puppetlabs cert sign",
+			"puppetlabs cert sign all",
+		} {
+			if !strings.Contains(out, ruleName) {
+				t.Errorf("expected rule %q in output", ruleName)
+			}
+		}
+	})
+}
+
 func TestRenderCAConf(t *testing.T) {
 	r := newConfigReconciler(setupTestClient())
 

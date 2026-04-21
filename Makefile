@@ -185,8 +185,6 @@ $(CHAINSAW):
 
 E2E_CHAINSAW = IMAGE_TAG=$(IMAGE_TAG) IMAGE_REGISTRY=$(IMAGE_REGISTRY) $(CHAINSAW) test --config tests/e2e/chainsaw-config.yaml
 
-WEBHOOK_CERT_SECRET ?= openvox-operator-webhook-cert
-WEBHOOK_SAN ?= openvox-operator-webhook.$(NAMESPACE).svc
 
 .PHONY: e2e-setup
 e2e-setup: ## Install all E2E external dependencies (CNPG, Envoy Gateway, cert-manager).
@@ -209,37 +207,32 @@ e2e-wait: ## Wait for E2E dependencies to be available (pre-installed via ArgoCD
 
 .PHONY: e2e-cleanup
 e2e-cleanup: ## Remove operator and all E2E test namespaces (keeps CRDs).
+	@echo "Cleaning up leftover E2E namespaces (operator still running to process finalizers)..."
+	@kubectl get namespaces -o name | grep '^namespace/e2e-' | xargs -r kubectl delete --timeout=120s --ignore-not-found 2>/dev/null || true
+	@# Strip certificate finalizers from any namespaces stuck in Terminating
+	@for ns in $$(kubectl get namespaces -o jsonpath='{range .items[?(@.status.phase=="Terminating")]}{.metadata.name}{"\n"}{end}' 2>/dev/null); do \
+		echo "Namespace $${ns} stuck in Terminating, stripping certificate finalizers..."; \
+		kubectl get certificates.openvox.voxpupuli.org -n "$${ns}" -o name 2>/dev/null \
+			| xargs -r -I{} kubectl patch {} -n "$${ns}" --type=merge -p '{"metadata":{"finalizers":null}}' 2>/dev/null || true; \
+	done
+	@# Wait for Terminating namespaces to be fully gone
+	@for ns in $$(kubectl get namespaces -o jsonpath='{range .items[?(@.status.phase=="Terminating")]}{.metadata.name}{"\n"}{end}' 2>/dev/null); do \
+		echo "Waiting for namespace $${ns} to terminate..."; \
+		kubectl wait --for=delete namespace/"$${ns}" --timeout=30s 2>/dev/null || true; \
+	done
 	helm uninstall openvox-operator --namespace $(NAMESPACE) --wait 2>/dev/null || true
-	@echo "Cleaning up leftover E2E namespaces..."
-	@kubectl get namespaces -o name | grep '^namespace/e2e-' | xargs -r kubectl delete --ignore-not-found 2>/dev/null || true
-	kubectl delete namespace $(NAMESPACE) --ignore-not-found 2>/dev/null || true
+	@# Strip certificate finalizers in operator namespace if stuck
+	@if kubectl get namespace $(NAMESPACE) -o jsonpath='{.status.phase}' 2>/dev/null | grep -q Terminating; then \
+		echo "Namespace $(NAMESPACE) stuck in Terminating, stripping certificate finalizers..."; \
+		kubectl get certificates.openvox.voxpupuli.org -n $(NAMESPACE) -o name 2>/dev/null \
+			| xargs -r -I{} kubectl patch {} -n $(NAMESPACE) --type=merge -p '{"metadata":{"finalizers":null}}' 2>/dev/null || true; \
+	fi
+	kubectl delete namespace $(NAMESPACE) --ignore-not-found --wait 2>/dev/null || true
 
 .PHONY: e2e-cleanup-full
 e2e-cleanup-full: e2e-cleanup ## Full cleanup including CRDs (use between test groups).
 	@echo "Removing CRDs..."
 	@kubectl get crds -o name | grep 'openvox\.voxpupuli\.org' | xargs -r kubectl delete --ignore-not-found 2>/dev/null || true
-
-.PHONY: e2e-webhook-byo-cert
-e2e-webhook-byo-cert: ## Generate self-signed TLS cert and create webhook Secret.
-	@if kubectl get secret $(WEBHOOK_CERT_SECRET) -n $(NAMESPACE) &>/dev/null; then \
-		echo "Secret $(WEBHOOK_CERT_SECRET) already exists, skipping."; \
-	else \
-		kubectl create namespace $(NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -; \
-		TMPDIR=$$(mktemp -d); \
-		openssl req -x509 -newkey rsa:2048 -nodes \
-			-keyout "$${TMPDIR}/tls.key" -out "$${TMPDIR}/tls.crt" \
-			-subj "/CN=$(WEBHOOK_SAN)" \
-			-addext "subjectAltName=DNS:$(WEBHOOK_SAN)" \
-			-days 365 2>/dev/null; \
-		cp "$${TMPDIR}/tls.crt" "$${TMPDIR}/ca.crt"; \
-		kubectl create secret generic $(WEBHOOK_CERT_SECRET) \
-			--namespace $(NAMESPACE) \
-			--from-file=tls.crt="$${TMPDIR}/tls.crt" \
-			--from-file=tls.key="$${TMPDIR}/tls.key" \
-			--from-file=ca.crt="$${TMPDIR}/ca.crt"; \
-		rm -rf "$${TMPDIR}"; \
-		echo "Created webhook TLS secret $(WEBHOOK_CERT_SECRET)."; \
-	fi
 
 .PHONY: e2e-operator-base
 e2e-operator-base: e2e-cleanup ## Install operator: webhooks=false, gatewayAPI=false.
@@ -269,24 +262,6 @@ e2e-operator-gateway: e2e-cleanup ## Install operator: webhooks=false, gatewayAP
 	kubectl wait --for=condition=Available deployment/openvox-operator \
 		-n $(NAMESPACE) --timeout=2m
 
-.PHONY: e2e-operator-webhooks-byo
-e2e-operator-webhooks-byo: e2e-cleanup e2e-webhook-byo-cert ## Install operator: webhooks=true, BYO TLS cert.
-	$(eval CA_BUNDLE := $(shell kubectl get secret $(WEBHOOK_CERT_SECRET) -n $(NAMESPACE) -o jsonpath='{.data.ca\.crt}'))
-	helm upgrade --install openvox-operator charts/openvox-operator \
-		--namespace $(NAMESPACE) --create-namespace \
-		--set image.repository=$(IMAGE_REGISTRY)/openvox-operator \
-		--set image.tag=$(IMAGE_TAG) \
-		--set image.pullPolicy=Always \
-		--set resources.limits.cpu=null \
-		--set resources.limits.memory=null \
-		--set webhook.enabled=true \
-		--set webhook.certManager.enabled=false \
-		--set webhook.tls.certSecret=$(WEBHOOK_CERT_SECRET) \
-		--set webhook.tls.caBundle=$(CA_BUNDLE) \
-		--set gatewayAPI.enabled=false
-	kubectl wait --for=condition=Available deployment/openvox-operator \
-		-n $(NAMESPACE) --timeout=2m
-
 .PHONY: e2e-operator-webhooks-cm
 e2e-operator-webhooks-cm: e2e-cleanup ## Install operator: webhooks=true, cert-manager.
 	helm upgrade --install openvox-operator charts/openvox-operator \
@@ -312,7 +287,11 @@ e2e-group-base: e2e-operator-base chainsaw ## Group: base tests (stack, agent, d
 		tests/e2e/agent-idempotent \
 		tests/e2e/agent-concurrent \
 		tests/e2e/agent-report \
-		tests/e2e/database-cnpg; \
+		tests/e2e/database-cnpg \
+		tests/e2e/readonly-rootfs \
+		tests/e2e/code-pvc \
+		tests/e2e/autosign-policy \
+		tests/e2e/cert-rotation; \
 	EXIT=$$?; $(MAKE) e2e-cleanup; exit $$EXIT
 
 .PHONY: e2e-group-enc
@@ -322,19 +301,16 @@ e2e-group-enc: e2e-operator-base chainsaw ## Group: ENC and full agent tests.
 		tests/e2e/agent-full; \
 	EXIT=$$?; $(MAKE) e2e-cleanup; exit $$EXIT
 
+.PHONY: e2e-group-ca
+e2e-group-ca: e2e-operator-base chainsaw ## Group: CA tests (external CA).
+	$(E2E_CHAINSAW) \
+		tests/e2e/external-ca; \
+	EXIT=$$?; $(MAKE) e2e-cleanup; exit $$EXIT
+
 .PHONY: e2e-group-gateway
 e2e-group-gateway: e2e-operator-gateway chainsaw ## Group: Gateway API TLSRoute tests.
 	$(E2E_CHAINSAW) \
 		tests/e2e/pool-gateway; \
-	EXIT=$$?; $(MAKE) e2e-cleanup; exit $$EXIT
-
-.PHONY: e2e-group-webhooks-byo
-e2e-group-webhooks-byo: e2e-operator-webhooks-byo chainsaw ## Group: webhook tests with BYO TLS cert.
-	$(E2E_CHAINSAW) \
-		tests/e2e/webhook-validation-server \
-		tests/e2e/webhook-validation-config \
-		tests/e2e/webhook-validation-database \
-		tests/e2e/webhook-smoke; \
 	EXIT=$$?; $(MAKE) e2e-cleanup; exit $$EXIT
 
 .PHONY: e2e-group-webhooks-cm
@@ -350,8 +326,8 @@ e2e-group-webhooks-cm: e2e-operator-webhooks-cm chainsaw ## Group: webhook tests
 e2e-all: ## Run all E2E test groups sequentially.
 	$(MAKE) e2e-group-base
 	$(MAKE) e2e-group-enc
+	$(MAKE) e2e-group-ca
 	$(MAKE) e2e-group-gateway
-	$(MAKE) e2e-group-webhooks-byo
 	$(MAKE) e2e-group-webhooks-cm
 
 ##@ Help

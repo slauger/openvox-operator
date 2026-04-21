@@ -751,7 +751,7 @@ func (r *CertificateReconciler) cleanCertViaAPI(ctx context.Context, cert *openv
 }
 
 // signCSRViaAPI signs a pending CSR via the Puppet CA HTTP API using mTLS with the
-// CA server's own certificate (which has the pp_cli_auth extension required by auth.conf).
+// operator-signing certificate (authorized by CN-based auth.conf rules).
 func (r *CertificateReconciler) signCSRViaAPI(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, caBaseURL, namespace string) error {
 	certname := cert.Spec.Certname
 	if certname == "" {

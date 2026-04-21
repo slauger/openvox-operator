@@ -1,0 +1,32 @@
+name: E2E (single group)
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag for E2E images'
+        required: false
+        type: string
+        default: 'develop'
+      group:
+        description: 'Test group to run'
+        required: true
+        type: choice
+        options:
+          - base
+          - enc
+          - gateway
+          - webhooks-byo
+          - webhooks-cm
+
+concurrency:
+  group: e2e
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    uses: ./.github/workflows/_e2e-run.yaml
+    with:
+      image_tag: ${{ inputs.image_tag }}
+      group: ${{ inputs.group }}
+    secrets: inherit

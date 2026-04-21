@@ -1,0 +1,140 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: code-pvc
+spec:
+  namespace: e2e-code-pvc
+  bindings:
+    - name: registry
+      value: (env('IMAGE_REGISTRY') || 'ghcr.io/slauger')
+    - name: imageTag
+      value: (env('IMAGE_TAG') || 'latest')
+  steps:
+    - name: Create PVC and populate with Puppet code
+      try:
+        - apply:
+            resource:
+              apiVersion: v1
+              kind: PersistentVolumeClaim
+              metadata:
+                name: puppet-code
+                namespace: e2e-code-pvc
+              spec:
+                accessModes: [ReadWriteOnce]
+                resources:
+                  requests:
+                    storage: 64Mi
+        - apply:
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: init-code
+                namespace: e2e-code-pvc
+              spec:
+                backoffLimit: 0
+                template:
+                  spec:
+                    restartPolicy: Never
+                    containers:
+                      - name: init
+                        image: busybox:1.37
+                        command: ["sh", "-c"]
+                        args:
+                          - |
+                            mkdir -p /code/production/manifests
+                            cat > /code/production/manifests/site.pp << 'SITEPP'
+                            node default {
+                              notify { 'code-pvc-test': message => 'Hello from PVC code' }
+                            }
+                            SITEPP
+                            cat > /code/production/environment.conf << 'ENVCONF'
+                            modulepath = modules:$basemodulepath
+                            manifest = manifests/site.pp
+                            ENVCONF
+                            echo "PVC code initialized"
+                            ls -laR /code/
+                        volumeMounts:
+                          - name: code
+                            mountPath: /code
+                    volumes:
+                      - name: code
+                        persistentVolumeClaim:
+                          claimName: puppet-code
+        - script:
+            timeout: 2m
+            content: |
+              kubectl wait --for=condition=Complete job/init-code \
+                -n e2e-code-pvc --timeout=120s
+
+    - name: Install openvox-stack with PVC code
+      try:
+        - script:
+            timeout: 2m
+            content: |
+              REPO_ROOT=$(git rev-parse --show-toplevel)
+              IMAGE_TAG=${IMAGE_TAG:-$(git describe --always)}
+              IMAGE_REGISTRY=${IMAGE_REGISTRY:-ghcr.io/slauger}
+              helm upgrade --install e2e-code-pvc "${REPO_ROOT}/charts/openvox-stack" \
+                --namespace e2e-code-pvc --create-namespace \
+                --values "${REPO_ROOT}/charts/openvox-stack/ci/code-pvc-values.yaml" \
+                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server \
+                --set config.image.tag="${IMAGE_TAG}" \
+                --set config.image.pullPolicy=Always
+      catch:
+        - events: {}
+
+    - name: Assert Server is Running
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: e2e-code-pvc-ca
+              status:
+                phase: Running
+                ready: 1
+                desired: 1
+
+    - name: Run Puppet agent
+      try:
+        - apply:
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: puppet-agent-code-pvc
+                namespace: e2e-code-pvc
+              spec:
+                backoffLimit: 0
+                template:
+                  spec:
+                    restartPolicy: Never
+                    containers:
+                      - name: puppet-agent
+                        image: (join('', [$registry, '/openvox-agent:', $imageTag]))
+                        imagePullPolicy: Always
+                        command: ["sh", "-c"]
+                        args:
+                          - |
+                            puppet agent --test \
+                              --server e2e-code-pvc-server \
+                              --waitforcert 30 \
+                              --certname agent-code-pvc-test;
+                            EXIT=$?;
+                            if [ $EXIT -eq 0 ] || [ $EXIT -eq 2 ]; then exit 0; else exit $EXIT; fi
+                        securityContext:
+                          runAsUser: 0
+        - script:
+            timeout: 5m
+            content: |
+              kubectl wait --for=condition=Complete job/puppet-agent-code-pvc \
+                -n e2e-code-pvc --timeout=300s
+      finally:
+        - script:
+            timeout: 2m
+            content: |
+              kubectl logs -n e2e-code-pvc job/puppet-agent-code-pvc || true
+              helm uninstall e2e-code-pvc --namespace e2e-code-pvc --wait 2>/dev/null || true
+              kubectl delete namespace e2e-code-pvc --ignore-not-found 2>/dev/null || true

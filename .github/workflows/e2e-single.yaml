@@ -19,10 +19,6 @@ on:
           - webhooks-byo
           - webhooks-cm
 
-concurrency:
-  group: e2e
-  cancel-in-progress: false
-
 jobs:
   e2e:
     uses: ./.github/workflows/_e2e-run.yaml

@@ -89,6 +89,8 @@ spec:
                 name: openvox-stack-gw-ca
               spec:
                 dnsAltNames:
+                  - openvox-stack-gw-ca
+                  - puppet
                   - puppet.e2e.example.com
 
     - name: Verify no TLSRoute for CA pool

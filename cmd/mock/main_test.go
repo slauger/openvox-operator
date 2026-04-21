@@ -537,6 +537,106 @@ func TestAuth_NoAuthRequired(t *testing.T) {
 	}
 }
 
+func TestHECEvent_Store(t *testing.T) {
+	ts, _ := newTestServer()
+	defer ts.Close()
+
+	event := `{"event":"test event","sourcetype":"puppet:summary"}`
+	resp, err := http.Post(ts.URL+"/services/collector/event", "application/json", strings.NewReader(event))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), `"code":0`) {
+		t.Errorf("expected success response, got: %s", string(body))
+	}
+
+	// Verify stored event
+	resp, err = http.Get(ts.URL + "/api/hec-events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var events []struct {
+		Body json.RawMessage `json:"body"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&events); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal(events[0].Body, &parsed); err != nil {
+		t.Fatal(err)
+	}
+	if parsed["event"] != "test event" {
+		t.Errorf("event = %v", parsed["event"])
+	}
+}
+
+func TestHECEvent_InvalidJSON(t *testing.T) {
+	ts, _ := newTestServer()
+	defer ts.Close()
+
+	resp, err := http.Post(ts.URL+"/services/collector/event", "application/json", strings.NewReader("not json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestAPIReset(t *testing.T) {
+	ts, _ := newTestServer()
+	defer ts.Close()
+
+	// Store some data
+	http.Post(ts.URL+"/reports", "application/json", strings.NewReader(`{"host":"test"}`))
+	http.Post(ts.URL+"/services/collector/event", "application/json", strings.NewReader(`{"event":"test"}`))
+	cmd := `{"command":"replace facts","version":5,"payload":{"certname":"node1"}}`
+	http.Post(ts.URL+"/pdb/cmd/v1", "application/json", strings.NewReader(cmd))
+	http.Get(ts.URL + "/node/test-node")
+
+	// Reset
+	req, _ := http.NewRequest("DELETE", ts.URL+"/api/reset", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("reset status = %d, want 200", resp.StatusCode)
+	}
+
+	// Verify all data is cleared
+	for _, endpoint := range []string{"/api/reports", "/api/pdb-commands", "/api/classifications", "/api/hec-events"} {
+		resp, err := http.Get(ts.URL + endpoint)
+		if err != nil {
+			t.Fatalf("GET %s: %v", endpoint, err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+
+		if string(body) != "null\n" {
+			t.Errorf("GET %s after reset: expected null, got %s", endpoint, string(body))
+		}
+	}
+}
+
 func TestAuth_APIEndpointsSkipAuth(t *testing.T) {
 	ts, _ := newTestServer(func(s *server) {
 		s.auth = authConfig{authType: "bearer", authToken: "secret"}
@@ -544,7 +644,7 @@ func TestAuth_APIEndpointsSkipAuth(t *testing.T) {
 	defer ts.Close()
 
 	// API endpoints should not require auth
-	for _, path := range []string{"/api/reports", "/api/pdb-commands", "/api/classifications", "/healthz"} {
+	for _, path := range []string{"/api/reports", "/api/pdb-commands", "/api/classifications", "/api/hec-events", "/healthz"} {
 		resp, err := http.Get(ts.URL + path)
 		if err != nil {
 			t.Fatalf("GET %s: %v", path, err)

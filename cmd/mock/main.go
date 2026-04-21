@@ -33,6 +33,11 @@ type storedClassification struct {
 	ServedAt time.Time `json:"served_at"`
 }
 
+type storedHECEvent struct {
+	ReceivedAt time.Time       `json:"received_at"`
+	Body       json.RawMessage `json:"body"`
+}
+
 type classificationEntry struct {
 	Classes     []string `yaml:"classes"`
 	Environment string   `yaml:"environment"`
@@ -51,6 +56,7 @@ type server struct {
 	reports         []storedReport
 	pdbCommands     []storedPDBCommand
 	classifications []storedClassification
+	hecEvents       []storedHECEvent
 
 	// Static ENC config (env vars)
 	encClasses     []string
@@ -123,6 +129,9 @@ func newServeMux(s *server) *http.ServeMux {
 	mux.HandleFunc("GET /api/reports", s.handleAPIReports)
 	mux.HandleFunc("GET /api/pdb-commands", s.handleAPIPDBCommands)
 	mux.HandleFunc("GET /api/classifications", s.handleAPIClassifications)
+	mux.HandleFunc("POST /services/collector/event", s.handleHECEvent)
+	mux.HandleFunc("GET /api/hec-events", s.handleAPIHECEvents)
+	mux.HandleFunc("DELETE /api/reset", s.handleAPIReset)
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
 	return mux
 }
@@ -363,6 +372,54 @@ func (s *server) handleAPIClassifications(w http.ResponseWriter, _ *http.Request
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	writeJSON(w, s.classifications)
+}
+
+func (s *server) handleHECEvent(w http.ResponseWriter, r *http.Request) {
+	if !s.checkAuth(w, r) {
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+	log.Printf("Received HEC event (%d bytes)", len(body))
+
+	if !json.Valid(body) {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	s.mu.Lock()
+	s.hecEvents = append(s.hecEvents, storedHECEvent{
+		ReceivedAt: time.Now(),
+		Body:       json.RawMessage(body),
+	})
+	s.mu.Unlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`{"text":"Success","code":0}`))
+}
+
+func (s *server) handleAPIHECEvents(w http.ResponseWriter, _ *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	writeJSON(w, s.hecEvents)
+}
+
+func (s *server) handleAPIReset(w http.ResponseWriter, _ *http.Request) {
+	s.mu.Lock()
+	s.reports = nil
+	s.pdbCommands = nil
+	s.classifications = nil
+	s.hecEvents = nil
+	s.mu.Unlock()
+
+	log.Printf("All stored data cleared")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("ok"))
 }
 
 func (s *server) handleHealthz(w http.ResponseWriter, _ *http.Request) {

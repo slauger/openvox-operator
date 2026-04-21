@@ -1,0 +1,131 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: autosign-policy
+spec:
+  namespace: e2e-autosign-policy
+  bindings:
+    - name: registry
+      value: (env('IMAGE_REGISTRY') || 'ghcr.io/slauger')
+    - name: imageTag
+      value: (env('IMAGE_TAG') || 'latest')
+  steps:
+    - name: Install openvox-stack
+      try:
+        - script:
+            timeout: 2m
+            content: |
+              REPO_ROOT=$(git rev-parse --show-toplevel)
+              IMAGE_TAG=${IMAGE_TAG:-$(git describe --always)}
+              IMAGE_REGISTRY=${IMAGE_REGISTRY:-ghcr.io/slauger}
+              helm upgrade --install e2e-autosign-policy "${REPO_ROOT}/charts/openvox-stack" \
+                --namespace e2e-autosign-policy --create-namespace \
+                --values "${REPO_ROOT}/charts/openvox-stack/ci/autosign-policy-values.yaml" \
+                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server \
+                --set config.image.tag="${IMAGE_TAG}" \
+                --set config.image.pullPolicy=Always \
+                --set config.code.image=${IMAGE_REGISTRY}/openvox-e2e-code:${IMAGE_TAG}
+      catch:
+        - events: {}
+
+    - name: Assert Server is Running
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: e2e-autosign-policy-ca
+              status:
+                phase: Running
+                ready: 1
+                desired: 1
+
+    - name: Run Puppet agent with matching CSR attribute (expect success)
+      try:
+        - apply:
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: puppet-agent-match
+                namespace: e2e-autosign-policy
+              spec:
+                backoffLimit: 0
+                template:
+                  spec:
+                    restartPolicy: Never
+                    containers:
+                      - name: puppet-agent
+                        image: (join('', [$registry, '/openvox-agent:', $imageTag]))
+                        imagePullPolicy: Always
+                        command: ["sh", "-c"]
+                        args:
+                          - |
+                            mkdir -p /etc/puppetlabs/puppet
+                            cat > /etc/puppetlabs/puppet/csr_attributes.yaml << 'CSRATTR'
+                            extension_requests:
+                              pp_preshared_key: e2e-correct-key
+                            CSRATTR
+                            puppet agent --test \
+                              --server e2e-autosign-policy-server \
+                              --waitforcert 30 \
+                              --certname agent-match-test;
+                            EXIT=$?;
+                            if [ $EXIT -eq 0 ] || [ $EXIT -eq 2 ]; then exit 0; else exit $EXIT; fi
+                        securityContext:
+                          runAsUser: 0
+        - script:
+            timeout: 5m
+            content: |
+              kubectl wait --for=condition=Complete job/puppet-agent-match \
+                -n e2e-autosign-policy --timeout=300s
+
+    - name: Run Puppet agent with wrong CSR attribute (expect failure)
+      try:
+        - apply:
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: puppet-agent-nomatch
+                namespace: e2e-autosign-policy
+              spec:
+                activeDeadlineSeconds: 90
+                backoffLimit: 0
+                template:
+                  spec:
+                    restartPolicy: Never
+                    containers:
+                      - name: puppet-agent
+                        image: (join('', [$registry, '/openvox-agent:', $imageTag]))
+                        imagePullPolicy: Always
+                        command: ["sh", "-c"]
+                        args:
+                          - |
+                            mkdir -p /etc/puppetlabs/puppet
+                            cat > /etc/puppetlabs/puppet/csr_attributes.yaml << 'CSRATTR'
+                            extension_requests:
+                              pp_preshared_key: wrong-key
+                            CSRATTR
+                            puppet agent --test \
+                              --server e2e-autosign-policy-server \
+                              --waitforcert 5 \
+                              --certname agent-nomatch-test;
+                            EXIT=$?;
+                            if [ $EXIT -eq 0 ] || [ $EXIT -eq 2 ]; then exit 0; else exit $EXIT; fi
+                        securityContext:
+                          runAsUser: 0
+        - script:
+            timeout: 3m
+            content: |
+              kubectl wait --for=condition=Failed job/puppet-agent-nomatch \
+                -n e2e-autosign-policy --timeout=120s
+      finally:
+        - script:
+            timeout: 2m
+            content: |
+              kubectl logs -n e2e-autosign-policy job/puppet-agent-match || true
+              kubectl logs -n e2e-autosign-policy job/puppet-agent-nomatch || true
+              helm uninstall e2e-autosign-policy --namespace e2e-autosign-policy --wait 2>/dev/null || true
+              kubectl delete namespace e2e-autosign-policy --ignore-not-found 2>/dev/null || true

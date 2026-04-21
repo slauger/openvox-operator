@@ -1,0 +1,139 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: cert-rotation
+spec:
+  namespace: e2e-cert-rotation
+  bindings:
+    - name: registry
+      value: (env('IMAGE_REGISTRY') || 'ghcr.io/slauger')
+    - name: imageTag
+      value: (env('IMAGE_TAG') || 'latest')
+  steps:
+    - name: Install openvox-stack
+      try:
+        - script:
+            timeout: 2m
+            content: |
+              REPO_ROOT=$(git rev-parse --show-toplevel)
+              IMAGE_TAG=${IMAGE_TAG:-$(git describe --always)}
+              IMAGE_REGISTRY=${IMAGE_REGISTRY:-ghcr.io/slauger}
+              helm upgrade --install e2e-cert-rotation "${REPO_ROOT}/charts/openvox-stack" \
+                --namespace e2e-cert-rotation --create-namespace \
+                --values "${REPO_ROOT}/charts/openvox-stack/ci/cert-rotation-values.yaml" \
+                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server \
+                --set config.image.tag="${IMAGE_TAG}" \
+                --set config.image.pullPolicy=Always \
+                --set config.code.image=${IMAGE_REGISTRY}/openvox-e2e-code:${IMAGE_TAG}
+      catch:
+        - events: {}
+
+    - name: Assert Server is Running
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: e2e-cert-rotation-ca
+              status:
+                phase: Running
+                ready: 1
+                desired: 1
+
+    - name: Assert Certificate is Signed
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Certificate
+              metadata:
+                name: e2e-cert-rotation-ca
+              status:
+                phase: Signed
+
+    - name: Record original cert serial and trigger rotation
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              SECRET_NAME=$(kubectl get certificate.openvox.voxpupuli.org e2e-cert-rotation-ca \
+                -n e2e-cert-rotation -o jsonpath='{.status.secretName}')
+              SERIAL=$(kubectl get secret "${SECRET_NAME}" -n e2e-cert-rotation \
+                -o jsonpath='{.data.cert\.pem}' | base64 -d | openssl x509 -noout -serial)
+              echo "Original cert serial: ${SERIAL}"
+              echo "${SERIAL}" > /tmp/e2e-cert-rotation-original-serial
+        - script:
+            timeout: 30s
+            content: |
+              kubectl patch certificate.openvox.voxpupuli.org e2e-cert-rotation-ca \
+                -n e2e-cert-rotation \
+                --type=merge -p '{"spec":{"renewBefore":"99999d"}}'
+
+    - name: Wait for Certificate renewal to complete
+      try:
+        - script:
+            timeout: 3m
+            content: |
+              echo "Waiting for Certificate to enter Renewing phase..."
+              for i in $(seq 1 60); do
+                PHASE=$(kubectl get certificate.openvox.voxpupuli.org e2e-cert-rotation-ca \
+                  -n e2e-cert-rotation -o jsonpath='{.status.phase}' 2>/dev/null)
+                if [ "${PHASE}" = "Renewing" ]; then
+                  echo "Certificate entered Renewing phase"
+                  break
+                fi
+                sleep 2
+              done
+              echo "Waiting for Certificate to return to Signed phase..."
+              for i in $(seq 1 60); do
+                PHASE=$(kubectl get certificate.openvox.voxpupuli.org e2e-cert-rotation-ca \
+                  -n e2e-cert-rotation -o jsonpath='{.status.phase}' 2>/dev/null)
+                if [ "${PHASE}" = "Signed" ]; then
+                  echo "Certificate is Signed again"
+                  break
+                fi
+                sleep 2
+              done
+              if [ "${PHASE}" != "Signed" ]; then
+                echo "ERROR: Certificate did not return to Signed phase (current: ${PHASE})"
+                exit 1
+              fi
+
+    - name: Verify cert serial changed
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              SECRET_NAME=$(kubectl get certificate.openvox.voxpupuli.org e2e-cert-rotation-ca \
+                -n e2e-cert-rotation -o jsonpath='{.status.secretName}')
+              NEW_SERIAL=$(kubectl get secret "${SECRET_NAME}" -n e2e-cert-rotation \
+                -o jsonpath='{.data.cert\.pem}' | base64 -d | openssl x509 -noout -serial)
+              ORIGINAL_SERIAL=$(cat /tmp/e2e-cert-rotation-original-serial)
+              echo "Original serial: ${ORIGINAL_SERIAL}"
+              echo "New serial:      ${NEW_SERIAL}"
+              if [ "${NEW_SERIAL}" = "${ORIGINAL_SERIAL}" ]; then
+                echo "ERROR: Certificate serial did not change after rotation"
+                exit 1
+              fi
+              echo "Certificate was successfully rotated"
+
+    - name: Assert Server still Running after rotation
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: e2e-cert-rotation-ca
+              status:
+                phase: Running
+                ready: 1
+                desired: 1
+      finally:
+        - script:
+            timeout: 2m
+            content: |
+              rm -f /tmp/e2e-cert-rotation-original-serial
+              helm uninstall e2e-cert-rotation --namespace e2e-cert-rotation --wait 2>/dev/null || true
+              kubectl delete namespace e2e-cert-rotation --ignore-not-found 2>/dev/null || true

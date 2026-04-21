@@ -184,6 +184,17 @@ COPY cmd/enc/ cmd/enc/
 RUN CGO_ENABLED=0 go build -o /openvox-enc ./cmd/enc/
 
 ################################################################################
+# Stage: report — compile the openvox-report Go binary
+################################################################################
+FROM docker.io/library/golang:1.26.2 AS report
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd/report/ cmd/report/
+RUN CGO_ENABLED=0 go build -o /openvox-report ./cmd/report/
+
+################################################################################
 # Stage: final — rootless runtime image (no Ruby)
 ################################################################################
 FROM base AS final
@@ -224,8 +235,10 @@ COPY images/openvox-server/healthcheck.sh /healthcheck.sh
 COPY images/openvox-server/cli-ca.sh /opt/puppetlabs/server/apps/puppetserver/cli/apps/ca
 COPY --from=autosign /openvox-autosign /usr/local/bin/openvox-autosign
 COPY --from=enc /openvox-enc /usr/local/bin/openvox-enc
+COPY --from=report /openvox-report /opt/puppetlabs/server/bin/openvox-report
+COPY puppet/reports/webhook.rb /opt/puppetlabs/puppet/lib/ruby/vendor_ruby/puppet/reports/webhook.rb
 
-RUN chmod +x /entrypoint.sh /healthcheck.sh /opt/puppetlabs/server/apps/puppetserver/cli/apps/ca /usr/local/bin/openvox-autosign /usr/local/bin/openvox-enc
+RUN chmod +x /entrypoint.sh /healthcheck.sh /opt/puppetlabs/server/apps/puppetserver/cli/apps/ca /usr/local/bin/openvox-autosign /usr/local/bin/openvox-enc /opt/puppetlabs/server/bin/openvox-report
 
 # Set HOME explicitly: random UIDs (OpenShift) default HOME to "/"
 ENV HOME=/opt/puppetlabs/server/data/puppetserver

@@ -8,22 +8,9 @@ on:
         required: false
         type: string
         default: 'develop'
-      group:
-        description: 'Test group to run'
-        required: false
-        type: choice
-        default: 'all'
-        options:
-          - all
-          - base
-          - enc
-          - gateway
-          - webhooks-byo
-          - webhooks-cm
 
 jobs:
   e2e-base:
-    if: inputs.group == 'all' || inputs.group == 'base'
     uses: ./.github/workflows/_e2e-run.yaml
     with:
       image_tag: ${{ inputs.image_tag }}
@@ -31,7 +18,6 @@ jobs:
     secrets: inherit
 
   e2e-enc:
-    if: inputs.group == 'all' || inputs.group == 'enc'
     needs: [e2e-base]
     uses: ./.github/workflows/_e2e-run.yaml
     with:
@@ -40,7 +26,6 @@ jobs:
     secrets: inherit
 
   e2e-gateway:
-    if: inputs.group == 'all' || inputs.group == 'gateway'
     needs: [e2e-enc]
     uses: ./.github/workflows/_e2e-run.yaml
     with:
@@ -49,7 +34,6 @@ jobs:
     secrets: inherit
 
   e2e-webhooks-byo:
-    if: inputs.group == 'all' || inputs.group == 'webhooks-byo'
     needs: [e2e-gateway]
     uses: ./.github/workflows/_e2e-run.yaml
     with:
@@ -58,7 +42,6 @@ jobs:
     secrets: inherit
 
   e2e-webhooks-cm:
-    if: inputs.group == 'all' || inputs.group == 'webhooks-cm'
     needs: [e2e-webhooks-byo]
     uses: ./.github/workflows/_e2e-run.yaml
     with:

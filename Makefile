@@ -298,7 +298,12 @@ e2e-group-base: e2e-operator-base chainsaw ## Group: base tests (stack, agent, d
 e2e-group-enc: e2e-operator-base chainsaw ## Group: ENC and full agent tests.
 	$(E2E_CHAINSAW) \
 		tests/e2e/agent-enc \
-		tests/e2e/agent-full \
+		tests/e2e/agent-full; \
+	EXIT=$$?; $(MAKE) e2e-cleanup; exit $$EXIT
+
+.PHONY: e2e-group-ca
+e2e-group-ca: e2e-operator-base chainsaw ## Group: CA tests (external CA).
+	$(E2E_CHAINSAW) \
 		tests/e2e/external-ca; \
 	EXIT=$$?; $(MAKE) e2e-cleanup; exit $$EXIT
 
@@ -321,6 +326,7 @@ e2e-group-webhooks-cm: e2e-operator-webhooks-cm chainsaw ## Group: webhook tests
 e2e-all: ## Run all E2E test groups sequentially.
 	$(MAKE) e2e-group-base
 	$(MAKE) e2e-group-enc
+	$(MAKE) e2e-group-ca
 	$(MAKE) e2e-group-gateway
 	$(MAKE) e2e-group-webhooks-cm
 

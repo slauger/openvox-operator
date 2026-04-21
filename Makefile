@@ -287,14 +287,19 @@ e2e-group-base: e2e-operator-base chainsaw ## Group: base tests (stack, agent, d
 		tests/e2e/agent-idempotent \
 		tests/e2e/agent-concurrent \
 		tests/e2e/agent-report \
-		tests/e2e/database-cnpg; \
+		tests/e2e/database-cnpg \
+		tests/e2e/readonly-rootfs \
+		tests/e2e/code-pvc \
+		tests/e2e/autosign-policy \
+		tests/e2e/cert-rotation; \
 	EXIT=$$?; $(MAKE) e2e-cleanup; exit $$EXIT
 
 .PHONY: e2e-group-enc
 e2e-group-enc: e2e-operator-base chainsaw ## Group: ENC and full agent tests.
 	$(E2E_CHAINSAW) \
 		tests/e2e/agent-enc \
-		tests/e2e/agent-full; \
+		tests/e2e/agent-full \
+		tests/e2e/external-ca; \
 	EXIT=$$?; $(MAKE) e2e-cleanup; exit $$EXIT
 
 .PHONY: e2e-group-gateway

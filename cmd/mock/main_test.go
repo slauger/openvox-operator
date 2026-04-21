@@ -604,11 +604,11 @@ func TestAPIReset(t *testing.T) {
 	defer ts.Close()
 
 	// Store some data
-	http.Post(ts.URL+"/reports", "application/json", strings.NewReader(`{"host":"test"}`))
-	http.Post(ts.URL+"/services/collector/event", "application/json", strings.NewReader(`{"event":"test"}`))
+	_, _ = http.Post(ts.URL+"/reports", "application/json", strings.NewReader(`{"host":"test"}`))
+	_, _ = http.Post(ts.URL+"/services/collector/event", "application/json", strings.NewReader(`{"event":"test"}`))
 	cmd := `{"command":"replace facts","version":5,"payload":{"certname":"node1"}}`
-	http.Post(ts.URL+"/pdb/cmd/v1", "application/json", strings.NewReader(cmd))
-	http.Get(ts.URL + "/node/test-node")
+	_, _ = http.Post(ts.URL+"/pdb/cmd/v1", "application/json", strings.NewReader(cmd))
+	_, _ = http.Get(ts.URL + "/node/test-node")
 
 	// Reset
 	req, _ := http.NewRequest("DELETE", ts.URL+"/api/reset", nil)

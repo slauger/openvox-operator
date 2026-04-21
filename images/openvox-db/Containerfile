@@ -16,7 +16,7 @@ ARG OPENVOXDB_VERSION=8.12.1
 ################################################################################
 FROM registry.access.redhat.com/ubi9/ubi:9.7-1776645994 AS base
 
-ARG JDK_VERSION=17
+ARG JDK_VERSION=21
 
 RUN dnf install -y --allowerasing --setopt=install_weak_deps=False \
         java-${JDK_VERSION}-openjdk-headless \

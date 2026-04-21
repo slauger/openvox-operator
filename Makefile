@@ -271,7 +271,7 @@ e2e-operator-gateway: e2e-cleanup ## Install operator: webhooks=false, gatewayAP
 
 .PHONY: e2e-operator-webhooks-byo
 e2e-operator-webhooks-byo: e2e-cleanup e2e-webhook-byo-cert ## Install operator: webhooks=true, BYO TLS cert.
-	$(eval CA_BUNDLE := $(shell kubectl get secret $(WEBHOOK_CERT_SECRET) -n $(NAMESPACE) -o jsonpath='{.data.ca\.crt}'))
+	CA_BUNDLE=$$(kubectl get secret $(WEBHOOK_CERT_SECRET) -n $(NAMESPACE) -o jsonpath='{.data.ca\.crt}') && \
 	helm upgrade --install openvox-operator charts/openvox-operator \
 		--namespace $(NAMESPACE) --create-namespace \
 		--set image.repository=$(IMAGE_REGISTRY)/openvox-operator \
@@ -282,7 +282,7 @@ e2e-operator-webhooks-byo: e2e-cleanup e2e-webhook-byo-cert ## Install operator:
 		--set webhook.enabled=true \
 		--set webhook.certManager.enabled=false \
 		--set webhook.tls.certSecret=$(WEBHOOK_CERT_SECRET) \
-		--set webhook.tls.caBundle=$(CA_BUNDLE) \
+		--set webhook.tls.caBundle=$${CA_BUNDLE} \
 		--set gatewayAPI.enabled=false
 	kubectl wait --for=condition=Available deployment/openvox-operator \
 		-n $(NAMESPACE) --timeout=2m

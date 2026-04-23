@@ -91,7 +91,7 @@ spec:
                 name: puppet-agent-nomatch
                 namespace: e2e-autosign-policy
               spec:
-                activeDeadlineSeconds: 90
+                activeDeadlineSeconds: 60
                 backoffLimit: 0
                 template:
                   spec:

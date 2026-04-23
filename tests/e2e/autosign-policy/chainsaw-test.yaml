@@ -91,7 +91,7 @@ spec:
                 name: puppet-agent-nomatch
                 namespace: e2e-autosign-policy
               spec:
-                activeDeadlineSeconds: 90
+                activeDeadlineSeconds: 60
                 backoffLimit: 0
                 template:
                   spec:
@@ -119,7 +119,7 @@ spec:
         - script:
             timeout: 3m
             content: |
-              kubectl wait --for=condition=Failed job/puppet-agent-nomatch \
+              kubectl wait --for=jsonpath='{.status.failed}'=1 job/puppet-agent-nomatch \
                 -n e2e-autosign-policy --timeout=120s
       finally:
         - script:

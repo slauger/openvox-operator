@@ -235,6 +235,36 @@ func TestCertReconcile_RenewalTriggered(t *testing.T) {
 	}
 }
 
+func TestCertReconcile_RenewingPhaseNotOverriddenByAdopt(t *testing.T) {
+	// Regression test: a cert already in Renewing phase must not be reset to
+	// Signed by the adopt-existing-secret block on the next reconcile.
+	certPEM, keyPEM := generateTestCertWithExpiry(t, 30*24*time.Hour)
+
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseRenewing)
+	cert.Status.NotAfter = parseCertNotAfter(testCtx(), certPEM)
+	cert.Status.SecretName = "my-cert-tls"
+	ca := newCertificateAuthority("test-ca")
+	tlsSecret := newSecret("my-cert-tls", map[string][]byte{
+		"cert.pem": certPEM,
+		"key.pem":  keyPEM,
+	})
+
+	c := setupTestClient(cert, ca, tlsSecret)
+	r := newCertificateReconciler(c)
+
+	// Reconcile should enter reconcileCertRenewal, not the adopt block.
+	// It will fail (no actual CA server) but must NOT reset the phase to Signed.
+	_, _ = r.Reconcile(testCtx(), testRequest("my-cert"))
+
+	updated := &openvoxv1alpha1.Certificate{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "my-cert", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get Certificate: %v", err)
+	}
+	if updated.Status.Phase != openvoxv1alpha1.CertificatePhaseRenewing {
+		t.Errorf("expected phase %q to be preserved, got %q", openvoxv1alpha1.CertificatePhaseRenewing, updated.Status.Phase)
+	}
+}
+
 func TestCertReconcile_SignedCertNoRequeue_BecomesRequeue(t *testing.T) {
 	// Verify that a signed cert with valid NotAfter now returns RequeueAfter > 0
 	// (the old behavior was ctrl.Result{} with no requeue)

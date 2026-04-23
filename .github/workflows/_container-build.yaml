@@ -168,7 +168,7 @@ jobs:
 
       - name: Install cosign
         if: inputs.sign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@v4.1.1
 
       - name: Create and push manifest
         run: |

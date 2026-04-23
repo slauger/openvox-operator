@@ -29,6 +29,8 @@ func (r *ConfigReconciler) renderPuppetConf(ctx context.Context, cfg *openvoxv1a
 		fmt.Fprintf(&sb, "hiera_config = %s\n", cfg.Spec.Puppet.HieraConfig)
 	}
 
+	writeExtraConfig(&sb, cfg.Spec.Puppet.ExtraConfig, "main")
+
 	sb.WriteString("\n[server]\n")
 
 	if cfg.Spec.Puppet.EnvironmentTimeout != "" {
@@ -84,16 +86,38 @@ func (r *ConfigReconciler) renderPuppetConf(ctx context.Context, cfg *openvoxv1a
 		fmt.Fprintf(&sb, "external_nodes = %s\n", encBinaryPath)
 	}
 
-	extraKeys := make([]string, 0, len(cfg.Spec.Puppet.ExtraConfig))
-	for k := range cfg.Spec.Puppet.ExtraConfig {
-		extraKeys = append(extraKeys, k)
-	}
-	sort.Strings(extraKeys)
-	for _, k := range extraKeys {
-		fmt.Fprintf(&sb, "%s = %s\n", k, cfg.Spec.Puppet.ExtraConfig[k])
+	writeExtraConfig(&sb, cfg.Spec.Puppet.ExtraConfig, "server")
+
+	if cfg.Spec.Puppet.ExtraConfig != nil && len(cfg.Spec.Puppet.ExtraConfig.Agent) > 0 {
+		sb.WriteString("\n[agent]\n")
+		writeExtraConfig(&sb, cfg.Spec.Puppet.ExtraConfig, "agent")
 	}
 
 	return sb.String(), nil
+}
+
+// writeExtraConfig writes sorted key=value pairs from the given section of a PuppetExtraConfig.
+func writeExtraConfig(sb *strings.Builder, extra *openvoxv1alpha1.PuppetExtraConfig, section string) {
+	if extra == nil {
+		return
+	}
+	var m map[string]string
+	switch section {
+	case "main":
+		m = extra.Main
+	case "server":
+		m = extra.Server
+	case "agent":
+		m = extra.Agent
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		fmt.Fprintf(sb, "%s = %s\n", k, m[k])
+	}
 }
 
 func (r *ConfigReconciler) renderPuppetDBConf(ctx context.Context, cfg *openvoxv1alpha1.Config) (string, error) {

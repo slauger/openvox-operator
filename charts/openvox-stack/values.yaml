@@ -22,8 +22,11 @@ config:
     reports: store
     extraConfig: {}
     # extraConfig:
-    #   strict_variables: "true"
-    #   parser: future
+    #   main:
+    #     environment: production
+    #   server:
+    #     strict_variables: "true"
+    #   agent: {}
   code:
     image: ""
     imagePullPolicy: IfNotPresent

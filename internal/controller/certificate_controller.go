@@ -164,6 +164,22 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	tlsSecretName := fmt.Sprintf("%s-tls", cert.Name)
 
+	// Handle renewal phase before anything else — a Renewing cert must not
+	// be overridden by the adopt-existing-secret block below.
+	if cert.Status.Phase == openvoxv1alpha1.CertificatePhaseRenewing {
+		return r.reconcileCertRenewal(ctx, cert, ca)
+	}
+
+	// If the certificate is already signed, just schedule renewal checks.
+	// This avoids re-adopting the TLS Secret on every reconcile, which would
+	// reset the phase and prevent entering the Renewing state.
+	if cert.Status.Phase == openvoxv1alpha1.CertificatePhaseSigned {
+		if cert.Status.NotAfter == nil {
+			return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
+		}
+		return r.scheduleRenewalCheck(ctx, cert)
+	}
+
 	// Check if TLS Secret already exists (may have been created by CA setup job)
 	if isSecretReady(ctx, r.Client, tlsSecretName, cert.Namespace, "cert.pem") {
 		if err := r.adoptTLSSecret(ctx, cert, tlsSecretName); err != nil {
@@ -190,11 +206,6 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 		}
 		return r.scheduleRenewalCheck(ctx, cert)
-	}
-
-	// Handle renewal phase
-	if cert.Status.Phase == openvoxv1alpha1.CertificatePhaseRenewing {
-		return r.reconcileCertRenewal(ctx, cert, ca)
 	}
 
 	// Sign certificate via CA HTTP API

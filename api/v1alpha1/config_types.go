@@ -361,9 +361,24 @@ type PuppetSpec struct {
 	// +optional
 	Reports string `json:"reports,omitempty"`
 
-	// ExtraConfig is a map of additional puppet.conf entries.
+	// ExtraConfig adds additional puppet.conf entries to specific INI sections.
 	// +optional
-	ExtraConfig map[string]string `json:"extraConfig,omitempty"`
+	ExtraConfig *PuppetExtraConfig `json:"extraConfig,omitempty"`
+}
+
+// PuppetExtraConfig holds additional puppet.conf entries per INI section.
+type PuppetExtraConfig struct {
+	// Main adds entries to the [main] section.
+	// +optional
+	Main map[string]string `json:"main,omitempty"`
+
+	// Server adds entries to the [server] section.
+	// +optional
+	Server map[string]string `json:"server,omitempty"`
+
+	// Agent adds entries to the [agent] section.
+	// +optional
+	Agent map[string]string `json:"agent,omitempty"`
 }
 
 // PuppetDBSpec defines the OpenVox DB connection.

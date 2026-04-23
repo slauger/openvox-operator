@@ -49,7 +49,28 @@ spec:
 | `storeconfigs` | bool | `true` | Enable storeconfigs |
 | `storeBackend` | string | `puppetdb` | Storeconfigs backend |
 | `reports` | string | `puppetdb` | Report processors |
-| `extraConfig` | map[string]string | - | Additional puppet.conf entries |
+| `extraConfig` | [PuppetExtraConfig](#puppetextraconfig) | - | Additional puppet.conf entries per INI section |
+
+### PuppetExtraConfig
+
+Additional puppet.conf entries grouped by INI section.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `main` | map[string]string | - | Entries for the `[main]` section |
+| `server` | map[string]string | - | Entries for the `[server]` section |
+| `agent` | map[string]string | - | Entries for the `[agent]` section |
+
+Example:
+
+```yaml
+puppet:
+  extraConfig:
+    main:
+      environment: staging
+    server:
+      strict_variables: "true"
+```
 
 ### PuppetDBSpec
 

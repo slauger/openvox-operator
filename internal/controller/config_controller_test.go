@@ -113,15 +113,41 @@ func TestConfigReconcile_PuppetConfRendering(t *testing.T) {
 			contains: []string{"hiera_config = /etc/puppetlabs/custom/hiera.yaml"},
 		},
 		{
-			name: "extraConfig sorted",
+			name: "extraConfig server section sorted",
 			opts: []configOption{withPuppetSpec(openvoxv1alpha1.PuppetSpec{
 				Reports: "puppetdb",
-				ExtraConfig: map[string]string{
-					"zz_setting": "zvalue",
-					"aa_setting": "avalue",
+				ExtraConfig: &openvoxv1alpha1.PuppetExtraConfig{
+					Server: map[string]string{
+						"zz_setting": "zvalue",
+						"aa_setting": "avalue",
+					},
 				},
 			})},
 			contains: []string{"aa_setting = avalue", "zz_setting = zvalue"},
+		},
+		{
+			name: "extraConfig main section",
+			opts: []configOption{withPuppetSpec(openvoxv1alpha1.PuppetSpec{
+				Reports: "puppetdb",
+				ExtraConfig: &openvoxv1alpha1.PuppetExtraConfig{
+					Main: map[string]string{
+						"environment": "staging",
+					},
+				},
+			})},
+			contains: []string{"environment = staging"},
+		},
+		{
+			name: "extraConfig agent section",
+			opts: []configOption{withPuppetSpec(openvoxv1alpha1.PuppetSpec{
+				Reports: "puppetdb",
+				ExtraConfig: &openvoxv1alpha1.PuppetExtraConfig{
+					Agent: map[string]string{
+						"noop": "true",
+					},
+				},
+			})},
+			contains: []string{"[agent]\n", "noop = true"},
 		},
 	}
 

@@ -211,9 +211,24 @@ spec:
                       When unset, Puppet's default (0 = no caching) is used.
                     type: string
                   extraConfig:
-                    additionalProperties:
-                      type: string
-                    description: ExtraConfig is a map of additional puppet.conf entries.
+                    description: ExtraConfig adds additional puppet.conf entries to
+                      specific INI sections.
+                    properties:
+                      agent:
+                        additionalProperties:
+                          type: string
+                        description: Agent adds entries to the [agent] section.
+                        type: object
+                      main:
+                        additionalProperties:
+                          type: string
+                        description: Main adds entries to the [main] section.
+                        type: object
+                      server:
+                        additionalProperties:
+                          type: string
+                        description: Server adds entries to the [server] section.
+                        type: object
                     type: object
                   hieraConfig:
                     default: $confdir/hiera.yaml

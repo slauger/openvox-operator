@@ -172,6 +172,8 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 		{Name: "logback-xml", MountPath: "/etc/puppetlabs/puppetserver/logback.xml", SubPath: "logback.xml", ReadOnly: true},
 		{Name: "metrics-conf", MountPath: "/etc/puppetlabs/puppetserver/conf.d/metrics.conf", SubPath: "metrics.conf", ReadOnly: true},
 		{Name: "puppetserver-data", MountPath: "/run/puppetserver"},
+		{Name: "puppet-cache", MountPath: "/opt/puppetlabs/puppet/cache"},
+		{Name: "puppet-run", MountPath: "/var/run/puppetlabs"},
 		{Name: "tmp", MountPath: "/tmp"},
 		{Name: "var-log", MountPath: "/var/log/puppetlabs"},
 	}
@@ -184,6 +186,8 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 	volumes := []corev1.Volume{
 		{Name: "ssl", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 		{Name: "puppetserver-data", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+		{Name: "puppet-cache", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+		{Name: "puppet-run", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 		{Name: "tmp", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 		{Name: "var-log", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 		{

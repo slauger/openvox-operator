@@ -180,20 +180,27 @@ tests:
           path: spec.puppet.storeBackend
           value: puppetdb
 
-  - it: should propagate puppet extraConfig
+  - it: should propagate puppet extraConfig sections
     set:
       config:
         puppet:
           extraConfig:
-            strict_variables: "true"
-            parser: future
+            main:
+              environment: staging
+            server:
+              strict_variables: "true"
+            agent:
+              noop: "true"
     asserts:
       - equal:
-          path: spec.puppet.extraConfig.strict_variables
+          path: spec.puppet.extraConfig.main.environment
+          value: staging
+      - equal:
+          path: spec.puppet.extraConfig.server.strict_variables
           value: "true"
       - equal:
-          path: spec.puppet.extraConfig.parser
-          value: future
+          path: spec.puppet.extraConfig.agent.noop
+          value: "true"
 
   - it: should propagate puppetserver settings
     set:

@@ -17,9 +17,9 @@ ARG OPENVOX_VERSION=8.26.2
 ################################################################################
 # Stage: base — JRE + minimal runtime deps (no Ruby)
 ################################################################################
-FROM registry.access.redhat.com/ubi9/ubi:9.7-1776645994 AS base
+FROM registry.access.redhat.com/ubi9/ubi:9.7-1776834047 AS base
 
-ARG JDK_VERSION=17
+ARG JDK_VERSION=21
 
 RUN dnf install -y --allowerasing --setopt=install_weak_deps=False \
         java-${JDK_VERSION}-openjdk-headless \

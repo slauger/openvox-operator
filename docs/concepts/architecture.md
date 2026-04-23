@@ -138,6 +138,8 @@ Server pods can optionally use `readOnlyRootFilesystem: true` for security harde
 | `logback-xml` | ConfigMap | `.../puppetserver/logback.xml` | Yes | Logging configuration |
 | `metrics-conf` | ConfigMap | `.../conf.d/metrics.conf` | Yes | Metrics endpoint configuration |
 | `puppetserver-data` | emptyDir | `/run/puppetserver` | No | Server runtime data (`server-var-dir`) |
+| `puppet-cache` | emptyDir | `/opt/puppetlabs/puppet/cache` | No | Puppet vardir (facts, state, lib) |
+| `puppet-run` | emptyDir | `/var/run/puppetlabs` | No | Puppet rundir (PID files) |
 | `tmp` | emptyDir | `/tmp` | No | Temporary files |
 | `var-log` | emptyDir | `/var/log/puppetlabs` | No | Server logs |
 
@@ -240,7 +242,7 @@ The operator uses a minimal container image:
 
 **Included:**
 
-- UBI9 + JDK 17
+- UBI9 + JDK 21
 - Tarball installation (puppet-server-release.jar, CLI tools, vendored JRuby gems)
 - OpenVox DB termini
 - OpenShift random-UID pattern (chgrp 0, chmod g=u)

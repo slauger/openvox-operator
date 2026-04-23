@@ -164,7 +164,7 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	tlsSecretName := fmt.Sprintf("%s-tls", cert.Name)
 
-	// Handle renewal phase before anything else — a Renewing cert must not
+	// Handle renewal phase before anything else - a Renewing cert must not
 	// be overridden by the adopt-existing-secret block below.
 	if cert.Status.Phase == openvoxv1alpha1.CertificatePhaseRenewing {
 		return r.reconcileCertRenewal(ctx, cert, ca)

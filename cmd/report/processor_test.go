@@ -352,7 +352,9 @@ func TestLoadReportConfig_FileNotFound(t *testing.T) {
 func TestLoadReportConfig_InvalidYAML(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "report.yaml")
-	os.WriteFile(path, []byte(":\n\t- invalid\x00"), 0644)
+	if err := os.WriteFile(path, []byte(":\n\t- invalid\x00"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	_, err := loadReportConfig(path)
 	if err == nil {
@@ -396,7 +398,9 @@ func TestBuildHTTPClient_WithValidCA(t *testing.T) {
 		t.Fatal(err)
 	}
 	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})
-	os.WriteFile(caFile, caPEM, 0644)
+	if err := os.WriteFile(caFile, caPEM, 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	endpoint := EndpointConfig{
 		TimeoutSeconds: 5,
@@ -428,7 +432,9 @@ func TestBuildHTTPClient_MissingCA(t *testing.T) {
 func TestBuildHTTPClient_InvalidCAPEM(t *testing.T) {
 	dir := t.TempDir()
 	caFile := filepath.Join(dir, "bad-ca.pem")
-	os.WriteFile(caFile, []byte("not a cert"), 0644)
+	if err := os.WriteFile(caFile, []byte("not a cert"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	endpoint := EndpointConfig{
 		TimeoutSeconds: 5,
@@ -467,9 +473,13 @@ func TestBuildHTTPClient_MTLS(t *testing.T) {
 	certFile := filepath.Join(dir, "client.pem")
 	keyFile := filepath.Join(dir, "client-key.pem")
 
-	os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: clientDER}), 0644)
+	if err := os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: clientDER}), 0644); err != nil {
+		t.Fatal(err)
+	}
 	keyBytes, _ := x509.MarshalECPrivateKey(clientKey)
-	os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes}), 0644)
+	if err := os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes}), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	endpoint := EndpointConfig{
 		TimeoutSeconds: 5,
@@ -495,8 +505,12 @@ func TestBuildHTTPClient_MTLS_InvalidKeyPair(t *testing.T) {
 	certFile := filepath.Join(dir, "cert.pem")
 	keyFile := filepath.Join(dir, "key.pem")
 
-	os.WriteFile(certFile, []byte("not a cert"), 0644)
-	os.WriteFile(keyFile, []byte("not a key"), 0644)
+	if err := os.WriteFile(certFile, []byte("not a cert"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyFile, []byte("not a key"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	endpoint := EndpointConfig{
 		TimeoutSeconds: 5,

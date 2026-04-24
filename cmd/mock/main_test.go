@@ -692,7 +692,9 @@ func TestLoadClassificationsFile_StatError(t *testing.T) {
 func TestLoadClassificationsFile_InvalidYAML(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "bad.yaml")
-	os.WriteFile(path, []byte(":\n\t[invalid\x00"), 0644)
+	if err := os.WriteFile(path, []byte(":\n\t[invalid\x00"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	s := &server{classificationsFile: path}
 	err := s.loadClassificationsFile()

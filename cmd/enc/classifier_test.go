@@ -691,8 +691,12 @@ func TestBuildHTTPClient_MTLS_InvalidKeyPair(t *testing.T) {
 	certFile := filepath.Join(dir, "cert.pem")
 	keyFile := filepath.Join(dir, "key.pem")
 
-	os.WriteFile(certFile, []byte("not a cert"), 0644)
-	os.WriteFile(keyFile, []byte("not a key"), 0644)
+	if err := os.WriteFile(certFile, []byte("not a cert"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyFile, []byte("not a key"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg := &ENCConfig{
 		TimeoutSeconds: 5,
@@ -764,7 +768,9 @@ func TestNormalizeResponse_InvalidYAML(t *testing.T) {
 func TestLoadENCConfig_InvalidYAML(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "enc.yaml")
-	os.WriteFile(path, []byte(":\n\t- invalid yaml\x00"), 0644)
+	if err := os.WriteFile(path, []byte(":\n\t- invalid yaml\x00"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	_, err := loadENCConfig(path)
 	if err == nil {

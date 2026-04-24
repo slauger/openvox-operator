@@ -1,8 +1,11 @@
 package controller
 
 import (
+	"fmt"
 	"strings"
 	"testing"
+
+	"k8s.io/apimachinery/pkg/types"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
@@ -262,5 +265,37 @@ func TestRenderENCConfig_CacheCustomDirectory(t *testing.T) {
 
 	if !strings.Contains(out, "directory: /custom/cache/dir") {
 		t.Errorf("expected custom cache directory in output:\n%s", out)
+	}
+}
+
+func TestUpdateNodeClassifierStatus_Success(t *testing.T) {
+	nc := newNodeClassifier("test-nc", "https://foreman.example.com")
+	c := setupTestClient(nc)
+	r := newConfigReconciler(c)
+
+	r.updateNodeClassifierStatus(testCtx(), nc, nil)
+
+	updated := &openvoxv1alpha1.NodeClassifier{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-nc", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get NodeClassifier: %v", err)
+	}
+	if updated.Status.Phase != openvoxv1alpha1.NodeClassifierPhaseActive {
+		t.Errorf("expected phase %q, got %q", openvoxv1alpha1.NodeClassifierPhaseActive, updated.Status.Phase)
+	}
+}
+
+func TestUpdateNodeClassifierStatus_Error(t *testing.T) {
+	nc := newNodeClassifier("test-nc", "https://foreman.example.com")
+	c := setupTestClient(nc)
+	r := newConfigReconciler(c)
+
+	r.updateNodeClassifierStatus(testCtx(), nc, fmt.Errorf("render failed"))
+
+	updated := &openvoxv1alpha1.NodeClassifier{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-nc", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get NodeClassifier: %v", err)
+	}
+	if updated.Status.Phase != openvoxv1alpha1.NodeClassifierPhaseError {
+		t.Errorf("expected phase %q, got %q", openvoxv1alpha1.NodeClassifierPhaseError, updated.Status.Phase)
 	}
 }

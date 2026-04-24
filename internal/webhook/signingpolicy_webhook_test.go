@@ -9,6 +9,30 @@ import (
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
 
+func TestSigningPolicyValidator_Update(t *testing.T) {
+	ca := &openvoxv1alpha1.CertificateAuthority{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-ca", Namespace: "default"},
+	}
+	c := setupTestClient(ca)
+	v := &SigningPolicyValidator{Client: c}
+
+	valid := &openvoxv1alpha1.SigningPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Spec:       openvoxv1alpha1.SigningPolicySpec{CertificateAuthorityRef: "my-ca"},
+	}
+	invalid := &openvoxv1alpha1.SigningPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Spec:       openvoxv1alpha1.SigningPolicySpec{CertificateAuthorityRef: "missing-ca"},
+	}
+
+	if _, err := v.ValidateUpdate(context.Background(), nil, valid); err != nil {
+		t.Errorf("expected no error for valid update, got %v", err)
+	}
+	if _, err := v.ValidateUpdate(context.Background(), nil, invalid); err == nil {
+		t.Error("expected error for missing CA ref update")
+	}
+}
+
 func TestSigningPolicyValidator(t *testing.T) {
 	ca := &openvoxv1alpha1.CertificateAuthority{
 		ObjectMeta: metav1.ObjectMeta{Name: "my-ca", Namespace: "default"},

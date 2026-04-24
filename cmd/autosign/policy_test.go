@@ -421,3 +421,22 @@ func TestPuppetOIDs(t *testing.T) {
 		}
 	}
 }
+
+func TestDecodeExtensionValue_RawFallback(t *testing.T) {
+	// Extension value that is not valid ASN.1 UTF8String triggers raw fallback
+	ext := pkix.Extension{
+		Id:    puppet.PuppetOIDs["pp_uuid"],
+		Value: []byte("raw-value"),
+	}
+	val := decodeExtensionValue(ext)
+	if val != "raw-value" {
+		t.Errorf("expected raw fallback %q, got %q", "raw-value", val)
+	}
+}
+
+func TestGlobMatch_InvalidPattern(t *testing.T) {
+	// filepath.Match returns error for patterns with unclosed bracket
+	if globMatch("[invalid", "test") {
+		t.Error("expected false for invalid glob pattern")
+	}
+}

@@ -1,10 +1,12 @@
 package controller
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
@@ -211,5 +213,37 @@ func TestRenderAutosignPolicyConfig_SortOrder(t *testing.T) {
 
 	if alphaIdx >= bravoIdx || bravoIdx >= charlieIdx {
 		t.Errorf("policies not sorted by name; alpha=%d, bravo=%d, charlie=%d", alphaIdx, bravoIdx, charlieIdx)
+	}
+}
+
+func TestUpdateSigningPolicyStatus_Success(t *testing.T) {
+	sp := newSigningPolicy("test-policy", "test-ca", true)
+	c := setupTestClient(sp)
+	r := newConfigReconciler(c)
+
+	r.updateSigningPolicyStatus(testCtx(), sp, nil)
+
+	updated := &openvoxv1alpha1.SigningPolicy{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-policy", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get SigningPolicy: %v", err)
+	}
+	if updated.Status.Phase != openvoxv1alpha1.SigningPolicyPhaseActive {
+		t.Errorf("expected phase %q, got %q", openvoxv1alpha1.SigningPolicyPhaseActive, updated.Status.Phase)
+	}
+}
+
+func TestUpdateSigningPolicyStatus_Error(t *testing.T) {
+	sp := newSigningPolicy("test-policy", "test-ca", true)
+	c := setupTestClient(sp)
+	r := newConfigReconciler(c)
+
+	r.updateSigningPolicyStatus(testCtx(), sp, fmt.Errorf("rendering failed"))
+
+	updated := &openvoxv1alpha1.SigningPolicy{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-policy", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get SigningPolicy: %v", err)
+	}
+	if updated.Status.Phase != openvoxv1alpha1.SigningPolicyPhaseError {
+		t.Errorf("expected phase %q, got %q", openvoxv1alpha1.SigningPolicyPhaseError, updated.Status.Phase)
 	}
 }

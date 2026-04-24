@@ -4,9 +4,11 @@ import (
 	"strings"
 	"testing"
 
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
@@ -234,4 +236,212 @@ func TestResolveCAJobResources(t *testing.T) {
 			t.Errorf("expected memory limit 4Gi, got %s", res.Limits.Memory().String())
 		}
 	})
+}
+
+func TestReconcileJob_CreatesNew(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	cfg := caPrereqs("test-ca")
+	c := setupTestClient(ca, cfg)
+	r := newCertificateAuthorityReconciler(c)
+
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ca-setup",
+			Namespace: testNamespace,
+		},
+		Spec: batchv1.JobSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers:    []corev1.Container{{Name: "setup", Image: "test:latest"}},
+					RestartPolicy: corev1.RestartPolicyNever,
+				},
+			},
+		},
+	}
+
+	res, err := r.reconcileJob(testCtx(), ca, "test-ca-setup", job, "test-ca-ca")
+	if err != nil {
+		t.Fatalf("reconcileJob: %v", err)
+	}
+	if res.RequeueAfter != RequeueIntervalMedium {
+		t.Errorf("expected requeue after %v, got %v", RequeueIntervalMedium, res.RequeueAfter)
+	}
+
+	created := &batchv1.Job{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca-setup", Namespace: testNamespace}, created); err != nil {
+		t.Fatalf("Job not created: %v", err)
+	}
+}
+
+func TestReconcileJob_Succeeded(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	cfg := caPrereqs("test-ca")
+
+	// Pre-create the expected secret
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": []byte("ca-cert-pem"),
+	})
+
+	existingJob := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ca-setup",
+			Namespace: testNamespace,
+		},
+		Spec: batchv1.JobSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers:    []corev1.Container{{Name: "setup", Image: "test:latest"}},
+					RestartPolicy: corev1.RestartPolicyNever,
+				},
+			},
+		},
+		Status: batchv1.JobStatus{
+			Succeeded: 1,
+		},
+	}
+
+	c := setupTestClient(ca, cfg, caSecret, existingJob)
+	r := newCertificateAuthorityReconciler(c)
+
+	desiredJob := existingJob.DeepCopy()
+	res, err := r.reconcileJob(testCtx(), ca, "test-ca-setup", desiredJob, "test-ca-ca")
+	if err != nil {
+		t.Fatalf("reconcileJob: %v", err)
+	}
+	if res.RequeueAfter != 0 {
+		t.Errorf("expected no requeue for succeeded job, got %v", res.RequeueAfter)
+	}
+}
+
+func TestReconcileJob_Failed(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	cfg := caPrereqs("test-ca")
+
+	existingJob := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ca-setup",
+			Namespace: testNamespace,
+		},
+		Spec: batchv1.JobSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers:    []corev1.Container{{Name: "setup", Image: "test:latest"}},
+					RestartPolicy: corev1.RestartPolicyNever,
+				},
+			},
+		},
+		Status: batchv1.JobStatus{
+			Conditions: []batchv1.JobCondition{
+				{Type: batchv1.JobFailed, Status: corev1.ConditionTrue},
+			},
+		},
+	}
+
+	c := setupTestClient(ca, cfg, existingJob)
+	r := newCertificateAuthorityReconciler(c)
+
+	desiredJob := existingJob.DeepCopy()
+	res, err := r.reconcileJob(testCtx(), ca, "test-ca-setup", desiredJob, "test-ca-ca")
+	if err != nil {
+		t.Fatalf("reconcileJob: %v", err)
+	}
+	if res.RequeueAfter != RequeueIntervalMedium {
+		t.Errorf("expected requeue after %v for failed job, got %v", RequeueIntervalMedium, res.RequeueAfter)
+	}
+}
+
+func TestReconcileJob_Running(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	cfg := caPrereqs("test-ca")
+
+	existingJob := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ca-setup",
+			Namespace: testNamespace,
+		},
+		Spec: batchv1.JobSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers:    []corev1.Container{{Name: "setup", Image: "test:latest"}},
+					RestartPolicy: corev1.RestartPolicyNever,
+				},
+			},
+		},
+	}
+
+	c := setupTestClient(ca, cfg, existingJob)
+	r := newCertificateAuthorityReconciler(c)
+
+	desiredJob := existingJob.DeepCopy()
+	res, err := r.reconcileJob(testCtx(), ca, "test-ca-setup", desiredJob, "test-ca-ca")
+	if err != nil {
+		t.Fatalf("reconcileJob: %v", err)
+	}
+	if res.RequeueAfter != RequeueIntervalLong {
+		t.Errorf("expected requeue after %v for running job, got %v", RequeueIntervalLong, res.RequeueAfter)
+	}
+}
+
+func TestReconcileJob_ImageChanged(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	cfg := caPrereqs("test-ca")
+
+	existingJob := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ca-setup",
+			Namespace: testNamespace,
+		},
+		Spec: batchv1.JobSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers:    []corev1.Container{{Name: "setup", Image: "old:v1"}},
+					RestartPolicy: corev1.RestartPolicyNever,
+				},
+			},
+		},
+	}
+
+	c := setupTestClient(ca, cfg, existingJob)
+	r := newCertificateAuthorityReconciler(c)
+
+	desiredJob := existingJob.DeepCopy()
+	desiredJob.Spec.Template.Spec.Containers[0].Image = "new:v2"
+
+	res, err := r.reconcileJob(testCtx(), ca, "test-ca-setup", desiredJob, "test-ca-ca")
+	if err != nil {
+		t.Fatalf("reconcileJob: %v", err)
+	}
+	// Should delete and requeue
+	if res.RequeueAfter != RequeueIntervalMedium {
+		t.Errorf("expected requeue after %v for image change, got %v", RequeueIntervalMedium, res.RequeueAfter)
+	}
+}
+
+func TestDeleteAndRequeueJob(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-job",
+			Namespace: testNamespace,
+		},
+		Spec: batchv1.JobSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers:    []corev1.Container{{Name: "setup", Image: "test:latest"}},
+					RestartPolicy: corev1.RestartPolicyNever,
+				},
+			},
+		},
+	}
+
+	c := setupTestClient(ca, job)
+	r := newCertificateAuthorityReconciler(c)
+
+	res, err := r.deleteAndRequeueJob(testCtx(), job, "test reason")
+	if err != nil {
+		t.Fatalf("deleteAndRequeueJob: %v", err)
+	}
+	if res.RequeueAfter != RequeueIntervalMedium {
+		t.Errorf("expected requeue after %v, got %v", RequeueIntervalMedium, res.RequeueAfter)
+	}
 }

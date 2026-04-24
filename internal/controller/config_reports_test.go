@@ -1,10 +1,12 @@
 package controller
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
@@ -299,5 +301,37 @@ func TestRenderReportWebhookConfig_MultipleEndpoints(t *testing.T) {
 		if !strings.Contains(out, s) {
 			t.Errorf("expected %q in output:\n%s", s, out)
 		}
+	}
+}
+
+func TestUpdateReportProcessorStatus_Success(t *testing.T) {
+	rp := newReportProcessor("test-rp", "production", "https://puppetdb.example.com")
+	c := setupTestClient(rp)
+	r := newConfigReconciler(c)
+
+	r.updateReportProcessorStatus(testCtx(), rp, nil)
+
+	updated := &openvoxv1alpha1.ReportProcessor{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-rp", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get ReportProcessor: %v", err)
+	}
+	if updated.Status.Phase != openvoxv1alpha1.ReportProcessorPhaseActive {
+		t.Errorf("expected phase %q, got %q", openvoxv1alpha1.ReportProcessorPhaseActive, updated.Status.Phase)
+	}
+}
+
+func TestUpdateReportProcessorStatus_Error(t *testing.T) {
+	rp := newReportProcessor("test-rp", "production", "https://puppetdb.example.com")
+	c := setupTestClient(rp)
+	r := newConfigReconciler(c)
+
+	r.updateReportProcessorStatus(testCtx(), rp, fmt.Errorf("rendering failed"))
+
+	updated := &openvoxv1alpha1.ReportProcessor{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-rp", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get ReportProcessor: %v", err)
+	}
+	if updated.Status.Phase != openvoxv1alpha1.ReportProcessorPhaseError {
+		t.Errorf("expected phase %q, got %q", openvoxv1alpha1.ReportProcessorPhaseError, updated.Status.Phase)
 	}
 }

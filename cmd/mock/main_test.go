@@ -637,6 +637,104 @@ func TestAPIReset(t *testing.T) {
 	}
 }
 
+func TestReloadClassificationsIfChanged(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "classifications.yaml")
+
+	initial := `_default:
+  classes: [base]
+  environment: production
+`
+	if err := os.WriteFile(path, []byte(initial), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &server{classificationsFile: path}
+	if err := s.loadClassificationsFile(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Same modtime - should not reload
+	s.reloadClassificationsIfChanged()
+	if entry, ok := s.classificationsData["_default"]; !ok || len(entry.Classes) != 1 || entry.Classes[0] != "base" {
+		t.Error("expected no change on same modtime")
+	}
+
+	// Update file
+	updated := `_default:
+  classes: [updated]
+  environment: staging
+`
+	if err := os.WriteFile(path, []byte(updated), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	s.reloadClassificationsIfChanged()
+	if entry, ok := s.classificationsData["_default"]; !ok || entry.Classes[0] != "updated" {
+		t.Error("expected reload after file change")
+	}
+}
+
+func TestReloadClassificationsIfChanged_MissingFile(t *testing.T) {
+	s := &server{classificationsFile: "/nonexistent/file.yaml"}
+	// Should not panic, just return
+	s.reloadClassificationsIfChanged()
+}
+
+func TestLoadClassificationsFile_StatError(t *testing.T) {
+	s := &server{classificationsFile: "/nonexistent/file.yaml"}
+	err := s.loadClassificationsFile()
+	if err == nil {
+		t.Fatal("expected error for missing file")
+	}
+}
+
+func TestLoadClassificationsFile_InvalidYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bad.yaml")
+	if err := os.WriteFile(path, []byte(":\n\t[invalid\x00"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &server{classificationsFile: path}
+	err := s.loadClassificationsFile()
+	if err == nil {
+		t.Fatal("expected error for invalid YAML")
+	}
+}
+
+func TestPDBCommand_MissingVersion(t *testing.T) {
+	ts, _ := newTestServer()
+	defer ts.Close()
+
+	resp, err := http.Post(ts.URL+"/pdb/cmd/v1", "application/json", strings.NewReader(`{"command":"store report"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestPDBCommand_NonReportCommand(t *testing.T) {
+	ts, _ := newTestServer()
+	defer ts.Close()
+
+	cmd := `{"command":"replace facts","version":5,"payload":{"certname":"node1"}}`
+	resp, err := http.Post(ts.URL+"/pdb/cmd/v1", "application/json", strings.NewReader(cmd))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Errorf("status = %d, want 200 for non-report command, body: %s", resp.StatusCode, body)
+	}
+}
+
 func TestAuth_APIEndpointsSkipAuth(t *testing.T) {
 	ts, _ := newTestServer(func(s *server) {
 		s.auth = authConfig{authType: "bearer", authToken: "secret"}

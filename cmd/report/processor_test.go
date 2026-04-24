@@ -1,10 +1,19 @@
 package main
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"io"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -286,5 +295,234 @@ func TestForward_NoAuth(t *testing.T) {
 
 	if receivedAuth != "" {
 		t.Errorf("Authorization should be empty when no auth configured, got %q", receivedAuth)
+	}
+}
+
+func TestLoadReportConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "report.yaml")
+
+	content := `endpoints:
+  - name: puppetdb
+    processor: puppetdb
+    url: https://puppetdb.example.com
+    timeoutSeconds: 15
+    auth:
+      type: bearer
+      token: my-token
+  - name: splunk
+    url: https://splunk.example.com/services/collector
+    headers:
+      - name: Authorization
+        value: "Splunk secret-token"
+`
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadReportConfig(path)
+	if err != nil {
+		t.Fatalf("loadReportConfig: %v", err)
+	}
+
+	if len(cfg.Endpoints) != 2 {
+		t.Fatalf("expected 2 endpoints, got %d", len(cfg.Endpoints))
+	}
+	if cfg.Endpoints[0].Name != "puppetdb" {
+		t.Errorf("endpoint[0].Name = %q", cfg.Endpoints[0].Name)
+	}
+	if cfg.Endpoints[0].Processor != "puppetdb" {
+		t.Errorf("endpoint[0].Processor = %q", cfg.Endpoints[0].Processor)
+	}
+	if cfg.Endpoints[0].TimeoutSeconds != 15 {
+		t.Errorf("endpoint[0].TimeoutSeconds = %d, want 15", cfg.Endpoints[0].TimeoutSeconds)
+	}
+	if cfg.Endpoints[1].TimeoutSeconds != 30 {
+		t.Errorf("endpoint[1].TimeoutSeconds = %d, want 30 (default)", cfg.Endpoints[1].TimeoutSeconds)
+	}
+}
+
+func TestLoadReportConfig_FileNotFound(t *testing.T) {
+	_, err := loadReportConfig("/nonexistent/report.yaml")
+	if err == nil {
+		t.Fatal("expected error for missing file")
+	}
+}
+
+func TestLoadReportConfig_InvalidYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "report.yaml")
+	if err := os.WriteFile(path, []byte(":\n\t- invalid\x00"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := loadReportConfig(path)
+	if err == nil {
+		t.Fatal("expected error for invalid YAML")
+	}
+}
+
+func TestBuildHTTPClient_Basic(t *testing.T) {
+	endpoint := EndpointConfig{
+		TimeoutSeconds: 20,
+	}
+
+	client, err := buildHTTPClient(endpoint)
+	if err != nil {
+		t.Fatalf("buildHTTPClient: %v", err)
+	}
+	if client.Timeout != 20*time.Second {
+		t.Errorf("Timeout = %v, want 20s", client.Timeout)
+	}
+}
+
+func TestBuildHTTPClient_WithValidCA(t *testing.T) {
+	dir := t.TempDir()
+	caFile := filepath.Join(dir, "ca.pem")
+
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caTemplate := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "Test CA"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		KeyUsage:              x509.KeyUsageCertSign,
+	}
+	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})
+	if err := os.WriteFile(caFile, caPEM, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	endpoint := EndpointConfig{
+		TimeoutSeconds: 5,
+		SSL:            SSLConfig{CAFile: caFile},
+	}
+
+	client, err := buildHTTPClient(endpoint)
+	if err != nil {
+		t.Fatalf("buildHTTPClient: %v", err)
+	}
+	transport := client.Transport.(*http.Transport)
+	if transport.TLSClientConfig.RootCAs == nil {
+		t.Error("expected RootCAs to be set")
+	}
+}
+
+func TestBuildHTTPClient_MissingCA(t *testing.T) {
+	endpoint := EndpointConfig{
+		TimeoutSeconds: 5,
+		SSL:            SSLConfig{CAFile: "/nonexistent/ca.pem"},
+	}
+
+	_, err := buildHTTPClient(endpoint)
+	if err == nil {
+		t.Fatal("expected error for missing CA file")
+	}
+}
+
+func TestBuildHTTPClient_InvalidCAPEM(t *testing.T) {
+	dir := t.TempDir()
+	caFile := filepath.Join(dir, "bad-ca.pem")
+	if err := os.WriteFile(caFile, []byte("not a cert"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	endpoint := EndpointConfig{
+		TimeoutSeconds: 5,
+		SSL:            SSLConfig{CAFile: caFile},
+	}
+
+	_, err := buildHTTPClient(endpoint)
+	if err == nil {
+		t.Fatal("expected error for invalid CA PEM")
+	}
+}
+
+func TestBuildHTTPClient_MTLS(t *testing.T) {
+	dir := t.TempDir()
+
+	caKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	caTemplate := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "Test CA"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		KeyUsage:              x509.KeyUsageCertSign,
+	}
+	clientKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	clientTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(2),
+		Subject:      pkix.Name{CommonName: "client"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+	}
+	clientDER, _ := x509.CreateCertificate(rand.Reader, clientTemplate, caTemplate, &clientKey.PublicKey, caKey)
+
+	certFile := filepath.Join(dir, "client.pem")
+	keyFile := filepath.Join(dir, "client-key.pem")
+
+	if err := os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: clientDER}), 0644); err != nil {
+		t.Fatal(err)
+	}
+	keyBytes, _ := x509.MarshalECPrivateKey(clientKey)
+	if err := os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes}), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	endpoint := EndpointConfig{
+		TimeoutSeconds: 5,
+		Auth:           AuthConfig{Type: "mtls"},
+		SSL: SSLConfig{
+			CertFile: certFile,
+			KeyFile:  keyFile,
+		},
+	}
+
+	client, err := buildHTTPClient(endpoint)
+	if err != nil {
+		t.Fatalf("buildHTTPClient: %v", err)
+	}
+	transport := client.Transport.(*http.Transport)
+	if len(transport.TLSClientConfig.Certificates) != 1 {
+		t.Errorf("expected 1 client cert, got %d", len(transport.TLSClientConfig.Certificates))
+	}
+}
+
+func TestBuildHTTPClient_MTLS_InvalidKeyPair(t *testing.T) {
+	dir := t.TempDir()
+	certFile := filepath.Join(dir, "cert.pem")
+	keyFile := filepath.Join(dir, "key.pem")
+
+	if err := os.WriteFile(certFile, []byte("not a cert"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyFile, []byte("not a key"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	endpoint := EndpointConfig{
+		TimeoutSeconds: 5,
+		Auth:           AuthConfig{Type: "mtls"},
+		SSL: SSLConfig{
+			CertFile: certFile,
+			KeyFile:  keyFile,
+		},
+	}
+
+	_, err := buildHTTPClient(endpoint)
+	if err == nil {
+		t.Fatal("expected error for invalid cert/key")
 	}
 }

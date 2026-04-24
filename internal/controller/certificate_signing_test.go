@@ -1029,6 +1029,87 @@ func TestSignCertificate_FullFlow(t *testing.T) {
 	_ = res
 }
 
+func TestEnsurePendingKey_New(t *testing.T) {
+	cert := newCertificate("my-cert", "test-ca", "")
+	c := setupTestClient(cert)
+	r := newCertificateReconciler(c)
+
+	keyPEM, err := r.ensurePendingKey(testCtx(), cert, "my-cert-tls-pending", testNamespace)
+	if err != nil {
+		t.Fatalf("ensurePendingKey: %v", err)
+	}
+	if len(keyPEM) == 0 {
+		t.Fatal("expected non-empty key PEM")
+	}
+
+	// Verify the secret was created
+	secret := &corev1.Secret{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "my-cert-tls-pending", Namespace: testNamespace}, secret); err != nil {
+		t.Fatalf("pending Secret not created: %v", err)
+	}
+}
+
+func TestEnsurePendingKey_Existing(t *testing.T) {
+	cert := newCertificate("my-cert", "test-ca", "")
+	existingKey := []byte("-----BEGIN RSA PRIVATE KEY-----\nexisting-key\n-----END RSA PRIVATE KEY-----\n")
+	pendingSecret := newSecret("my-cert-tls-pending", map[string][]byte{
+		"key.pem": existingKey,
+	})
+
+	c := setupTestClient(cert, pendingSecret)
+	r := newCertificateReconciler(c)
+
+	keyPEM, err := r.ensurePendingKey(testCtx(), cert, "my-cert-tls-pending", testNamespace)
+	if err != nil {
+		t.Fatalf("ensurePendingKey: %v", err)
+	}
+	if string(keyPEM) != string(existingKey) {
+		t.Error("expected existing key to be returned")
+	}
+}
+
+func TestHandleCertificateCleanup_ExternalCA(t *testing.T) {
+	ca := newCertificateAuthority("test-ca", withExternal("https://puppet.example.com"))
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseSigned)
+	cert.Spec.Certname = "test-node"
+
+	c := setupTestClient(ca, cert)
+	r := newCertificateReconciler(c)
+
+	// External CA: cleanup should be skipped gracefully
+	if err := r.handleCertificateCleanup(testCtx(), cert); err != nil {
+		t.Fatalf("handleCertificateCleanup: %v", err)
+	}
+}
+
+func TestHandleCertificateCleanup_NoSigningSecret(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.SigningSecretName = ""
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseSigned)
+	cert.Spec.Certname = "test-node"
+
+	c := setupTestClient(ca, cert)
+	r := newCertificateReconciler(c)
+
+	// No signing secret: cleanup should be skipped
+	if err := r.handleCertificateCleanup(testCtx(), cert); err != nil {
+		t.Fatalf("handleCertificateCleanup: %v", err)
+	}
+}
+
+func TestHandleCertificateCleanup_CANotFound(t *testing.T) {
+	cert := newCertificate("my-cert", "missing-ca", openvoxv1alpha1.CertificatePhaseSigned)
+	cert.Spec.Certname = "test-node"
+
+	c := setupTestClient(cert)
+	r := newCertificateReconciler(c)
+
+	// Missing CA: should skip cleanup gracefully
+	if err := r.handleCertificateCleanup(testCtx(), cert); err != nil {
+		t.Fatalf("handleCertificateCleanup: %v", err)
+	}
+}
+
 func TestReconcileCertSigning_ExternalCA(t *testing.T) {
 	// Use long-lived cert to avoid immediate renewal trigger (default renewBefore is 60d)
 	certPEM, keyPEM := generateTestCertWithExpiry(t, 365*24*time.Hour)

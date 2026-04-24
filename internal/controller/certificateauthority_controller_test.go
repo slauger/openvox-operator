@@ -985,6 +985,60 @@ func TestCAReconcile_CAServiceDirectUpdate(t *testing.T) {
 	}
 }
 
+func TestAdoptSecret_New(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.UID = "ca-uid-123"
+	secret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": []byte("ca-cert"),
+	})
+
+	c := setupTestClient(ca, secret)
+	r := newCertificateAuthorityReconciler(c)
+
+	if err := r.adoptSecret(testCtx(), ca, "test-ca-ca"); err != nil {
+		t.Fatalf("adoptSecret: %v", err)
+	}
+
+	updated := &corev1.Secret{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca-ca", Namespace: testNamespace}, updated); err != nil {
+		t.Fatal(err)
+	}
+	if len(updated.OwnerReferences) == 0 {
+		t.Error("expected owner reference to be set")
+	}
+}
+
+func TestAdoptSecret_AlreadyOwned(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.UID = "ca-uid-123"
+	secret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": []byte("ca-cert"),
+	})
+
+	c := setupTestClient(ca, secret)
+	r := newCertificateAuthorityReconciler(c)
+
+	// First adopt
+	if err := r.adoptSecret(testCtx(), ca, "test-ca-ca"); err != nil {
+		t.Fatalf("first adoptSecret: %v", err)
+	}
+	// Second adopt (no-op)
+	if err := r.adoptSecret(testCtx(), ca, "test-ca-ca"); err != nil {
+		t.Fatalf("second adoptSecret: %v", err)
+	}
+}
+
+func TestAdoptSecret_NotFound(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	c := setupTestClient(ca)
+	r := newCertificateAuthorityReconciler(c)
+
+	// Should not error for missing secret
+	if err := r.adoptSecret(testCtx(), ca, "nonexistent"); err != nil {
+		t.Fatalf("adoptSecret should not error for missing secret: %v", err)
+	}
+}
+
 func TestCAReconcile_ExternalCA_NoConfigRequired(t *testing.T) {
 	// External CA should work without any Config object (unlike internal CA which requires it)
 	ca := newCertificateAuthority("ext-ca", withExternal("https://puppet-ca.example.com:8140"))

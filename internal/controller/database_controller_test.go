@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -523,5 +524,120 @@ func TestDatabaseReconcile_NetworkPolicyAdditionalIngress(t *testing.T) {
 	}
 	if np.Spec.Ingress[1].Ports[0].Port.IntVal != 9090 {
 		t.Errorf("expected additional ingress port 9090, got %d", np.Spec.Ingress[1].Ports[0].Port.IntVal)
+	}
+}
+
+func TestDatabaseReconcile_PDBCreation(t *testing.T) {
+	pdbEnabled := &openvoxv1alpha1.PDBSpec{Enabled: true}
+	db := newDatabase("test-db")
+	db.Spec.PDB = pdbEnabled
+
+	objs := append(databasePrereqs(), db)
+	c := setupTestClient(objs...)
+	r := newDatabaseReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-db")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	pdb := &policyv1.PodDisruptionBudget{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-db", Namespace: testNamespace}, pdb); err != nil {
+		t.Fatalf("PDB not created: %v", err)
+	}
+
+	if pdb.Spec.Selector == nil || pdb.Spec.Selector.MatchLabels[LabelDatabase] != "test-db" {
+		t.Error("PDB selector missing database label")
+	}
+	// Default should be MinAvailable=1
+	if pdb.Spec.MinAvailable == nil || pdb.Spec.MinAvailable.IntVal != DefaultPDBMinAvailable {
+		t.Errorf("expected default MinAvailable=%d", DefaultPDBMinAvailable)
+	}
+}
+
+func TestDatabaseReconcile_PDBWithMaxUnavailable(t *testing.T) {
+	maxUnavail := intstr.FromInt32(2)
+	pdbSpec := &openvoxv1alpha1.PDBSpec{Enabled: true, MaxUnavailable: &maxUnavail}
+	db := newDatabase("test-db")
+	db.Spec.PDB = pdbSpec
+
+	objs := append(databasePrereqs(), db)
+	c := setupTestClient(objs...)
+	r := newDatabaseReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-db")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	pdb := &policyv1.PodDisruptionBudget{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-db", Namespace: testNamespace}, pdb); err != nil {
+		t.Fatalf("PDB not created: %v", err)
+	}
+	if pdb.Spec.MaxUnavailable == nil || pdb.Spec.MaxUnavailable.IntVal != 2 {
+		t.Errorf("expected MaxUnavailable=2, got %v", pdb.Spec.MaxUnavailable)
+	}
+	if pdb.Spec.MinAvailable != nil {
+		t.Error("MinAvailable should be nil when MaxUnavailable is set")
+	}
+}
+
+func TestDatabaseReconcile_PDBDisabledDeletesExisting(t *testing.T) {
+	// Pre-create a PDB
+	existingPDB := &policyv1.PodDisruptionBudget{}
+	existingPDB.Name = "test-db"
+	existingPDB.Namespace = testNamespace
+
+	db := newDatabase("test-db")
+	// PDB disabled (nil)
+
+	objs := append(databasePrereqs(), db, existingPDB)
+	c := setupTestClient(objs...)
+	r := newDatabaseReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-db")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	pdb := &policyv1.PodDisruptionBudget{}
+	err := c.Get(testCtx(), types.NamespacedName{Name: "test-db", Namespace: testNamespace}, pdb)
+	if err == nil {
+		t.Error("PDB should have been deleted when disabled")
+	}
+}
+
+func TestDatabaseReconcile_PDBUpdate(t *testing.T) {
+	// Create initial PDB via first reconcile
+	pdbSpec := &openvoxv1alpha1.PDBSpec{Enabled: true}
+	db := newDatabase("test-db")
+	db.Spec.PDB = pdbSpec
+
+	objs := append(databasePrereqs(), db)
+	c := setupTestClient(objs...)
+	r := newDatabaseReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-db")); err != nil {
+		t.Fatalf("first reconcile error: %v", err)
+	}
+
+	// Update to use MinAvailable=2
+	updated := &openvoxv1alpha1.Database{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-db", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get Database: %v", err)
+	}
+	minAvail := intstr.FromInt32(2)
+	updated.Spec.PDB = &openvoxv1alpha1.PDBSpec{Enabled: true, MinAvailable: &minAvail}
+	if err := c.Update(testCtx(), updated); err != nil {
+		t.Fatalf("failed to update Database: %v", err)
+	}
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-db")); err != nil {
+		t.Fatalf("second reconcile error: %v", err)
+	}
+
+	pdb := &policyv1.PodDisruptionBudget{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-db", Namespace: testNamespace}, pdb); err != nil {
+		t.Fatalf("PDB not found: %v", err)
+	}
+	if pdb.Spec.MinAvailable == nil || pdb.Spec.MinAvailable.IntVal != 2 {
+		t.Errorf("expected MinAvailable=2 after update, got %v", pdb.Spec.MinAvailable)
 	}
 }

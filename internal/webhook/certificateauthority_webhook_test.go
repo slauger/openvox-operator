@@ -9,6 +9,25 @@ import (
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
 
+func TestCertificateAuthorityValidator_Update(t *testing.T) {
+	v := &CertificateAuthorityValidator{}
+	valid := &openvoxv1alpha1.CertificateAuthority{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Spec:       openvoxv1alpha1.CertificateAuthoritySpec{TTL: "5y"},
+	}
+	invalid := &openvoxv1alpha1.CertificateAuthority{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Spec:       openvoxv1alpha1.CertificateAuthoritySpec{TTL: "5x"},
+	}
+
+	if _, err := v.ValidateUpdate(context.Background(), nil, valid); err != nil {
+		t.Errorf("expected no error for valid update, got %v", err)
+	}
+	if _, err := v.ValidateUpdate(context.Background(), nil, invalid); err == nil {
+		t.Error("expected error for invalid TTL update")
+	}
+}
+
 func TestCertificateAuthorityValidator(t *testing.T) {
 	t.Run("valid CA", func(t *testing.T) {
 		v := &CertificateAuthorityValidator{}

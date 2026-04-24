@@ -9,6 +9,30 @@ import (
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
 
+func TestReportProcessorValidator_Update(t *testing.T) {
+	cfg := &openvoxv1alpha1.Config{
+		ObjectMeta: metav1.ObjectMeta{Name: "production", Namespace: "default"},
+	}
+	c := setupTestClient(cfg)
+	v := &ReportProcessorValidator{Client: c}
+
+	valid := &openvoxv1alpha1.ReportProcessor{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Spec:       openvoxv1alpha1.ReportProcessorSpec{ConfigRef: "production", URL: "https://puppetdb.example.com"},
+	}
+	invalid := &openvoxv1alpha1.ReportProcessor{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Spec:       openvoxv1alpha1.ReportProcessorSpec{ConfigRef: "production", URL: "not-a-url"},
+	}
+
+	if _, err := v.ValidateUpdate(context.Background(), nil, valid); err != nil {
+		t.Errorf("expected no error for valid update, got %v", err)
+	}
+	if _, err := v.ValidateUpdate(context.Background(), nil, invalid); err == nil {
+		t.Error("expected error for invalid URL update")
+	}
+}
+
 func TestReportProcessorValidator(t *testing.T) {
 	cfg := &openvoxv1alpha1.Config{
 		ObjectMeta: metav1.ObjectMeta{Name: "production", Namespace: "default"},

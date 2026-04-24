@@ -743,6 +743,511 @@ func TestRenewCertificate_mTLSAuth(t *testing.T) {
 	}
 }
 
+func TestSubmitCSR_Success(t *testing.T) {
+	certPEM, keyPEM := generateTestCert(t)
+
+	var csrReceived bool
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/puppet-ca/v1/certificate_request/") {
+			csrReceived = true
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	ca := newCertificateAuthority("test-ca")
+	cert := newCertificate("my-cert", "test-ca", "")
+	cert.Spec.Certname = "test-node"
+
+	c := setupTestClient(ca, cert, caSecret)
+	r := newCertificateReconciler(c)
+
+	res, err := r.submitCSR(testCtx(), cert, ca, server.URL, testNamespace)
+	if err != nil {
+		t.Fatalf("submitCSR: %v", err)
+	}
+	if !csrReceived {
+		t.Error("expected CSR to be submitted to the server")
+	}
+
+	// Should have created a pending secret with the key
+	pendingSecret := &corev1.Secret{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "my-cert-tls-pending", Namespace: testNamespace}, pendingSecret); err != nil {
+		t.Fatalf("pending Secret not created: %v", err)
+	}
+	if len(pendingSecret.Data["key.pem"]) == 0 {
+		t.Error("pending Secret should contain key.pem")
+	}
+	_ = res
+}
+
+func TestSubmitCSR_AlreadyPending(t *testing.T) {
+	certPEM, keyPEM := generateTestCert(t)
+
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte("already has a requested certificate"))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	ca := newCertificateAuthority("test-ca")
+	cert := newCertificate("my-cert", "test-ca", "")
+	cert.Spec.Certname = "test-node"
+
+	c := setupTestClient(ca, cert, caSecret)
+	r := newCertificateReconciler(c)
+
+	_, err := r.submitCSR(testCtx(), cert, ca, server.URL, testNamespace)
+	if err != nil {
+		t.Fatalf("submitCSR should not error for already-pending: %v", err)
+	}
+}
+
+func TestSubmitCSR_Rejected(t *testing.T) {
+	certPEM, keyPEM := generateTestCert(t)
+
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte("forbidden"))
+	}))
+	defer server.Close()
+
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	ca := newCertificateAuthority("test-ca")
+	cert := newCertificate("my-cert", "test-ca", "")
+	cert.Spec.Certname = "test-node"
+
+	c := setupTestClient(ca, cert, caSecret)
+	r := newCertificateReconciler(c)
+
+	_, err := r.submitCSR(testCtx(), cert, ca, server.URL, testNamespace)
+	if err == nil {
+		t.Fatal("expected error for rejected CSR")
+	}
+}
+
+func TestSubmitCSR_ExistingPendingKey(t *testing.T) {
+	certPEM, keyPEM := generateTestCert(t)
+
+	var csrReceived bool
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			csrReceived = true
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	// Pre-create the pending secret with a key
+	pendingSecret := newSecret("my-cert-tls-pending", map[string][]byte{
+		"key.pem": keyPEM,
+	})
+
+	ca := newCertificateAuthority("test-ca")
+	cert := newCertificate("my-cert", "test-ca", "")
+	cert.Spec.Certname = "test-node"
+
+	c := setupTestClient(ca, cert, caSecret, pendingSecret)
+	r := newCertificateReconciler(c)
+
+	_, err := r.submitCSR(testCtx(), cert, ca, server.URL, testNamespace)
+	if err != nil {
+		t.Fatalf("submitCSR with existing key: %v", err)
+	}
+	if !csrReceived {
+		t.Error("expected CSR to be submitted even with existing key")
+	}
+}
+
+func TestFetchSignedCert_Signed(t *testing.T) {
+	certPEM, keyPEM := generateTestCert(t)
+
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/puppet-ca/v1/certificate/") {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(certPEM) // return the cert as "signed"
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	ca := newCertificateAuthority("test-ca")
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseRequesting)
+	cert.Spec.Certname = "test-node"
+
+	c := setupTestClient(ca, cert, caSecret)
+	r := newCertificateReconciler(c)
+
+	signedCert, err := r.fetchSignedCert(testCtx(), cert, ca, server.URL, testNamespace)
+	if err != nil {
+		t.Fatalf("fetchSignedCert: %v", err)
+	}
+	if signedCert == nil {
+		t.Fatal("expected signed cert to be returned")
+	}
+}
+
+func TestFetchSignedCert_NotYetSigned(t *testing.T) {
+	certPEM, keyPEM := generateTestCert(t)
+
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	ca := newCertificateAuthority("test-ca")
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseRequesting)
+	cert.Spec.Certname = "test-node"
+
+	c := setupTestClient(ca, cert, caSecret)
+	r := newCertificateReconciler(c)
+
+	signedCert, err := r.fetchSignedCert(testCtx(), cert, ca, server.URL, testNamespace)
+	if err != nil {
+		t.Fatalf("fetchSignedCert: %v", err)
+	}
+	if signedCert != nil {
+		t.Error("expected nil for unsigned cert")
+	}
+}
+
+func TestFetchSignedCert_EmptyCertname(t *testing.T) {
+	certPEM, keyPEM := generateTestCert(t)
+
+	var requestedPath string
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestedPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(certPEM)
+	}))
+	defer server.Close()
+
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	ca := newCertificateAuthority("test-ca")
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseRequesting)
+	cert.Spec.Certname = "" // empty -> defaults to "puppet"
+
+	c := setupTestClient(ca, cert, caSecret)
+	r := newCertificateReconciler(c)
+
+	_, err := r.fetchSignedCert(testCtx(), cert, ca, server.URL, testNamespace)
+	if err != nil {
+		t.Fatalf("fetchSignedCert: %v", err)
+	}
+	if !strings.Contains(requestedPath, "/puppet") {
+		t.Errorf("expected path to contain /puppet for empty certname, got %s", requestedPath)
+	}
+}
+
+func TestSignCertificate_FullFlow(t *testing.T) {
+	certPEM, keyPEM := generateTestCert(t)
+
+	// Server handles CSR submit and cert fetch
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/certificate_request/"):
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/certificate/"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(certPEM)
+		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/certificate_status/"):
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	signingSecret := newSecret("ca-cert-tls", map[string][]byte{
+		"cert.pem": certPEM,
+		"key.pem":  keyPEM,
+	})
+
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.SigningSecretName = "ca-cert-tls"
+
+	cert := newCertificate("my-cert", "test-ca", "")
+	cert.Spec.Certname = "test-node"
+
+	c := setupTestClient(ca, cert, caSecret, signingSecret)
+	r := newCertificateReconciler(c)
+
+	res, err := r.signCertificate(testCtx(), cert, ca, server.URL, testNamespace)
+	if err != nil {
+		t.Fatalf("signCertificate: %v", err)
+	}
+
+	// Should have created the TLS secret
+	tlsSecret := &corev1.Secret{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "my-cert-tls", Namespace: testNamespace}, tlsSecret); err != nil {
+		t.Fatalf("TLS Secret not created: %v", err)
+	}
+	if len(tlsSecret.Data["cert.pem"]) == 0 {
+		t.Error("TLS Secret should contain cert.pem")
+	}
+	if len(tlsSecret.Data["key.pem"]) == 0 {
+		t.Error("TLS Secret should contain key.pem")
+	}
+
+	// Pending secret should be cleaned up
+	pendingSecret := &corev1.Secret{}
+	err = c.Get(testCtx(), types.NamespacedName{Name: "my-cert-tls-pending", Namespace: testNamespace}, pendingSecret)
+	if err == nil {
+		t.Error("pending Secret should have been deleted")
+	}
+	_ = res
+}
+
+func TestEnsurePendingKey_New(t *testing.T) {
+	cert := newCertificate("my-cert", "test-ca", "")
+	c := setupTestClient(cert)
+	r := newCertificateReconciler(c)
+
+	keyPEM, err := r.ensurePendingKey(testCtx(), cert, "my-cert-tls-pending", testNamespace)
+	if err != nil {
+		t.Fatalf("ensurePendingKey: %v", err)
+	}
+	if len(keyPEM) == 0 {
+		t.Fatal("expected non-empty key PEM")
+	}
+
+	// Verify the secret was created
+	secret := &corev1.Secret{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "my-cert-tls-pending", Namespace: testNamespace}, secret); err != nil {
+		t.Fatalf("pending Secret not created: %v", err)
+	}
+}
+
+func TestEnsurePendingKey_Existing(t *testing.T) {
+	cert := newCertificate("my-cert", "test-ca", "")
+	existingKey := []byte("-----BEGIN RSA PRIVATE KEY-----\nexisting-key\n-----END RSA PRIVATE KEY-----\n")
+	pendingSecret := newSecret("my-cert-tls-pending", map[string][]byte{
+		"key.pem": existingKey,
+	})
+
+	c := setupTestClient(cert, pendingSecret)
+	r := newCertificateReconciler(c)
+
+	keyPEM, err := r.ensurePendingKey(testCtx(), cert, "my-cert-tls-pending", testNamespace)
+	if err != nil {
+		t.Fatalf("ensurePendingKey: %v", err)
+	}
+	if string(keyPEM) != string(existingKey) {
+		t.Error("expected existing key to be returned")
+	}
+}
+
+func TestHandleCertificateCleanup_ExternalCA(t *testing.T) {
+	ca := newCertificateAuthority("test-ca", withExternal("https://puppet.example.com"))
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseSigned)
+	cert.Spec.Certname = "test-node"
+
+	c := setupTestClient(ca, cert)
+	r := newCertificateReconciler(c)
+
+	// External CA: cleanup should be skipped gracefully
+	if err := r.handleCertificateCleanup(testCtx(), cert); err != nil {
+		t.Fatalf("handleCertificateCleanup: %v", err)
+	}
+}
+
+func TestHandleCertificateCleanup_NoSigningSecret(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.SigningSecretName = ""
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseSigned)
+	cert.Spec.Certname = "test-node"
+
+	c := setupTestClient(ca, cert)
+	r := newCertificateReconciler(c)
+
+	// No signing secret: cleanup should be skipped
+	if err := r.handleCertificateCleanup(testCtx(), cert); err != nil {
+		t.Fatalf("handleCertificateCleanup: %v", err)
+	}
+}
+
+func TestHandleCertificateCleanup_CANotFound(t *testing.T) {
+	cert := newCertificate("my-cert", "missing-ca", openvoxv1alpha1.CertificatePhaseSigned)
+	cert.Spec.Certname = "test-node"
+
+	c := setupTestClient(cert)
+	r := newCertificateReconciler(c)
+
+	// Missing CA: should skip cleanup gracefully
+	if err := r.handleCertificateCleanup(testCtx(), cert); err != nil {
+		t.Fatalf("handleCertificateCleanup: %v", err)
+	}
+}
+
+func TestReconcileCertSigning_ExternalCA(t *testing.T) {
+	// Use long-lived cert to avoid immediate renewal trigger (default renewBefore is 60d)
+	certPEM, keyPEM := generateTestCertWithExpiry(t, 365*24*time.Hour)
+
+	// Server returns the signed cert immediately
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/certificate_request/"):
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/certificate/"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(certPEM)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	ca := newCertificateAuthority("ext-ca", withExternal(server.URL))
+	ca.Spec.External.InsecureSkipVerify = true
+	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseExternal
+
+	cert := newCertificate("my-cert", "ext-ca", "")
+	cert.Spec.Certname = "test-node"
+
+	c := setupTestClient(ca, cert)
+	r := newCertificateReconciler(c)
+
+	res, err := r.reconcileCertSigning(testCtx(), cert, ca)
+	if err != nil {
+		t.Fatalf("reconcileCertSigning: %v", err)
+	}
+
+	// Should have created TLS secret and updated status
+	updated := &openvoxv1alpha1.Certificate{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "my-cert", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get Certificate: %v", err)
+	}
+	if updated.Status.Phase != openvoxv1alpha1.CertificatePhaseSigned {
+		t.Errorf("expected phase %q, got %q", openvoxv1alpha1.CertificatePhaseSigned, updated.Status.Phase)
+	}
+	if updated.Status.SecretName != "my-cert-tls" {
+		t.Errorf("expected SecretName %q, got %q", "my-cert-tls", updated.Status.SecretName)
+	}
+	_ = res
+}
+
+func TestReconcileCertSigning_Error(t *testing.T) {
+	certPEM, keyPEM := generateTestCert(t)
+
+	// Server rejects all requests
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("server error"))
+	}))
+	defer server.Close()
+
+	ca := newCertificateAuthority("ext-ca", withExternal(server.URL))
+	ca.Spec.External.InsecureSkipVerify = true
+	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseExternal
+
+	cert := newCertificate("my-cert", "ext-ca", "")
+	cert.Spec.Certname = "test-node"
+
+	c := setupTestClient(ca, cert)
+	r := newCertificateReconciler(c)
+
+	res, err := r.reconcileCertSigning(testCtx(), cert, ca)
+	if err != nil {
+		// reconcileCertSigning swallows errors and requeues
+		t.Fatalf("reconcileCertSigning should not return error: %v", err)
+	}
+	if res.RequeueAfter == 0 {
+		t.Error("expected requeue after error")
+	}
+
+	// Phase should be Error
+	updated := &openvoxv1alpha1.Certificate{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "my-cert", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get Certificate: %v", err)
+	}
+	if updated.Status.Phase != openvoxv1alpha1.CertificatePhaseError {
+		t.Errorf("expected phase %q, got %q", openvoxv1alpha1.CertificatePhaseError, updated.Status.Phase)
+	}
+}
+
+func TestSignCertificate_WaitingForSigning(t *testing.T) {
+	certPEM, keyPEM := generateTestCert(t)
+
+	// Server accepts CSR but never returns signed cert
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/certificate_request/"):
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/certificate/"):
+			w.WriteHeader(http.StatusNotFound) // not yet signed
+		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/certificate_status/"):
+			w.WriteHeader(http.StatusForbidden) // signing fails
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	caSecret := newSecret("test-ca-ca", map[string][]byte{
+		"ca_crt.pem": certPEM,
+	})
+	signingSecret := newSecret("ca-cert-tls", map[string][]byte{
+		"cert.pem": certPEM,
+		"key.pem":  keyPEM,
+	})
+
+	ca := newCertificateAuthority("test-ca")
+	ca.Status.SigningSecretName = "ca-cert-tls"
+
+	cert := newCertificate("my-cert", "test-ca", "")
+	cert.Spec.Certname = "test-node"
+
+	c := setupTestClient(ca, cert, caSecret, signingSecret)
+	r := newCertificateReconciler(c)
+
+	res, err := r.signCertificate(testCtx(), cert, ca, server.URL, testNamespace)
+	if err != nil {
+		t.Fatalf("signCertificate: %v", err)
+	}
+
+	// Should requeue since cert is not yet signed
+	if res.RequeueAfter == 0 {
+		t.Error("expected RequeueAfter > 0 when cert is not yet signed")
+	}
+
+	// Pending secret should still exist
+	pendingSecret := &corev1.Secret{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "my-cert-tls-pending", Namespace: testNamespace}, pendingSecret); err != nil {
+		t.Fatalf("pending Secret should still exist: %v", err)
+	}
+}
+
 // newTestTLSServer creates a test HTTPS server using the given cert/key for TLS.
 func newTestTLSServer(t *testing.T, certPEM, keyPEM []byte, handler http.Handler) *httptest.Server {
 	t.Helper()

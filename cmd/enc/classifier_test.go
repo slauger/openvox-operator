@@ -1,13 +1,21 @@
 package main
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -549,5 +557,223 @@ func TestBuildHTTPClient_WithCA(t *testing.T) {
 	_, err := buildHTTPClient(cfg)
 	if err == nil {
 		t.Fatal("expected error for missing CA file")
+	}
+}
+
+func TestBuildHTTPClient_WithValidCA(t *testing.T) {
+	dir := t.TempDir()
+	caFile := filepath.Join(dir, "ca.pem")
+
+	// Generate a self-signed CA certificate
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caTemplate := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "Test CA"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		KeyUsage:              x509.KeyUsageCertSign,
+	}
+	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})
+	if err := os.WriteFile(caFile, caPEM, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &ENCConfig{
+		TimeoutSeconds: 5,
+		SSL:            SSLConfig{CAFile: caFile},
+	}
+
+	client, err := buildHTTPClient(cfg)
+	if err != nil {
+		t.Fatalf("buildHTTPClient: %v", err)
+	}
+	transport, ok := client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatal("expected *http.Transport")
+	}
+	if transport.TLSClientConfig.RootCAs == nil {
+		t.Error("expected RootCAs to be set")
+	}
+}
+
+func TestBuildHTTPClient_InvalidCAPEM(t *testing.T) {
+	dir := t.TempDir()
+	caFile := filepath.Join(dir, "bad-ca.pem")
+	if err := os.WriteFile(caFile, []byte("not a cert"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &ENCConfig{
+		TimeoutSeconds: 5,
+		SSL:            SSLConfig{CAFile: caFile},
+	}
+
+	_, err := buildHTTPClient(cfg)
+	if err == nil {
+		t.Fatal("expected error for invalid CA PEM")
+	}
+}
+
+func TestBuildHTTPClient_MTLS(t *testing.T) {
+	dir := t.TempDir()
+
+	// Generate CA
+	caKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	caTemplate := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "Test CA"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		KeyUsage:              x509.KeyUsageCertSign,
+	}
+	caDER, _ := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caKey.PublicKey, caKey)
+
+	// Generate client cert signed by CA
+	clientKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	clientTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(2),
+		Subject:      pkix.Name{CommonName: "client"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+	}
+	clientDER, _ := x509.CreateCertificate(rand.Reader, clientTemplate, caTemplate, &clientKey.PublicKey, caKey)
+
+	certFile := filepath.Join(dir, "client.pem")
+	keyFile := filepath.Join(dir, "client-key.pem")
+	caFile := filepath.Join(dir, "ca.pem")
+
+	if err := os.WriteFile(caFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER}), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: clientDER}), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	keyBytes, _ := x509.MarshalECPrivateKey(clientKey)
+	if err := os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes}), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &ENCConfig{
+		TimeoutSeconds: 5,
+		Auth:           AuthConfig{Type: "mtls"},
+		SSL: SSLConfig{
+			CAFile:   caFile,
+			CertFile: certFile,
+			KeyFile:  keyFile,
+		},
+	}
+
+	client, err := buildHTTPClient(cfg)
+	if err != nil {
+		t.Fatalf("buildHTTPClient: %v", err)
+	}
+	transport := client.Transport.(*http.Transport)
+	if len(transport.TLSClientConfig.Certificates) != 1 {
+		t.Errorf("expected 1 client certificate, got %d", len(transport.TLSClientConfig.Certificates))
+	}
+}
+
+func TestBuildHTTPClient_MTLS_InvalidKeyPair(t *testing.T) {
+	dir := t.TempDir()
+	certFile := filepath.Join(dir, "cert.pem")
+	keyFile := filepath.Join(dir, "key.pem")
+
+	if err := os.WriteFile(certFile, []byte("not a cert"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyFile, []byte("not a key"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &ENCConfig{
+		TimeoutSeconds: 5,
+		Auth:           AuthConfig{Type: "mtls"},
+		SSL: SSLConfig{
+			CertFile: certFile,
+			KeyFile:  keyFile,
+		},
+	}
+
+	_, err := buildHTTPClient(cfg)
+	if err == nil {
+		t.Fatal("expected error for invalid client cert/key")
+	}
+}
+
+func TestLoadFacts(t *testing.T) {
+	// loadFacts reads from a hardcoded path, so we test the fallback behavior
+	// when the file doesn't exist (returns empty map)
+	facts := loadFacts("nonexistent-node")
+	if facts == nil {
+		t.Fatal("expected non-nil map")
+	}
+	if len(facts) != 0 {
+		t.Errorf("expected empty facts, got %d entries", len(facts))
+	}
+}
+
+func TestBuildRequestBody_Facts(t *testing.T) {
+	// "facts" body type calls loadFacts, which will return empty map for
+	// non-existent nodes, but the JSON structure should be correct
+	body, err := buildRequestBody("facts", "test-node")
+	if err != nil {
+		t.Fatalf("buildRequestBody: %v", err)
+	}
+
+	var data map[string]interface{}
+	if err := json.Unmarshal([]byte(body), &data); err != nil {
+		t.Fatalf("parsing body: %v", err)
+	}
+	if data["certname"] != "test-node" {
+		t.Errorf("certname = %v", data["certname"])
+	}
+	if _, ok := data["facts"]; !ok {
+		t.Error("expected 'facts' key in body")
+	}
+}
+
+func TestNotFoundError(t *testing.T) {
+	err := &notFoundError{msg: "HTTP 404: https://example.com/node/test"}
+	if err.Error() != "HTTP 404: https://example.com/node/test" {
+		t.Errorf("Error() = %q", err.Error())
+	}
+}
+
+func TestNormalizeResponse_InvalidJSON(t *testing.T) {
+	_, err := normalizeResponse([]byte("{invalid json"), "json")
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestNormalizeResponse_InvalidYAML(t *testing.T) {
+	_, err := normalizeResponse([]byte(":\n  :\n    - :\n  invalid"), "yaml")
+	// YAML parser is lenient, so this may or may not error; just ensure no panic
+	_ = err
+}
+
+func TestLoadENCConfig_InvalidYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "enc.yaml")
+	if err := os.WriteFile(path, []byte(":\n\t- invalid yaml\x00"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := loadENCConfig(path)
+	if err == nil {
+		t.Fatal("expected error for invalid YAML")
 	}
 }

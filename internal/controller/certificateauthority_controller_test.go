@@ -861,6 +861,34 @@ func TestCAReconcile_ExternalCA_SkipsOperatorSigning(t *testing.T) {
 	}
 }
 
+func TestCAReconcile_CAServiceDirectUpdate(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	c := setupTestClient(ca)
+	r := newCertificateAuthorityReconciler(c)
+
+	// Create
+	if err := r.reconcileCAService(testCtx(), ca); err != nil {
+		t.Fatalf("first reconcileCAService: %v", err)
+	}
+
+	// Update (should not error, exercises update path)
+	if err := r.reconcileCAService(testCtx(), ca); err != nil {
+		t.Fatalf("second reconcileCAService: %v", err)
+	}
+
+	svc := &corev1.Service{}
+	svcName := caInternalServiceName("test-ca")
+	if err := c.Get(testCtx(), types.NamespacedName{Name: svcName, Namespace: testNamespace}, svc); err != nil {
+		t.Fatalf("Service not found after update: %v", err)
+	}
+	if svc.Spec.Ports[0].Port != 8140 {
+		t.Errorf("expected port 8140 after update, got %d", svc.Spec.Ports[0].Port)
+	}
+	if svc.Spec.Selector[LabelCA] != "true" {
+		t.Error("service selector missing CA label after update")
+	}
+}
+
 func TestCAReconcile_ExternalCA_NoConfigRequired(t *testing.T) {
 	// External CA should work without any Config object (unlike internal CA which requires it)
 	ca := newCertificateAuthority("ext-ca", withExternal("https://puppet-ca.example.com:8140"))

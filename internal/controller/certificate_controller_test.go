@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -501,6 +502,105 @@ func TestCertReconcile_DeletionCANotFound(t *testing.T) {
 	err = c.Get(testCtx(), types.NamespacedName{Name: "my-cert", Namespace: testNamespace}, updated)
 	if !errors.IsNotFound(err) {
 		t.Errorf("expected Certificate to be deleted, got err: %v", err)
+	}
+}
+
+func TestExtractNotAfter_ValidCert(t *testing.T) {
+	certPEM, keyPEM := generateTestCertWithExpiry(t, 90*24*time.Hour)
+	secret := newSecret("test-tls", map[string][]byte{
+		"cert.pem": certPEM,
+		"key.pem":  keyPEM,
+	})
+
+	c := setupTestClient(secret)
+	r := newCertificateReconciler(c)
+
+	notAfter := r.extractNotAfter(testCtx(), "test-tls", testNamespace)
+	if notAfter == nil {
+		t.Fatal("expected non-nil NotAfter")
+	}
+	if notAfter.Time.Before(time.Now()) {
+		t.Error("expected NotAfter to be in the future")
+	}
+}
+
+func TestExtractNotAfter_SecretNotFound(t *testing.T) {
+	c := setupTestClient()
+	r := newCertificateReconciler(c)
+
+	notAfter := r.extractNotAfter(testCtx(), "nonexistent", testNamespace)
+	if notAfter != nil {
+		t.Errorf("expected nil NotAfter for missing secret, got %v", notAfter)
+	}
+}
+
+func TestExtractNotAfter_InvalidCertPEM(t *testing.T) {
+	secret := newSecret("test-tls", map[string][]byte{
+		"cert.pem": []byte("not a cert"),
+		"key.pem":  []byte("not a key"),
+	})
+
+	c := setupTestClient(secret)
+	r := newCertificateReconciler(c)
+
+	notAfter := r.extractNotAfter(testCtx(), "test-tls", testNamespace)
+	if notAfter != nil {
+		t.Errorf("expected nil NotAfter for invalid cert, got %v", notAfter)
+	}
+}
+
+func TestAdoptTLSSecret_NewOwner(t *testing.T) {
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseSigned)
+	cert.UID = "test-uid-123"
+	secret := newSecret("my-cert-tls", map[string][]byte{
+		"cert.pem": []byte("cert-data"),
+	})
+
+	c := setupTestClient(cert, secret)
+	r := newCertificateReconciler(c)
+
+	if err := r.adoptTLSSecret(testCtx(), cert, "my-cert-tls"); err != nil {
+		t.Fatalf("adoptTLSSecret: %v", err)
+	}
+
+	updated := &corev1.Secret{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "my-cert-tls", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get secret: %v", err)
+	}
+	if len(updated.OwnerReferences) == 0 {
+		t.Error("expected owner reference to be set")
+	}
+}
+
+func TestAdoptTLSSecret_AlreadyOwned(t *testing.T) {
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseSigned)
+	cert.UID = "test-uid-123"
+	secret := newSecret("my-cert-tls", map[string][]byte{
+		"cert.pem": []byte("cert-data"),
+	})
+
+	c := setupTestClient(cert, secret)
+	r := newCertificateReconciler(c)
+
+	// First adopt
+	if err := r.adoptTLSSecret(testCtx(), cert, "my-cert-tls"); err != nil {
+		t.Fatalf("first adoptTLSSecret: %v", err)
+	}
+
+	// Second adopt should be a no-op
+	if err := r.adoptTLSSecret(testCtx(), cert, "my-cert-tls"); err != nil {
+		t.Fatalf("second adoptTLSSecret: %v", err)
+	}
+}
+
+func TestAdoptTLSSecret_SecretNotFound(t *testing.T) {
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseSigned)
+	c := setupTestClient(cert)
+	r := newCertificateReconciler(c)
+
+	err := r.adoptTLSSecret(testCtx(), cert, "nonexistent-tls")
+	if err == nil {
+		t.Fatal("expected error for missing secret")
 	}
 }
 

@@ -654,11 +654,17 @@ func TestBuildHTTPClient_MTLS(t *testing.T) {
 	keyFile := filepath.Join(dir, "client-key.pem")
 	caFile := filepath.Join(dir, "ca.pem")
 
-	os.WriteFile(caFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER}), 0644)
-	os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: clientDER}), 0644)
+	if err := os.WriteFile(caFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER}), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: clientDER}), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	keyBytes, _ := x509.MarshalECPrivateKey(clientKey)
-	os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes}), 0644)
+	if err := os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes}), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg := &ENCConfig{
 		TimeoutSeconds: 5,

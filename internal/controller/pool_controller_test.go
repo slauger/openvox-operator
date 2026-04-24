@@ -234,6 +234,68 @@ func TestPoolReconcile_UpdateExistingService(t *testing.T) {
 	}
 }
 
+func TestPoolReconcile_TLSRouteDirectUpdate(t *testing.T) {
+	pool := newPool("puppet", withRoute(true, "puppet.example.com", "my-gateway"))
+	c := setupTestClient(pool)
+	r := newPoolReconciler(c, true)
+
+	// Create
+	if err := r.reconcileTLSRoute(testCtx(), pool); err != nil {
+		t.Fatalf("first reconcileTLSRoute: %v", err)
+	}
+
+	// Update hostname
+	pool.Spec.Route.Hostname = "puppet2.example.com"
+	if err := r.reconcileTLSRoute(testCtx(), pool); err != nil {
+		t.Fatalf("second reconcileTLSRoute: %v", err)
+	}
+
+	route := &gwapiv1.TLSRoute{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "puppet", Namespace: testNamespace}, route); err != nil {
+		t.Fatalf("TLSRoute not found: %v", err)
+	}
+	if len(route.Spec.Hostnames) != 1 || string(route.Spec.Hostnames[0]) != "puppet2.example.com" {
+		t.Errorf("hostname not updated, got %v", route.Spec.Hostnames)
+	}
+}
+
+func TestPoolReconcile_TLSRouteWithSectionName(t *testing.T) {
+	pool := newPool("puppet", withRoute(true, "puppet.example.com", "my-gateway"))
+	pool.Spec.Route.GatewayRef.SectionName = "https"
+	c := setupTestClient(pool)
+	r := newPoolReconciler(c, true)
+
+	if err := r.reconcileTLSRoute(testCtx(), pool); err != nil {
+		t.Fatalf("reconcileTLSRoute: %v", err)
+	}
+
+	route := &gwapiv1.TLSRoute{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "puppet", Namespace: testNamespace}, route); err != nil {
+		t.Fatalf("TLSRoute not created: %v", err)
+	}
+	if route.Spec.ParentRefs[0].SectionName == nil || string(*route.Spec.ParentRefs[0].SectionName) != "https" {
+		t.Error("expected SectionName 'https' on parent ref")
+	}
+}
+
+func TestPoolReconcile_TLSRouteCustomPort(t *testing.T) {
+	pool := newPool("puppet", withRoute(true, "puppet.example.com", "my-gateway"), withServicePort(9140))
+	c := setupTestClient(pool)
+	r := newPoolReconciler(c, true)
+
+	if err := r.reconcileTLSRoute(testCtx(), pool); err != nil {
+		t.Fatalf("reconcileTLSRoute: %v", err)
+	}
+
+	route := &gwapiv1.TLSRoute{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "puppet", Namespace: testNamespace}, route); err != nil {
+		t.Fatalf("TLSRoute not created: %v", err)
+	}
+	if route.Spec.Rules[0].BackendRefs[0].Port == nil || int32(*route.Spec.Rules[0].BackendRefs[0].Port) != 9140 {
+		t.Errorf("expected port 9140 on backend ref")
+	}
+}
+
 func TestPoolReconcile_InjectDNSAltNames(t *testing.T) {
 	pool := newPool("puppet", withRoute(true, "puppet.example.com", "my-gw"))
 	server := newServer("srv1", withPoolRefs("puppet"))

@@ -861,6 +861,102 @@ func TestCAReconcile_ExternalCA_SkipsOperatorSigning(t *testing.T) {
 	}
 }
 
+func TestEnsureCARole_CreateAndUpdate(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	c := setupTestClient(ca)
+	r := newCertificateAuthorityReconciler(c)
+
+	labels := caLabels(ca.Name)
+	resourceNames := []string{"test-ca-ca", "test-ca-ca-key", "test-ca-ca-crl"}
+
+	// Create
+	if err := r.ensureCARole(testCtx(), "test-ca-ca-setup", testNamespace, labels, resourceNames, ca); err != nil {
+		t.Fatalf("ensureCARole create: %v", err)
+	}
+
+	role := &rbacv1.Role{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca-ca-setup", Namespace: testNamespace}, role); err != nil {
+		t.Fatalf("Role not created: %v", err)
+	}
+	if len(role.Rules) != 2 {
+		t.Fatalf("expected 2 rules, got %d", len(role.Rules))
+	}
+
+	// Update with additional resource names
+	updatedNames := append(resourceNames, "extra-cert-tls")
+	if err := r.ensureCARole(testCtx(), "test-ca-ca-setup", testNamespace, labels, updatedNames, ca); err != nil {
+		t.Fatalf("ensureCARole update: %v", err)
+	}
+
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca-ca-setup", Namespace: testNamespace}, role); err != nil {
+		t.Fatalf("Role not found after update: %v", err)
+	}
+	if len(role.Rules[0].ResourceNames) != 4 {
+		t.Errorf("expected 4 resource names after update, got %d", len(role.Rules[0].ResourceNames))
+	}
+}
+
+func TestReconcileCASetupRBAC(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhasePending)
+
+	c := setupTestClient(ca)
+	r := newCertificateAuthorityReconciler(c)
+
+	certs := []openvoxv1alpha1.Certificate{*cert}
+	if err := r.reconcileCASetupRBAC(testCtx(), ca, certs); err != nil {
+		t.Fatalf("reconcileCASetupRBAC: %v", err)
+	}
+
+	// Check ServiceAccount, Role, and RoleBinding were created
+	sa := &corev1.ServiceAccount{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca-ca-setup", Namespace: testNamespace}, sa); err != nil {
+		t.Fatalf("ServiceAccount not created: %v", err)
+	}
+
+	role := &rbacv1.Role{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca-ca-setup", Namespace: testNamespace}, role); err != nil {
+		t.Fatalf("Role not created: %v", err)
+	}
+
+	rb := &rbacv1.RoleBinding{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca-ca-setup", Namespace: testNamespace}, rb); err != nil {
+		t.Fatalf("RoleBinding not created: %v", err)
+	}
+}
+
+func TestUpdateCRLSecret(t *testing.T) {
+	ca := newCertificateAuthority("test-ca")
+	c := setupTestClient(ca)
+	r := newCertificateAuthorityReconciler(c)
+
+	crlPEM := []byte("-----BEGIN X509 CRL-----\ntest-crl-data\n-----END X509 CRL-----\n")
+
+	if err := r.updateCRLSecret(testCtx(), ca, "test-ca-ca-crl", crlPEM); err != nil {
+		t.Fatalf("updateCRLSecret: %v", err)
+	}
+
+	secret := &corev1.Secret{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca-ca-crl", Namespace: testNamespace}, secret); err != nil {
+		t.Fatalf("CRL Secret not created: %v", err)
+	}
+	if string(secret.Data["ca_crl.pem"]) != string(crlPEM) {
+		t.Errorf("CRL data mismatch")
+	}
+
+	// Update
+	newCRL := []byte("-----BEGIN X509 CRL-----\nupdated-crl\n-----END X509 CRL-----\n")
+	if err := r.updateCRLSecret(testCtx(), ca, "test-ca-ca-crl", newCRL); err != nil {
+		t.Fatalf("updateCRLSecret update: %v", err)
+	}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca-ca-crl", Namespace: testNamespace}, secret); err != nil {
+		t.Fatalf("CRL Secret not found after update: %v", err)
+	}
+	if string(secret.Data["ca_crl.pem"]) != string(newCRL) {
+		t.Errorf("CRL data not updated")
+	}
+}
+
 func TestCAReconcile_CAServiceDirectUpdate(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
 	c := setupTestClient(ca)

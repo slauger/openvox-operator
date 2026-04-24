@@ -1029,6 +1029,92 @@ func TestSignCertificate_FullFlow(t *testing.T) {
 	_ = res
 }
 
+func TestReconcileCertSigning_ExternalCA(t *testing.T) {
+	// Use long-lived cert to avoid immediate renewal trigger (default renewBefore is 60d)
+	certPEM, keyPEM := generateTestCertWithExpiry(t, 365*24*time.Hour)
+
+	// Server returns the signed cert immediately
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/certificate_request/"):
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/certificate/"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(certPEM)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	ca := newCertificateAuthority("ext-ca", withExternal(server.URL))
+	ca.Spec.External.InsecureSkipVerify = true
+	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseExternal
+
+	cert := newCertificate("my-cert", "ext-ca", "")
+	cert.Spec.Certname = "test-node"
+
+	c := setupTestClient(ca, cert)
+	r := newCertificateReconciler(c)
+
+	res, err := r.reconcileCertSigning(testCtx(), cert, ca)
+	if err != nil {
+		t.Fatalf("reconcileCertSigning: %v", err)
+	}
+
+	// Should have created TLS secret and updated status
+	updated := &openvoxv1alpha1.Certificate{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "my-cert", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get Certificate: %v", err)
+	}
+	if updated.Status.Phase != openvoxv1alpha1.CertificatePhaseSigned {
+		t.Errorf("expected phase %q, got %q", openvoxv1alpha1.CertificatePhaseSigned, updated.Status.Phase)
+	}
+	if updated.Status.SecretName != "my-cert-tls" {
+		t.Errorf("expected SecretName %q, got %q", "my-cert-tls", updated.Status.SecretName)
+	}
+	_ = res
+}
+
+func TestReconcileCertSigning_Error(t *testing.T) {
+	certPEM, keyPEM := generateTestCert(t)
+
+	// Server rejects all requests
+	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("server error"))
+	}))
+	defer server.Close()
+
+	ca := newCertificateAuthority("ext-ca", withExternal(server.URL))
+	ca.Spec.External.InsecureSkipVerify = true
+	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseExternal
+
+	cert := newCertificate("my-cert", "ext-ca", "")
+	cert.Spec.Certname = "test-node"
+
+	c := setupTestClient(ca, cert)
+	r := newCertificateReconciler(c)
+
+	res, err := r.reconcileCertSigning(testCtx(), cert, ca)
+	if err != nil {
+		// reconcileCertSigning swallows errors and requeues
+		t.Fatalf("reconcileCertSigning should not return error: %v", err)
+	}
+	if res.RequeueAfter == 0 {
+		t.Error("expected requeue after error")
+	}
+
+	// Phase should be Error
+	updated := &openvoxv1alpha1.Certificate{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "my-cert", Namespace: testNamespace}, updated); err != nil {
+		t.Fatalf("failed to get Certificate: %v", err)
+	}
+	if updated.Status.Phase != openvoxv1alpha1.CertificatePhaseError {
+		t.Errorf("expected phase %q, got %q", openvoxv1alpha1.CertificatePhaseError, updated.Status.Phase)
+	}
+}
+
 func TestSignCertificate_WaitingForSigning(t *testing.T) {
 	certPEM, keyPEM := generateTestCert(t)
 

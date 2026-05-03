@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // +kubebuilder:object:root=true
@@ -389,5 +390,8 @@ type PuppetDBSpec struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&Config{}, &ConfigList{})
+	SchemeBuilder.Register(func(s *runtime.Scheme) error {
+		s.AddKnownTypes(GroupVersion, &Config{}, &ConfigList{})
+		return nil
+	})
 }

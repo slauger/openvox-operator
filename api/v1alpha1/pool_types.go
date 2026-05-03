@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // +kubebuilder:object:root=true
@@ -117,5 +118,8 @@ type PoolStatus struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&Pool{}, &PoolList{})
+	SchemeBuilder.Register(func(s *runtime.Scheme) error {
+		s.AddKnownTypes(GroupVersion, &Pool{}, &PoolList{})
+		return nil
+	})
 }

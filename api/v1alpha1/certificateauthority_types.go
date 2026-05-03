@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // +kubebuilder:object:root=true
@@ -172,5 +173,8 @@ const (
 )
 
 func init() {
-	SchemeBuilder.Register(&CertificateAuthority{}, &CertificateAuthorityList{})
+	SchemeBuilder.Register(func(s *runtime.Scheme) error {
+		s.AddKnownTypes(GroupVersion, &CertificateAuthority{}, &CertificateAuthorityList{})
+		return nil
+	})
 }

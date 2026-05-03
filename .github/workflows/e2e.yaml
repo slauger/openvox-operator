@@ -14,7 +14,8 @@ jobs:
     uses: ./.github/workflows/_e2e-run.yaml
     with:
       image_tag: ${{ inputs.image_tag }}
-      group: base
+      operator: base
+      tests: '["single-node","multi-server","agent-basic","agent-broken","agent-idempotent","agent-concurrent","agent-report","database-cnpg","readonly-rootfs","code-pvc","autosign-policy","cert-rotation"]'
     secrets: inherit
 
   e2e-enc:
@@ -22,7 +23,8 @@ jobs:
     uses: ./.github/workflows/_e2e-run.yaml
     with:
       image_tag: ${{ inputs.image_tag }}
-      group: enc
+      operator: base
+      tests: '["agent-enc","agent-full"]'
     secrets: inherit
 
   e2e-gateway:
@@ -30,7 +32,8 @@ jobs:
     uses: ./.github/workflows/_e2e-run.yaml
     with:
       image_tag: ${{ inputs.image_tag }}
-      group: gateway
+      operator: gateway
+      tests: '["pool-gateway"]'
     secrets: inherit
 
   e2e-webhooks-cm:
@@ -38,5 +41,6 @@ jobs:
     uses: ./.github/workflows/_e2e-run.yaml
     with:
       image_tag: ${{ inputs.image_tag }}
-      group: webhooks-cm
+      operator: webhooks-cm
+      tests: '["webhook-validation-server","webhook-validation-config","webhook-validation-database","webhook-smoke"]'
     secrets: inherit

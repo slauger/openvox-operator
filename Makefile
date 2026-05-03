@@ -277,6 +277,11 @@ e2e-operator-webhooks-cm: e2e-cleanup ## Install operator: webhooks=true, cert-m
 	kubectl wait --for=condition=Available deployment/openvox-operator \
 		-n $(NAMESPACE) --timeout=2m
 
+.PHONY: e2e-run-test
+e2e-run-test: chainsaw ## Run a single E2E test. Usage: make e2e-run-test TEST=single-node
+	$(E2E_CHAINSAW) tests/e2e/$(TEST); \
+	EXIT=$$?; kubectl get namespaces -o name | grep '^namespace/e2e-' | xargs -r kubectl delete --timeout=120s --ignore-not-found 2>/dev/null || true; exit $$EXIT
+
 .PHONY: e2e-group-base
 e2e-group-base: e2e-operator-base chainsaw ## Group: base tests (stack, agent, database).
 	$(E2E_CHAINSAW) \

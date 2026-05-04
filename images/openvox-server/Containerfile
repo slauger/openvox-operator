@@ -9,9 +9,9 @@
 #   podman run --rm openvox-server:latest
 
 # renovate: datasource=github-releases depName=OpenVoxProject/openvox-server
-ARG OPENVOXSERVER_VERSION=8.12.1
+ARG OPENVOXSERVER_VERSION=8.13.0
 # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
-ARG OPENVOXDB_TERMINI_VERSION=8.12.1
+ARG OPENVOXDB_TERMINI_VERSION=8.13.0
 # renovate: datasource=github-releases depName=OpenVoxProject/openvox
 ARG OPENVOX_VERSION=8.26.2
 ################################################################################

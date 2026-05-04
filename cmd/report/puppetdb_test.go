@@ -377,3 +377,136 @@ func TestEmptyMetrics(t *testing.T) {
 		t.Errorf("expected empty metrics for nil, got %d", len(result))
 	}
 }
+
+func TestCalculateEndTime_EmptyStartTime(t *testing.T) {
+	report := map[string]any{
+		"metrics": map[string]any{},
+	}
+	result := calculateEndTime(report)
+	if result != "" {
+		t.Errorf("expected empty string for missing start_time, got %q", result)
+	}
+}
+
+func TestCalculateEndTime_InvalidTime(t *testing.T) {
+	report := map[string]any{
+		"time":    "not-a-time",
+		"metrics": map[string]any{},
+	}
+	result := calculateEndTime(report)
+	if result != "not-a-time" {
+		t.Errorf("expected fallback to original time, got %q", result)
+	}
+}
+
+func TestGetRunDuration_NoTimeMetric(t *testing.T) {
+	report := map[string]any{
+		"metrics": map[string]any{
+			"resources": map[string]any{
+				"name":   "resources",
+				"values": []any{[]any{"total", "Total", float64(10)}},
+			},
+		},
+	}
+	d := getRunDuration(report)
+	if d != 0 {
+		t.Errorf("expected 0 duration without time metric, got %f", d)
+	}
+}
+
+func TestGetRunDuration_NoValues(t *testing.T) {
+	report := map[string]any{
+		"metrics": map[string]any{
+			"time": map[string]any{
+				"name": "time",
+			},
+		},
+	}
+	d := getRunDuration(report)
+	if d != 0 {
+		t.Errorf("expected 0 for missing values, got %f", d)
+	}
+}
+
+func TestGetRunDuration_MalformedTuple(t *testing.T) {
+	report := map[string]any{
+		"metrics": map[string]any{
+			"time": map[string]any{
+				"name":   "time",
+				"values": []any{[]any{"short"}, "not-a-slice"},
+			},
+		},
+	}
+	d := getRunDuration(report)
+	if d != 0 {
+		t.Errorf("expected 0 for malformed tuples, got %f", d)
+	}
+}
+
+func TestGetRunDuration_NoMetricsKey(t *testing.T) {
+	report := map[string]any{}
+	d := getRunDuration(report)
+	if d != 0 {
+		t.Errorf("expected 0 for no metrics, got %f", d)
+	}
+}
+
+func TestTransformToPuppetDB_InvalidJSON(t *testing.T) {
+	_, err := transformToPuppetDB([]byte("{invalid"))
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestTransformEvents_Empty(t *testing.T) {
+	result := transformEvents(nil)
+	if len(result) != 0 {
+		t.Errorf("expected empty events for nil, got %d", len(result))
+	}
+
+	result = transformEvents([]any{})
+	if len(result) != 0 {
+		t.Errorf("expected empty events for empty slice, got %d", len(result))
+	}
+}
+
+func TestTransformEvents_NonMapEntry(t *testing.T) {
+	result := transformEvents([]any{"not-a-map", 42})
+	if len(result) != 0 {
+		t.Errorf("expected empty events for non-map entries, got %d", len(result))
+	}
+}
+
+func TestTransformResources_NonMapStatus(t *testing.T) {
+	// resource_statuses values that aren't maps should be skipped
+	statuses := map[string]any{
+		"Notify[test]": "not-a-map",
+	}
+	result := transformResources(statuses)
+	if len(result) != 0 {
+		t.Errorf("expected empty resources for non-map status, got %d", len(result))
+	}
+}
+
+func TestTransformMetrics_NonMapCategory(t *testing.T) {
+	metrics := map[string]any{
+		"time": "not-a-map",
+	}
+	result := transformMetrics(metrics)
+	if len(result) != 0 {
+		t.Errorf("expected empty metrics for non-map category, got %d", len(result))
+	}
+}
+
+func TestTransformMetrics_NonSliceValues(t *testing.T) {
+	metrics := map[string]any{
+		"time": map[string]any{
+			"name":   "time",
+			"values": "not-a-slice",
+		},
+	}
+	result := transformMetrics(metrics)
+	if len(result) != 0 {
+		t.Errorf("expected empty metrics for non-slice values, got %d", len(result))
+	}
+}

@@ -7,8 +7,12 @@ on:
         description: 'Image tag to use for E2E tests'
         required: true
         type: string
-      group:
-        description: 'Test group to run (base, enc, gateway, webhooks-cm)'
+      operator:
+        description: 'Operator variant to install (base, gateway, webhooks-cm)'
+        required: true
+        type: string
+      tests:
+        description: 'JSON array of test names to run'
         required: true
         type: string
 
@@ -33,12 +37,17 @@ jobs:
       - name: Cleanup previous run
         run: make e2e-cleanup
 
-      - name: Verify cluster connectivity
-        run: kubectl get nodes
+      - name: Install operator (${{ inputs.operator }})
+        run: make e2e-operator-${{ inputs.operator }} IMAGE_TAG=${{ inputs.image_tag }}
 
   e2e-test:
     needs: [e2e-setup]
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        test: ${{ fromJson(inputs.tests) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -55,5 +64,22 @@ jobs:
           chmod 600 ~/.kube/config
           kubectl version --short 2>/dev/null || kubectl version
 
-      - name: Run ${{ inputs.group }} test group
-        run: make e2e-group-${{ inputs.group }} IMAGE_TAG=${{ inputs.image_tag }}
+      - name: Run ${{ matrix.test }}
+        run: make e2e-run-test TEST=${{ matrix.test }} IMAGE_TAG=${{ inputs.image_tag }}
+
+  e2e-cleanup:
+    needs: [e2e-test]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.E2E_KUBECONFIG }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Cleanup
+        run: make e2e-cleanup

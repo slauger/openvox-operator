@@ -222,6 +222,55 @@ func TestServerReconcile_PDBDeletion(t *testing.T) {
 	}
 }
 
+func TestServerReconcile_PDBUpdate(t *testing.T) {
+	objs := append(serverPrereqs(), newServer("test-server", withPDBEnabled(true)))
+	c := setupTestClient(objs...)
+	r := newServerReconciler(c)
+
+	// First reconcile creates PDB
+	if _, err := r.Reconcile(testCtx(), testRequest("test-server")); err != nil {
+		t.Fatalf("first reconcile error: %v", err)
+	}
+
+	// Second reconcile updates PDB
+	if _, err := r.Reconcile(testCtx(), testRequest("test-server")); err != nil {
+		t.Fatalf("second reconcile error: %v", err)
+	}
+
+	pdb := &policyv1.PodDisruptionBudget{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-server", Namespace: testNamespace}, pdb); err != nil {
+		t.Fatalf("PDB not found: %v", err)
+	}
+	if pdb.Spec.MinAvailable == nil {
+		t.Fatal("PDB minAvailable should be set after update")
+	}
+}
+
+func TestServerReconcile_PDBMaxUnavailable(t *testing.T) {
+	server := newServer("test-server", withPDBEnabled(true))
+	maxUnavail := intstrInt(2)
+	server.Spec.PDB.MaxUnavailable = &maxUnavail
+
+	objs := append(serverPrereqs(), server)
+	c := setupTestClient(objs...)
+	r := newServerReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-server")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	pdb := &policyv1.PodDisruptionBudget{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-server", Namespace: testNamespace}, pdb); err != nil {
+		t.Fatalf("PDB not created: %v", err)
+	}
+	if pdb.Spec.MaxUnavailable == nil || pdb.Spec.MaxUnavailable.IntVal != 2 {
+		t.Errorf("expected MaxUnavailable=2, got %v", pdb.Spec.MaxUnavailable)
+	}
+	if pdb.Spec.MinAvailable != nil {
+		t.Error("MinAvailable should be nil when MaxUnavailable is set")
+	}
+}
+
 func TestServerReconcile_HPACreation(t *testing.T) {
 	objs := append(serverPrereqs(), newServer("test-server", withAutoscaling(true)))
 	c := setupTestClient(objs...)

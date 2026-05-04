@@ -31,7 +31,8 @@ make ci
 |----------|------|---------|-------------|
 | CI | `ci.yaml` | Push to main/develop, PRs | Linting + all 6 image builds; pushes `:develop` tag on develop branch |
 | E2E Images | `e2e-images.yaml` | Manual only | Builds + pushes all 6 E2E images to ghcr.io |
-| E2E | `e2e.yaml` | Manual only | Runs E2E test groups against pre-built images (sequential, with group selection) |
+| E2E | `e2e.yaml` | Manual only | Runs all E2E test groups sequentially against pre-built images |
+| E2E (single) | `e2e-single.yaml` | Manual only | Run a single test, group, or all tests for an operator variant |
 | Release | `release.yaml` | Manual (main only) | semantic-release, builds operator/server/db with version tag + `:latest`, publishes Helm charts |
 
 ### Reusable Workflows
@@ -39,7 +40,7 @@ make ci
 | Workflow | File | Purpose |
 |----------|------|---------|
 | Container Build | `_container-build.yaml` | Multi-arch image build, optional push, signing, SBOM |
-| E2E Run | `_e2e-run.yaml` | Run a single E2E test group (cluster cleanup + test execution) |
+| E2E Run | `_e2e-run.yaml` | Reusable: operator setup, matrix test execution, cleanup |
 | Go | `_go.yaml` | Go build, test, vet, vulncheck, lint |
 | Helm | `_helm.yaml` | Helm lint + unittest |
 | Shellcheck | `_shellcheck.yaml` | Shell script linting |
@@ -156,7 +157,7 @@ Tests are organized into groups. Each group installs the operator with specific 
 
 | Group | Operator Settings | Tests | Make Target |
 |-------|-------------------|-------|-------------|
-| base | webhook=false, gatewayAPI=false | single-node, multi-server, agent-basic, agent-broken, agent-idempotent, agent-concurrent, agent-report, database-cnpg | `make e2e-group-base` |
+| base | webhook=false, gatewayAPI=false | single-node, multi-server, agent-basic, agent-broken, agent-idempotent, agent-concurrent, agent-report, database-cnpg, readonly-rootfs, code-pvc, autosign-policy, cert-rotation | `make e2e-group-base` |
 | enc | webhook=false, gatewayAPI=false | agent-enc, agent-full | `make e2e-group-enc` |
 | gateway | webhook=false, gatewayAPI=true | pool-gateway | `make e2e-group-gateway` |
 | webhooks-cm | webhook=true, cert-manager | webhook-validation-server, webhook-validation-config, webhook-validation-database, webhook-smoke | `make e2e-group-webhooks-cm` |
@@ -199,7 +200,11 @@ Versions can be overridden via environment variables: `CNPG_VERSION`, `ENVOY_GAT
 ### Running Locally
 
 ```bash
-# Use develop images (auto-built on every push to develop)
+# Run a single test (operator must be installed first)
+make e2e-operator-base IMAGE_TAG=develop
+make e2e-run-test TEST=cert-rotation IMAGE_TAG=develop
+
+# Run a test group (installs operator automatically)
 make e2e-group-base IMAGE_TAG=develop
 
 # Run all groups
@@ -213,16 +218,26 @@ make e2e-all IMAGE_TAG=develop
 
 ### Running in CI
 
-The E2E workflow connects to a persistent K3S cluster via `E2E_KUBECONFIG` secret. External dependencies (CNPG, Envoy Gateway, cert-manager) are managed by ArgoCD on the cluster -- the workflow only verifies they are available before starting tests. Test groups run sequentially: base, enc, gateway, webhooks-cm.
+The E2E workflow connects to a persistent K3S cluster via `E2E_KUBECONFIG` secret. External dependencies (CNPG, Envoy Gateway, cert-manager) are managed by ArgoCD on the cluster -- the workflow only verifies they are available before starting tests. Each test runs as its own matrix job with `max-parallel: 1` for better visibility.
 
-Images are built by the CI workflow on push to develop (`:develop` tag) or manually via `e2e-images.yaml`. The `e2e.yaml` workflow only runs tests against already-pushed images.
+Images are built by the CI workflow on push to develop (`:develop` tag) or manually via `e2e-images.yaml`. The E2E workflows only run tests against already-pushed images.
 
-Manual trigger with group selection:
+There are three ways to trigger E2E tests:
 
-```bash
-gh workflow run e2e-single.yaml -f group=webhooks-cm -f image_tag=develop
-gh workflow run e2e.yaml -f image_tag=develop
-```
+| Goal | Command |
+|------|---------|
+| Run all groups | `gh workflow run e2e.yaml -f image_tag=develop` |
+| Run a test group | `gh workflow run e2e-single.yaml -f operator=base -f group=base` |
+| Run a single test | `gh workflow run e2e-single.yaml -f operator=base -f tests='["cert-rotation"]'` |
+
+The `e2e-single.yaml` workflow selects tests using this priority:
+
+| `group` | `tests` | What runs |
+|---------|---------|-----------|
+| _(empty)_ | _(empty)_ | All tests for the selected `operator` variant |
+| `base` | _(empty)_ | All tests in the base group |
+| _(empty)_ | `["cert-rotation"]` | Only cert-rotation |
+| `base` | `["cert-rotation"]` | Only cert-rotation (`tests` overrides `group`) |
 
 ### Chainsaw Configuration
 

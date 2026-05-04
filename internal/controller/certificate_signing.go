@@ -469,20 +469,6 @@ func (r *CertificateReconciler) reconcileCertRenewal(ctx context.Context, cert *
 	r.Recorder.Eventf(cert, nil, corev1.EventTypeNormal, EventReasonCertificateRenewed, "Reconcile",
 		"Certificate renewed successfully in Secret %s/%s-tls", cert.Namespace, cert.Name)
 
-	// Record renewal time and reset expiry warnings for the new cert.
-	// If the patch fails, requeue with cooldown interval to avoid a tight
-	// re-renewal loop (the cooldown annotation would be missing).
-	patch := client.MergeFrom(cert.DeepCopy())
-	if cert.Annotations == nil {
-		cert.Annotations = make(map[string]string)
-	}
-	cert.Annotations[AnnotationLastRenewalTime] = r.Clock.Now().UTC().Format(time.RFC3339)
-	delete(cert.Annotations, AnnotationExpiryWarned)
-	if patchErr := r.Patch(ctx, cert, patch); patchErr != nil {
-		logger.Error(patchErr, "failed to update renewal annotations, requeueing with cooldown")
-		return ctrl.Result{RequeueAfter: minRenewalCooldown}, nil
-	}
-
 	logger.Info("certificate renewed successfully", "certname", cert.Spec.Certname)
 	return r.scheduleRenewalCheck(ctx, cert)
 }
@@ -613,6 +599,20 @@ func (r *CertificateReconciler) renewCertificate(ctx context.Context, cert *open
 	pemBlock, _ := pem.Decode(body)
 	if pemBlock == nil || pemBlock.Type != "CERTIFICATE" {
 		return fmt.Errorf("renewal response is not a valid PEM certificate")
+	}
+
+	// Set the renewal cooldown annotation BEFORE updating status or Secret.
+	// This prevents a concurrent reconcile from seeing Signed + no cooldown
+	// and triggering a second renewal that would overwrite the Secret with
+	// a different key, causing a cert/key mismatch.
+	patch := client.MergeFrom(cert.DeepCopy())
+	if cert.Annotations == nil {
+		cert.Annotations = make(map[string]string)
+	}
+	cert.Annotations[AnnotationLastRenewalTime] = r.Clock.Now().UTC().Format(time.RFC3339)
+	delete(cert.Annotations, AnnotationExpiryWarned)
+	if err := r.Patch(ctx, cert, patch); err != nil {
+		return fmt.Errorf("setting renewal cooldown annotation: %w", err)
 	}
 
 	// Update Certificate status to Signed BEFORE updating the TLS Secret.

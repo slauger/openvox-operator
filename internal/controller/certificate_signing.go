@@ -515,8 +515,9 @@ func buildCSR(certname string, dnsAltNames []string, extensions *openvoxv1alpha1
 }
 
 // renewCertificate performs certificate renewal via the Puppet CA HTTP API.
-// It generates a new key+CSR, authenticates with the existing cert via mTLS,
-// and POSTs the CSR to the certificate_renewal endpoint.
+// It reuses the existing private key, builds a CSR, authenticates with the
+// existing cert via mTLS, and POSTs the CSR to the certificate_renewal endpoint.
+// The CA returns a new certificate for the same public key.
 func (r *CertificateReconciler) renewCertificate(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, caBaseURL, namespace string) error {
 	logger := log.FromContext(ctx)
 
@@ -526,7 +527,6 @@ func (r *CertificateReconciler) renewCertificate(ctx context.Context, cert *open
 	}
 
 	tlsSecretName := fmt.Sprintf("%s-tls", cert.Name)
-	pendingSecretName := fmt.Sprintf("%s-tls-pending", cert.Name)
 
 	// Read existing cert+key from TLS Secret for mTLS authentication
 	existingSecret := &corev1.Secret{}
@@ -539,20 +539,15 @@ func (r *CertificateReconciler) renewCertificate(ctx context.Context, cert *open
 		return fmt.Errorf("TLS Secret %s missing cert.pem or key.pem", tlsSecretName)
 	}
 
-	// Ensure a pending key exists (reuse from previous attempt or generate new)
-	newKeyPEM, err := r.ensurePendingKey(ctx, cert, pendingSecretName, namespace)
-	if err != nil {
-		return err
-	}
-
-	// Parse new private key to build CSR
-	block, _ := pem.Decode(newKeyPEM)
+	// Reuse the existing private key for renewal -- the CA renews the
+	// certificate for the same public key, so the key must not change.
+	block, _ := pem.Decode(existingKeyPEM)
 	if block == nil {
-		return fmt.Errorf("invalid PEM in pending key")
+		return fmt.Errorf("invalid PEM in existing key")
 	}
 	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
 	if err != nil {
-		return fmt.Errorf("parsing pending key: %w", err)
+		return fmt.Errorf("parsing existing key: %w", err)
 	}
 
 	csrPEM, err := buildCSR(certname, cert.Spec.DNSAltNames, cert.Spec.CSRExtensions, privateKey)
@@ -635,17 +630,9 @@ func (r *CertificateReconciler) renewCertificate(ctx context.Context, cert *open
 		return fmt.Errorf("updating Certificate status to Signed: %w", err)
 	}
 
-	// Update TLS Secret with new cert and key
-	if err := r.createOrUpdateTLSSecret(ctx, cert, ca, tlsSecretName, body, newKeyPEM); err != nil {
+	// Update TLS Secret with renewed cert and existing key
+	if err := r.createOrUpdateTLSSecret(ctx, cert, ca, tlsSecretName, body, existingKeyPEM); err != nil {
 		return fmt.Errorf("updating TLS Secret with renewed cert: %w", err)
-	}
-
-	// Clean up pending Secret
-	pendingSecret := &corev1.Secret{}
-	if err := r.Get(ctx, types.NamespacedName{Name: pendingSecretName, Namespace: namespace}, pendingSecret); err == nil {
-		if err := r.Delete(ctx, pendingSecret); err != nil && !errors.IsNotFound(err) {
-			logger.Info("failed to delete pending Secret", "error", err)
-		}
 	}
 
 	logger.Info("certificate renewed via CA API", "certname", certname)

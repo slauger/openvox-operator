@@ -466,26 +466,8 @@ func (r *CertificateReconciler) reconcileCertRenewal(ctx context.Context, cert *
 		return ctrl.Result{RequeueAfter: RequeueIntervalLong}, nil
 	}
 
-	// Renewal succeeded -- update status to Signed
-	tlsSecretName := fmt.Sprintf("%s-tls", cert.Name)
-	notAfter := r.extractNotAfter(ctx, tlsSecretName, cert.Namespace)
-	if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
-		cert.Status.Phase = openvoxv1alpha1.CertificatePhaseSigned
-		cert.Status.SecretName = tlsSecretName
-		cert.Status.NotAfter = notAfter
-		meta.SetStatusCondition(&cert.Status.Conditions, metav1.Condition{
-			Type:               openvoxv1alpha1.ConditionCertSigned,
-			Status:             metav1.ConditionTrue,
-			Reason:             "CertificateRenewed",
-			Message:            "Certificate has been renewed",
-			LastTransitionTime: metav1.Now(),
-		})
-	}); err != nil {
-		return ctrl.Result{}, err
-	}
-
 	r.Recorder.Eventf(cert, nil, corev1.EventTypeNormal, EventReasonCertificateRenewed, "Reconcile",
-		"Certificate renewed successfully in Secret %s", tlsSecretName)
+		"Certificate renewed successfully in Secret %s/%s-tls", cert.Namespace, cert.Name)
 
 	// Record renewal time and reset expiry warnings for the new cert.
 	// If the patch fails, requeue with cooldown interval to avoid a tight
@@ -631,6 +613,26 @@ func (r *CertificateReconciler) renewCertificate(ctx context.Context, cert *open
 	pemBlock, _ := pem.Decode(body)
 	if pemBlock == nil || pemBlock.Type != "CERTIFICATE" {
 		return fmt.Errorf("renewal response is not a valid PEM certificate")
+	}
+
+	// Update Certificate status to Signed BEFORE updating the TLS Secret.
+	// The Secret update triggers the Server watcher, which checks the
+	// Certificate phase. Setting Signed first avoids a race where the
+	// Server sees the stale Renewing phase and transitions to Pending.
+	notAfter := parseCertNotAfter(ctx, body)
+	if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
+		cert.Status.Phase = openvoxv1alpha1.CertificatePhaseSigned
+		cert.Status.SecretName = tlsSecretName
+		cert.Status.NotAfter = notAfter
+		meta.SetStatusCondition(&cert.Status.Conditions, metav1.Condition{
+			Type:               openvoxv1alpha1.ConditionCertSigned,
+			Status:             metav1.ConditionTrue,
+			Reason:             "CertificateRenewed",
+			Message:            "Certificate has been renewed",
+			LastTransitionTime: metav1.Now(),
+		})
+	}); err != nil {
+		return fmt.Errorf("updating Certificate status to Signed: %w", err)
 	}
 
 	// Update TLS Secret with new cert and key

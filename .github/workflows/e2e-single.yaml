@@ -1,4 +1,4 @@
-name: E2E (single group)
+name: E2E (single)
 
 on:
   workflow_dispatch:
@@ -8,20 +8,46 @@ on:
         required: false
         type: string
         default: 'develop'
-      group:
-        description: 'Test group to run'
+      operator:
+        description: 'Operator variant to install'
         required: true
         type: choice
+        default: 'base'
         options:
+          - base
+          - gateway
+          - webhooks-cm
+      group:
+        description: 'Run predefined test group (overridden by tests if set)'
+        required: false
+        type: choice
+        default: ''
+        options:
+          - ''
           - base
           - enc
           - gateway
           - webhooks-cm
+      tests:
+        description: 'JSON array of tests to run (e.g. ["cert-rotation"]), overrides group'
+        required: false
+        type: string
 
 jobs:
   e2e:
     uses: ./.github/workflows/_e2e-run.yaml
     with:
       image_tag: ${{ inputs.image_tag }}
-      group: ${{ inputs.group }}
+      operator: ${{ inputs.operator }}
+      tests: >-
+        ${{
+          inputs.tests != '' && inputs.tests
+          || inputs.group == 'base' && '["single-node","multi-server","agent-basic","agent-broken","agent-idempotent","agent-concurrent","agent-report","database-cnpg","readonly-rootfs","code-pvc","autosign-policy","cert-rotation"]'
+          || inputs.group == 'enc' && '["agent-enc","agent-full"]'
+          || inputs.group == 'gateway' && '["pool-gateway"]'
+          || inputs.group == 'webhooks-cm' && '["webhook-validation-server","webhook-validation-config","webhook-validation-database","webhook-smoke"]'
+          || inputs.operator == 'gateway' && '["pool-gateway"]'
+          || inputs.operator == 'webhooks-cm' && '["webhook-validation-server","webhook-validation-config","webhook-validation-database","webhook-smoke"]'
+          || '["single-node","multi-server","agent-basic","agent-broken","agent-idempotent","agent-concurrent","agent-report","database-cnpg","readonly-rootfs","code-pvc","autosign-policy","cert-rotation"]'
+        }}
     secrets: inherit

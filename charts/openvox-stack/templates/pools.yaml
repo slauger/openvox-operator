@@ -13,7 +13,7 @@ spec:
     enabled: true
     hostname: {{ $entry.route.hostname }}
     gatewayRef:
-      name: {{ $.Values.gateway.name }}
+      name: {{ required "gateway.name is required when route.enabled is true" $.Values.gateway.name }}
       {{- with $.Values.gateway.sectionName }}
       sectionName: {{ . }}
       {{- end }}

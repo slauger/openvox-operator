@@ -106,3 +106,17 @@ tests:
       - equal:
           path: spec.route.injectDNSAltName
           value: true
+
+  - it: should fail when route enabled but gateway.name is empty
+    set:
+      pools:
+        - name: ca
+          service:
+            type: ClusterIP
+            port: 8140
+          route:
+            enabled: true
+            hostname: puppet.example.com
+    asserts:
+      - failedTemplate:
+          errorMessage: "gateway.name is required when route.enabled is true"

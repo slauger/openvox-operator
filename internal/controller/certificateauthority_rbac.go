@@ -113,7 +113,8 @@ func (r *CertificateAuthorityReconciler) ensureCARole(ctx context.Context, name,
 
 func (r *CertificateAuthorityReconciler) ensureCARoleBinding(ctx context.Context, name, namespace string, labels map[string]string, owner *openvoxv1alpha1.CertificateAuthority) error {
 	rb := &rbacv1.RoleBinding{}
-	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, rb); errors.IsNotFound(err) {
+	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, rb)
+	if errors.IsNotFound(err) {
 		rb = &rbacv1.RoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
@@ -137,7 +138,16 @@ func (r *CertificateAuthorityReconciler) ensureCARoleBinding(ctx context.Context
 			return err
 		}
 		return r.Create(ctx, rb)
-	} else {
+	} else if err != nil {
 		return err
 	}
+
+	rb.Subjects = []rbacv1.Subject{
+		{
+			Kind:      "ServiceAccount",
+			Name:      name,
+			Namespace: namespace,
+		},
+	}
+	return r.Update(ctx, rb)
 }

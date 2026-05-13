@@ -116,6 +116,17 @@ func TestResolveImage(t *testing.T) {
 			want: "ghcr.io/slauger/openvox-server:v8.12.1",
 		},
 		{
+			name: "server repository override only",
+			server: &openvoxv1alpha1.Server{
+				Spec: openvoxv1alpha1.ServerSpec{
+					Image: openvoxv1alpha1.ImageSpec{
+						Repository: "custom-registry/server",
+					},
+				},
+			},
+			want: "custom-registry/server:latest",
+		},
+		{
 			name: "server full override",
 			server: &openvoxv1alpha1.Server{
 				Spec: openvoxv1alpha1.ServerSpec{

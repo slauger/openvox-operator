@@ -10,6 +10,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -152,8 +153,22 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 		if ready > 0 {
 			server.Status.Phase = openvoxv1alpha1.ServerPhaseRunning
+			meta.SetStatusCondition(&server.Status.Conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionServerReady,
+				Status:             metav1.ConditionTrue,
+				Reason:             "ReplicasReady",
+				Message:            fmt.Sprintf("%d/%d replicas ready", ready, replicas),
+				LastTransitionTime: metav1.Now(),
+			})
 		} else {
 			server.Status.Phase = openvoxv1alpha1.ServerPhasePending
+			meta.SetStatusCondition(&server.Status.Conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionServerReady,
+				Status:             metav1.ConditionFalse,
+				Reason:             "ReplicasNotReady",
+				Message:            fmt.Sprintf("0/%d replicas ready", replicas),
+				LastTransitionTime: metav1.Now(),
+			})
 		}
 	}); err != nil {
 		return ctrl.Result{}, err

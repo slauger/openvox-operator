@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -143,16 +144,20 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 		return err
 	}
 
-	// Update existing Deployment
-	// Only set replicas when HPA is not managing scaling
-	if !server.Spec.Autoscaling.Enabled {
-		deploy.Spec.Replicas = &replicas
-	}
-	deploy.Spec.Strategy = strategy
-	deploy.Spec.Template.Labels = labels
-	deploy.Spec.Template.Annotations = annotations
-	deploy.Spec.Template.Spec = r.buildPodSpec(server, cfg, cert, ca, image, javaArgs, configMapName)
-	return r.Update(ctx, deploy)
+	// Update existing Deployment with conflict retry
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		if err := r.Get(ctx, types.NamespacedName{Name: deployName, Namespace: server.Namespace}, deploy); err != nil {
+			return err
+		}
+		if !server.Spec.Autoscaling.Enabled {
+			deploy.Spec.Replicas = &replicas
+		}
+		deploy.Spec.Strategy = strategy
+		deploy.Spec.Template.Labels = labels
+		deploy.Spec.Template.Annotations = annotations
+		deploy.Spec.Template.Spec = r.buildPodSpec(server, cfg, cert, ca, image, javaArgs, configMapName)
+		return r.Update(ctx, deploy)
+	})
 }
 
 func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *openvoxv1alpha1.Config, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, image, javaArgs, configMapName string) corev1.PodSpec {

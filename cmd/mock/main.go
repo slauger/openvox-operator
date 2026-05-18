@@ -15,6 +15,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const maxBodySize = 10 * 1024 * 1024 // 10 MB
+
 type storedReport struct {
 	ReceivedAt time.Time       `json:"received_at"`
 	Body       json.RawMessage `json:"body"`
@@ -275,7 +277,7 @@ func (s *server) handleReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxBodySize))
 	if err != nil {
 		http.Error(w, "failed to read body", http.StatusBadRequest)
 		return
@@ -298,7 +300,7 @@ func (s *server) handlePDBCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxBodySize))
 	if err != nil {
 		http.Error(w, "failed to read body", http.StatusBadRequest)
 		return
@@ -379,7 +381,7 @@ func (s *server) handleHECEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxBodySize))
 	if err != nil {
 		http.Error(w, "failed to read body", http.StatusBadRequest)
 		return

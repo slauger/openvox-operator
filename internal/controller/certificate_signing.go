@@ -101,6 +101,10 @@ const (
 
 	// CSRPollWaitingThreshold is the number of poll attempts before transitioning to WaitingForSigning.
 	CSRPollWaitingThreshold = 10
+
+	// CSRPollAbsoluteTimeout is the maximum duration to poll for a signed certificate
+	// before transitioning to Error phase.
+	CSRPollAbsoluteTimeout = 24 * time.Hour
 )
 
 // csrPollBackoff returns the requeue duration based on the number of poll attempts.
@@ -368,6 +372,32 @@ func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openv
 		pendingSecret := &corev1.Secret{}
 		if err := r.Get(ctx, types.NamespacedName{Name: pendingSecretName, Namespace: namespace}, pendingSecret); err != nil {
 			return ctrl.Result{}, fmt.Errorf("reading pending Secret for poll tracking: %w", err)
+		}
+
+		// Check absolute timeout based on pending Secret creation time
+		elapsed := time.Since(pendingSecret.CreationTimestamp.Time)
+		if !pendingSecret.CreationTimestamp.IsZero() && elapsed >= CSRPollAbsoluteTimeout {
+			certname := cert.Spec.Certname
+			if certname == "" {
+				certname = "puppet"
+			}
+			timeoutMsg := fmt.Sprintf("CSR polling timed out after %s", elapsed.Truncate(time.Minute))
+			if statusErr := updateStatusWithRetry(ctx, r.Client, cert, func() {
+				cert.Status.Phase = openvoxv1alpha1.CertificatePhaseError
+				meta.SetStatusCondition(&cert.Status.Conditions, metav1.Condition{
+					Type:               openvoxv1alpha1.ConditionCertSigned,
+					Status:             metav1.ConditionFalse,
+					Reason:             "CSRPollingTimeout",
+					Message:            timeoutMsg,
+					LastTransitionTime: metav1.Now(),
+				})
+			}); statusErr != nil {
+				logger.Error(statusErr, "failed to update Certificate status to Error")
+			}
+			r.Recorder.Eventf(cert, nil, corev1.EventTypeWarning, EventReasonCSRWaitingForSigning, "Reconcile",
+				"CSR polling timed out after %s. Check the CA and sign manually: puppetserver ca sign --certname %s",
+				elapsed.Truncate(time.Minute), certname)
+			return ctrl.Result{}, nil
 		}
 
 		attempts := 0

@@ -40,3 +40,18 @@ tests:
       - equal:
           path: subjects[0].namespace
           value: NAMESPACE
+
+  - it: should set subject namespace to watchNamespace in namespace mode
+    set:
+      scope:
+        mode: namespace
+        watchNamespace: other-namespace
+    asserts:
+      - isKind:
+          of: RoleBinding
+      - equal:
+          path: metadata.namespace
+          value: other-namespace
+      - equal:
+          path: subjects[0].namespace
+          value: other-namespace

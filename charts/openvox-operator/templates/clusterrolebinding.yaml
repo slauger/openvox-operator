@@ -22,4 +22,4 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: {{ include "openvox-operator.serviceAccountName" . }}
-    namespace: {{ .Release.Namespace }}
+    namespace: {{ if eq .Values.scope.mode "namespace" }}{{ .Values.scope.watchNamespace | default .Release.Namespace }}{{ else }}{{ .Release.Namespace }}{{ end }}

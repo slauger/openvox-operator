@@ -11,8 +11,63 @@ maintainers:
   - name: Simon Lauger
     email: simon@lauger.de
     url: https://lauger.de
+icon: https://slauger.github.io/openvox-operator/assets/logo.svg
 keywords:
   - openvox
   - puppet
   - operator
   - kubernetes
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/operator: "true"
+  artifacthub.io/operatorCapabilities: Seamless Upgrades
+  artifacthub.io/category: integration-delivery
+  artifacthub.io/images: |
+    - name: openvox-operator
+      image: ghcr.io/slauger/openvox-operator:latest
+    - name: openvox-server
+      image: ghcr.io/slauger/openvox-server:latest
+    - name: openvox-db
+      image: ghcr.io/slauger/openvox-db:latest
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://slauger.github.io/openvox-operator/
+    - name: Source Code
+      url: https://github.com/slauger/openvox-operator
+  artifacthub.io/crds: |
+    - kind: Config
+      version: v1alpha1
+      name: configs.openvox.io
+      description: OpenVox Server configuration
+    - kind: Server
+      version: v1alpha1
+      name: servers.openvox.io
+      description: OpenVox Server instance
+    - kind: Pool
+      version: v1alpha1
+      name: pools.openvox.io
+      description: Pool of OpenVox Server instances
+    - kind: CertificateAuthority
+      version: v1alpha1
+      name: certificateauthorities.openvox.io
+      description: Puppet CA for certificate management
+    - kind: Certificate
+      version: v1alpha1
+      name: certificates.openvox.io
+      description: Certificate signing request
+    - kind: SigningPolicy
+      version: v1alpha1
+      name: signingpolicies.openvox.io
+      description: Certificate signing policy
+    - kind: NodeClassifier
+      version: v1alpha1
+      name: nodeclassifiers.openvox.io
+      description: External node classifier endpoint
+    - kind: ReportProcessor
+      version: v1alpha1
+      name: reportprocessors.openvox.io
+      description: Report processor endpoint
+    - kind: Database
+      version: v1alpha1
+      name: databases.openvox.io
+      description: PuppetDB database instance

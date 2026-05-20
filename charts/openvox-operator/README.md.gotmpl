@@ -1,0 +1,31 @@
+{{ template "chart.header" . }}
+{{ template "chart.badgesSection" . }}
+{{ template "chart.description" . }}
+
+## Overview
+
+The openvox-operator chart installs the Kubernetes operator for managing OpenVox (Puppet) infrastructure.
+The operator manages the full lifecycle of OpenVox Server environments including certificate authorities,
+server pools, PuppetDB databases, node classifiers, and report processors via Kubernetes Custom Resources.
+
+For the full documentation visit [slauger.github.io/openvox-operator](https://slauger.github.io/openvox-operator/).
+
+## Prerequisites
+
+- Kubernetes 1.28+
+- Helm 3.14+
+- cert-manager (optional, for admission webhook TLS)
+
+## Installation
+
+```bash
+helm install openvox-operator oci://ghcr.io/slauger/charts/openvox-operator
+```
+
+To deploy a complete OpenVox stack after installing the operator, use the
+[openvox-stack](https://github.com/slauger/openvox-operator/tree/main/charts/openvox-stack) chart.
+
+{{ template "chart.maintainersSection" . }}
+{{ template "chart.sourcesSection" . }}
+{{ template "chart.valuesSection" . }}
+{{ template "helm-docs.versionFooter" . }}

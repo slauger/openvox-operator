@@ -1,0 +1,30 @@
+{{ template "chart.header" . }}
+{{ template "chart.badgesSection" . }}
+{{ template "chart.description" . }}
+
+## Overview
+
+The openvox-db-postgres chart deploys a CloudNativePG PostgreSQL cluster for use as the
+PuppetDB backend in an OpenVox environment. It creates a CNPG Cluster resource with
+sensible defaults for OpenVox DB (PuppetDB).
+
+This chart requires [CloudNativePG](https://cloudnative-pg.io/) to be installed in the cluster.
+
+For the full documentation visit [slauger.github.io/openvox-operator](https://slauger.github.io/openvox-operator/).
+
+## Prerequisites
+
+- Kubernetes 1.28+
+- Helm 3.14+
+- CloudNativePG operator installed in the cluster
+
+## Installation
+
+```bash
+helm install openvox-db oci://ghcr.io/slauger/charts/openvox-db-postgres
+```
+
+{{ template "chart.maintainersSection" . }}
+{{ template "chart.sourcesSection" . }}
+{{ template "chart.valuesSection" . }}
+{{ template "helm-docs.versionFooter" . }}

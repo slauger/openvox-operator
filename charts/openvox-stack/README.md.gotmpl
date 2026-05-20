@@ -1,0 +1,31 @@
+{{ template "chart.header" . }}
+{{ template "chart.badgesSection" . }}
+{{ template "chart.description" . }}
+
+## Overview
+
+The openvox-stack chart deploys a complete OpenVox (Puppet) environment using the openvox-operator CRDs.
+It creates Config, CertificateAuthority, Server, Pool, and optionally Database, NodeClassifier,
+ReportProcessor, and SigningPolicy resources in a single release.
+
+This chart requires the [openvox-operator](https://github.com/slauger/openvox-operator/tree/main/charts/openvox-operator)
+to be installed in the cluster.
+
+For the full documentation visit [slauger.github.io/openvox-operator](https://slauger.github.io/openvox-operator/).
+
+## Prerequisites
+
+- Kubernetes 1.28+
+- Helm 3.14+
+- openvox-operator installed in the cluster
+
+## Installation
+
+```bash
+helm install openvox oci://ghcr.io/slauger/charts/openvox-stack
+```
+
+{{ template "chart.maintainersSection" . }}
+{{ template "chart.sourcesSection" . }}
+{{ template "chart.valuesSection" . }}
+{{ template "helm-docs.versionFooter" . }}

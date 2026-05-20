@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "database": {
+      "description": "PostgreSQL database name.",
+      "type": "string"
+    },
+    "instances": {
+      "description": "Cluster resource name. Defaults to release name. name: \"\"",
+      "type": "integer",
+      "minimum": 1
+    },
+    "postInitSQL": {
+      "description": "Extra SQL statements to run after database creation (pg_trgm is always included).",
+      "type": "array"
+    },
+    "storage": {
+      "type": "object",
+      "properties": {
+        "size": {
+          "description": "PVC size for each PostgreSQL instance.",
+          "type": "string"
+        },
+        "storageClass": {
+          "description": "Storage class for PostgreSQL PVCs. Empty uses cluster default.",
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -143,7 +143,7 @@ jobs:
           done < chart-digests.txt
 
       - name: Install oras
-        uses: oras-project/setup-oras@v1
+        uses: oras-project/setup-oras@v2
 
       - name: Push ArtifactHub metadata
         run: |

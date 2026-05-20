@@ -1,40 +1,52 @@
+# @schema minimum:1
+# -- Number of operator pod replicas.
 replicaCount: 1
 
 image:
+  # @schema required:true
+  # -- Image repository.
   repository: ghcr.io/slauger/openvox-operator
+  # -- Image tag. Ignored if digest is set.
   tag: latest
-  # digest: sha256:...  # Set to use digest instead of tag
+  # @schema type:string;pattern:^sha256:[a-f0-9]{64}$
+  # -- Image digest. Takes precedence over tag.
+  digest: "" # @schema hidden
+  # @schema enum:[Always, IfNotPresent, Never]
+  # -- Image pull policy.
   pullPolicy: Always
 
+# -- Image pull secrets for private registries.
 imagePullSecrets: []
 
-# Annotations applied to the operator Pod template (e.g. for log collectors,
+# -- Annotations applied to the operator Pod template (e.g. for log collectors,
 # Prometheus scraping, or forcing rollouts via a checksum annotation).
 podAnnotations: {}
 
 serviceAccount:
+  # -- Create a service account for the operator.
   create: true
+  # -- Service account name. Auto-generated if empty.
   name: ""
+  # -- Annotations added to the service account.
   annotations: {}
 
+# -- Enable leader election for controller manager.
 leaderElect: true
 
 # Operator scope configuration.
-#
-# mode: "cluster" (default) -- the operator watches resources in all namespaces.
-#   RBAC is created as ClusterRole + ClusterRoleBinding.
-# mode: "namespace" -- the operator only watches a single namespace.
-#   RBAC is created as Role + RoleBinding scoped to watchNamespace.
-#
-# When mode = "namespace" and watchNamespace is empty, .Release.Namespace is used.
-# Example: scope.mode=namespace, scope.watchNamespace=openvox-prod
 scope:
+  # @schema enum:[cluster, namespace]
+  # -- Operator scope mode. cluster: watches all namespaces (ClusterRole).
+  # namespace: watches a single namespace (Role).
   mode: cluster
+  # -- Namespace to watch when mode is namespace. Defaults to release namespace if empty.
   watchNamespace: ""
 
 gatewayAPI:
-  enabled: true  # set to false to disable TLSRoute support
+  # -- Enable TLSRoute support via Gateway API.
+  enabled: true
 
+# -- CPU/memory resource requests and limits.
 resources:
   limits:
     cpu: 500m
@@ -43,32 +55,31 @@ resources:
     cpu: 10m
     memory: 128Mi
 
-# Admission webhook configuration.
-#
-# When webhook.enabled = true the operator serves CRD validation/mutation
-# webhooks on webhook.port. The webhook needs a TLS server certificate; pick
-# ONE of the two options below:
-#
-#   1. cert-manager (default): set certManager.enabled = true. Requires
-#      cert-manager to be installed in the cluster -- otherwise the chart
-#      installs successfully but the webhook will never become Ready.
-#
-#   2. Existing Secret: set certManager.enabled = false and provide
-#      tls.certSecret with an existing Secret containing tls.crt / tls.key
-#      (and ca.crt for the apiservice CA bundle). Set tls.caBundle to the
-#      base64-encoded CA certificate that signs tls.crt; the chart writes
-#      this into the ValidatingWebhookConfiguration / MutatingWebhookConfiguration.
+# Admission webhook configuration. When enabled the operator serves CRD
+# validation/mutation webhooks. The webhook needs a TLS server certificate;
+# use either cert-manager or an existing Secret.
 webhook:
+  # -- Enable CRD validation/mutation webhooks.
   enabled: false
+  # @schema minimum:1;maximum:65535
+  # -- Port for the webhook server.
   port: 9443
   certManager:
-    enabled: true        # set to false to skip cert-manager resources
-    duration: 8760h      # 1 year
-    renewBefore: 720h    # 30 days
+    # -- Use cert-manager to provision webhook TLS certificates.
+    enabled: true
+    # -- Certificate duration (e.g. 8760h for 1 year).
+    duration: 8760h
+    # -- Renew certificate before expiry (e.g. 720h for 30 days).
+    renewBefore: 720h
   tls:
-    certSecret: ""       # name of an existing TLS Secret (tls.crt, tls.key, ca.crt)
-    caBundle: ""         # base64-encoded CA certificate for webhook config
+    # -- Name of an existing TLS Secret containing tls.crt, tls.key, and ca.crt.
+    certSecret: ""
+    # -- Base64-encoded CA certificate for the webhook configuration.
+    caBundle: ""
 
+# -- Node selector for pod scheduling.
 nodeSelector: {}
+# -- Tolerations for pod scheduling.
 tolerations: []
+# -- Affinity rules for pod scheduling.
 affinity: {}

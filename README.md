@@ -4,6 +4,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/slauger/openvox-operator)](https://goreportcard.com/report/github.com/slauger/openvox-operator)
 [![Go Reference](https://pkg.go.dev/badge/github.com/slauger/openvox-operator.svg)](https://pkg.go.dev/github.com/slauger/openvox-operator)
 [![License](https://img.shields.io/github/license/slauger/openvox-operator)](LICENSE)
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/openvox-operator)](https://artifacthub.io/packages/search?repo=openvox-operator)
 
 A Kubernetes Operator that maps [OpenVox Server](https://github.com/OpenVoxProject) infrastructure onto native building blocks - CRDs, Secrets, OCI image volumes, and Gateway API - for running Puppet on **Kubernetes** and **OpenShift**.
 

@@ -1,25 +1,42 @@
+# -- Override chart name.
 # nameOverride: ""
+# -- Override full release name.
 # fullnameOverride: ""
 
 config:
-  name: ""             # default: Release name
+  # -- Config resource name. Defaults to release name.
+  name: ""
+  # -- Enable read-only root filesystem for server containers.
   readOnlyRootFilesystem: false
   image:
+    # -- OpenVox Server image repository.
     repository: ghcr.io/slauger/openvox-server
+    # -- Image tag.
     tag: latest
+    # @schema enum:[Always, IfNotPresent, Never]
+    # -- Image pull policy.
     pullPolicy: Always
+    # -- Image pull secrets.
     pullSecrets: []
     # pullSecrets:
     #   - name: my-registry-secret
   puppetdb:
+    # -- PuppetDB server URLs for report storage.
     serverUrls: []
   puppet:
+    # -- Environment timeout setting.
     environmentTimeout: ""
+    # -- Path to Puppet environments.
     environmentPath: ""
+    # -- Path to Hiera configuration file.
     hieraConfig: ""
+    # -- Enable stored configurations.
     storeconfigs: false
+    # -- Storage backend for stored configurations.
     storeBackend: ""
+    # -- Enabled report processors.
     reports: store
+    # -- Extra puppet.conf sections and settings.
     extraConfig: {}
     # extraConfig:
     #   main:
@@ -28,9 +45,14 @@ config:
     #     strict_variables: "true"
     #   agent: {}
   code:
+    # -- Init container image for Puppet code deployment.
     image: ""
+    # @schema enum:[Always, IfNotPresent, Never]
+    # -- Pull policy for the code init container.
     imagePullPolicy: IfNotPresent
+    # -- Pull secret for the code init container.
     imagePullSecret: ""
+    # -- Existing PVC claim name for code volume.
     claimName: ""
   # puppetserver:
   #   maxRequestsPerInstance: 0
@@ -55,7 +77,9 @@ config:
   #     port: 2003
 
 ca:
-  name: ""             # default: {fullname}-ca
+  # -- CA resource name. Defaults to {fullname}-ca.
+  name: ""
+  # -- CA certificate time-to-live.
   ttl: 5y
   # allowSubjectAltNames: true
   # allowAuthorizationExtensions: true
@@ -64,7 +88,9 @@ ca:
   # autoRenewalCertTTL: 90d
   # crlRefreshInterval: 5m
   storage:
+    # -- PVC size for CA storage.
     size: 1Gi
+    # -- Storage class for CA PVC. Empty uses cluster default.
     storageClass: ""
   # resources:
   #   requests:
@@ -78,6 +104,7 @@ ca:
   # external:
   #   url: https://ca.example.com
 
+# -- Report processor endpoints.
 reportProcessors: []
 # reportProcessors:
 #   - name: my-webhook
@@ -87,6 +114,7 @@ reportProcessors: []
 #     url: https://my-puppetdb:8081
 #     processor: puppetdb
 
+# -- Signing policies for certificate auto-signing.
 signingPolicies: []
 # signingPolicies:
 #   - name: autosign-any
@@ -97,40 +125,72 @@ signingPolicies: []
 #         value: "my-secret-token"
 
 nodeClassifier:
+  # -- Enable external node classifier integration.
   enabled: false
-  name: ""             # default: {fullname}-enc
+  # -- NodeClassifier resource name. Defaults to {fullname}-enc.
+  name: ""
+  # -- URL of the external node classifier API.
   url: ""
   request:
+    # -- HTTP method for ENC requests.
     method: GET
+    # -- Request path template. {certname} is replaced with the node name.
     path: /node/{certname}
+    # -- Request body template.
     body: ""
   response:
+    # @schema enum:[yaml, json]
+    # -- Response format from the ENC endpoint.
     format: yaml
+  # @schema minimum:1
+  # -- Timeout in seconds for ENC requests.
   timeoutSeconds: 10
   auth:
+    # -- Enable mutual TLS authentication for ENC requests.
     mtls: false
   cache:
+    # -- Enable response caching for ENC requests.
     enabled: false
+    # -- Directory path for cached ENC responses.
     directory: /var/cache/openvox-enc
 
 database:
+  # -- Enable PuppetDB database deployment.
   enabled: false
-  name: ""              # REQUIRED when enabled (no auto-default)
+  # -- Database resource name. Required when enabled.
+  name: ""
   image:
+    # -- OpenVox DB image repository.
     repository: ghcr.io/slauger/openvox-db
+    # -- Image tag.
     tag: latest
+    # @schema enum:[Always, IfNotPresent, Never]
+    # -- Image pull policy.
     pullPolicy: IfNotPresent
   certificate:
-    certname: ""        # REQUIRED when enabled
+    # -- Certificate common name for PuppetDB. Required when enabled.
+    certname: ""
+    # -- Additional DNS subject alternative names.
     dnsAltNames: []
   postgres:
-    host: ""            # REQUIRED when enabled
+    # -- PostgreSQL host. Required when enabled.
+    host: ""
+    # @schema minimum:1;maximum:65535
+    # -- PostgreSQL port.
     port: 5432
+    # -- PostgreSQL database name.
     database: openvoxdb
-    credentialsSecretRef: ""  # REQUIRED when enabled
+    # -- Name of Secret containing PostgreSQL credentials. Required when enabled.
+    credentialsSecretRef: ""
+    # @schema enum:[disable, allow, prefer, require, verify-ca, verify-full]
+    # -- PostgreSQL SSL mode.
     sslMode: require
+  # @schema minimum:1
+  # -- Number of PuppetDB replicas.
   replicas: 1
+  # -- JVM arguments for PuppetDB.
   javaArgs: ""
+  # -- CPU/memory resource requests and limits for PuppetDB.
   resources:
     requests:
       cpu: 250m
@@ -146,6 +206,7 @@ database:
   #   type: ClusterIP
   #   port: 8081
 
+# -- Server definitions. Each entry creates a Server resource.
 servers:
   - name: ca
     ca: true
@@ -203,9 +264,12 @@ servers:
     # priorityClassName: ""
 
 gateway:
-  name: ""              # shared Gateway resource name
-  sectionName: ""       # listener name on the Gateway
+  # -- Shared Gateway resource name for TLSRoute integration.
+  name: ""
+  # -- Listener section name on the Gateway.
+  sectionName: ""
 
+# -- Pool definitions. Each entry creates a Pool resource with a Service.
 pools:
   - name: ca
     service:

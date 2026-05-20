@@ -4,3 +4,29 @@ description: Deploy a complete OpenVox stack (Config, CA, Servers, Pools)
 type: application
 version: 0.0.0
 appVersion: "0.0.0"
+icon: https://slauger.github.io/openvox-operator/assets/logo.svg
+home: https://github.com/slauger/openvox-operator
+sources:
+  - https://github.com/slauger/openvox-operator
+maintainers:
+  - name: Simon Lauger
+    email: simon@lauger.de
+    url: https://lauger.de
+keywords:
+  - openvox
+  - puppet
+  - kubernetes
+  - configuration-management
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/category: integration-delivery
+  artifacthub.io/images: |
+    - name: openvox-server
+      image: ghcr.io/slauger/openvox-server:latest
+    - name: openvox-db
+      image: ghcr.io/slauger/openvox-db:latest
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://slauger.github.io/openvox-operator/
+    - name: Source Code
+      url: https://github.com/slauger/openvox-operator

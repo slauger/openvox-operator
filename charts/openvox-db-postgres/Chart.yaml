@@ -4,6 +4,7 @@ description: CloudNative PG cluster for OpenVox DB (PuppetDB)
 type: application
 version: 0.0.0
 appVersion: "0.0.0"
+icon: https://slauger.github.io/openvox-operator/assets/logo.svg
 home: https://github.com/slauger/openvox-operator
 sources:
   - https://github.com/slauger/openvox-operator
@@ -11,3 +12,16 @@ maintainers:
   - name: Simon Lauger
     email: simon@lauger.de
     url: https://lauger.de
+keywords:
+  - openvox
+  - puppetdb
+  - postgresql
+  - kubernetes
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/category: database
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://slauger.github.io/openvox-operator/
+    - name: Source Code
+      url: https://github.com/slauger/openvox-operator

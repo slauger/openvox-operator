@@ -77,6 +77,7 @@ nav:
       - Mock Server: development/mock-server.md
   - Reference:
       - Overview: reference/index.md
+      - Helm Values: reference/helm-values.md
       - Helper Binaries: reference/binaries.md
       - Config: reference/config.md
       - CertificateAuthority: reference/certificateauthority.md

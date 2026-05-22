@@ -297,3 +297,184 @@ func TestConfigMapVolumeType(t *testing.T) {
 		t.Error("unexpected additional volume sources set")
 	}
 }
+
+func TestResolveSecretKey(t *testing.T) {
+	secret := newSecret("db-creds", map[string][]byte{
+		"password": []byte("supersecret"),
+		"username": []byte("admin"),
+	})
+	c := setupTestClient(secret)
+
+	tests := []struct {
+		name       string
+		secretName string
+		key        string
+		want       string
+		wantErr    bool
+	}{
+		{
+			name:       "existing key",
+			secretName: "db-creds",
+			key:        "password",
+			want:       "supersecret",
+			wantErr:    false,
+		},
+		{
+			name:       "missing key",
+			secretName: "db-creds",
+			key:        "missing",
+			want:       "",
+			wantErr:    true,
+		},
+		{
+			name:       "missing secret",
+			secretName: "not-exists",
+			key:        "password",
+			want:       "",
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := resolveSecretKey(testCtx(), c, testNamespace, tt.secretName, tt.key)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("resolveSecretKey() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("resolveSecretKey() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsSecretReady(t *testing.T) {
+	secret := newSecret("my-secret", map[string][]byte{
+		"tls.crt": []byte("cert-data"),
+		"tls.key": []byte("key-data"),
+	})
+	c := setupTestClient(secret)
+
+	tests := []struct {
+		name        string
+		secretName  string
+		requiredKey string
+		want        bool
+	}{
+		{
+			name:        "exists without key requirement",
+			secretName:  "my-secret",
+			requiredKey: "",
+			want:        true,
+		},
+		{
+			name:        "exists with present key",
+			secretName:  "my-secret",
+			requiredKey: "tls.crt",
+			want:        true,
+		},
+		{
+			name:        "exists with missing key",
+			secretName:  "my-secret",
+			requiredKey: "ca.crt",
+			want:        false,
+		},
+		{
+			name:        "secret does not exist",
+			secretName:  "not-exists",
+			requiredKey: "",
+			want:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isSecretReady(testCtx(), c, tt.secretName, testNamespace, tt.requiredKey)
+			if got != tt.want {
+				t.Errorf("isSecretReady() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCAInternalServiceName(t *testing.T) {
+	tests := []struct {
+		caName string
+		want   string
+	}{
+		{caName: "production", want: "production-internal"},
+		{caName: "my-ca", want: "my-ca-internal"},
+		{caName: "", want: "-internal"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.caName, func(t *testing.T) {
+			got := caInternalServiceName(tt.caName)
+			if got != tt.want {
+				t.Errorf("caInternalServiceName(%q) = %q, want %q", tt.caName, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseCertNotAfter(t *testing.T) {
+	// Valid PEM certificate (self-signed, expires 2030-01-01)
+	validCertPEM := []byte(`-----BEGIN CERTIFICATE-----
+MIICujCCAaKgAwIBAgIBATANBgkqhkiG9w0BAQsFADAPMQ0wCwYDVQQDEwR0ZXN0
+MB4XDTIwMDEwMTAwMDAwMFoXDTMwMDEwMTAwMDAwMFowDzENMAsGA1UEAxMEdGVz
+dDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAPO26OVqqye9Z3SF7VEs
+8uiKA8VNZmRg1LPsn+IYY6oc025pnAG8WyIuWg6MMYGTpAbKWVnI1nwW8EBv8Qg3
+Cl5Y1LGbnnZnu7tdMkcnLZJv5LWcIaMQw0PvAOSqPBca66/wN/I3CBMCwQGvuBAY
+UK7A9hN29X0EX9Hcj/cMgGRvn2pk61ae2pOiLkxgH6OQT8QJW71TwBRgKwwtfY5G
+Q5wLMcssT8tO1MzWCkjN1akL9Xd+E4dnH00qsej7NFXb+lpobI7YdcmBVbIv0JtK
+YoRuiyBB+0MoEt7Rr0VEjbSeVvbiFthVY4Gkq64wlVBZsjECswxMjk55Lyps8zgT
+zkUCAwEAAaMhMB8wHQYDVR0OBBYEFOoDmk6u9EfFFp6Lq4wPkcMxHAMMMA0GCSqG
+SIb3DQEBCwUAA4IBAQAOXzQYERe2tA+CT4jzRwy3Fr6UTCPdoMD0vXbFMPWwiPDe
+N1C9MHRxAoxc1MEdU6/WOFWQRoVaPNHVp1C7RfARekh7aPKM8Pnv2iCQMV4OLx6l
+UPUciFsDEJzh0x0ZViP1/b31wrMAZqiqJldJo0x3TojEEXnkCBL9KVGg+4hQ7HeT
+Cry0P1mb4Y1tLgR1iDN2oAtLno6yURFlZ5QiF8urp1TGdz5F3LWOAb4Hum6ClliM
+8yULVmDNZPUTKNwCAv/5ebwxN3ZidYthXuO014lxRMfVNa4IQWXPZDl64UnMLNzp
+liqwHJVNUueDArq7d4MOYP/zXLbF7OJ8ordjCPzl
+-----END CERTIFICATE-----`)
+
+	// Invalid PEM
+	invalidPEM := []byte("not a valid PEM")
+
+	// Wrong PEM type
+	wrongTypePEM := []byte(`-----BEGIN PRIVATE KEY-----
+MIIBVgIBADANBgkqhkiG9w0BAQEFAASCAUAwggE8AgEAAkEAu6PehQqeA2Jz/Vrw
+-----END PRIVATE KEY-----`)
+
+	t.Run("valid certificate", func(t *testing.T) {
+		result := parseCertNotAfter(testCtx(), validCertPEM)
+		if result == nil {
+			t.Fatal("expected non-nil result for valid certificate")
+		}
+		// Check year is 2030
+		if result.Year() != 2030 {
+			t.Errorf("expected year 2030, got %d", result.Year())
+		}
+	})
+
+	t.Run("invalid PEM", func(t *testing.T) {
+		result := parseCertNotAfter(testCtx(), invalidPEM)
+		if result != nil {
+			t.Errorf("expected nil result for invalid PEM, got %v", result)
+		}
+	})
+
+	t.Run("wrong PEM type", func(t *testing.T) {
+		result := parseCertNotAfter(testCtx(), wrongTypePEM)
+		if result != nil {
+			t.Errorf("expected nil result for wrong PEM type, got %v", result)
+		}
+	})
+
+	t.Run("empty input", func(t *testing.T) {
+		result := parseCertNotAfter(testCtx(), []byte{})
+		if result != nil {
+			t.Errorf("expected nil result for empty input, got %v", result)
+		}
+	})
+}

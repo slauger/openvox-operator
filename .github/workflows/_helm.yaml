@@ -30,3 +30,54 @@ jobs:
 
       - name: Helm unittest
         run: helm unittest charts/${{ matrix.chart }}
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run helm-docs
+        uses: losisin/helm-docs-github-action@v1
+        with:
+          chart-search-root: charts
+
+      - name: Check for uncommitted changes
+        run: |
+          if ! git diff --exit-code; then
+            echo ""
+            echo "ERROR: helm-docs output is out of date."
+            echo "Run 'helm-docs' locally and commit the updated README.md files."
+            exit 1
+          fi
+
+  schema:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        chart:
+          - openvox-operator
+          - openvox-stack
+          - openvox-db-postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v5
+
+      - name: Install helm-values-schema-json plugin
+        run: helm plugin install https://github.com/losisin/helm-values-schema-json
+
+      - name: Generate schema
+        run: helm schema -input charts/${{ matrix.chart }}/values.yaml -output /tmp/values.schema.json
+
+      - name: Check for schema drift
+        run: |
+          if ! diff -q /tmp/values.schema.json charts/${{ matrix.chart }}/values.schema.json > /dev/null 2>&1; then
+            echo ""
+            echo "ERROR: values.schema.json for ${{ matrix.chart }} is out of date."
+            echo "Run 'helm schema -input charts/${{ matrix.chart }}/values.yaml -output charts/${{ matrix.chart }}/values.schema.json' and commit."
+            diff /tmp/values.schema.json charts/${{ matrix.chart }}/values.schema.json || true
+            exit 1
+          fi

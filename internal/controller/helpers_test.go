@@ -450,6 +450,7 @@ MIIBVgIBADANBgkqhkiG9w0BAQEFAASCAUAwggE8AgEAAkEAu6PehQqeA2Jz/Vrw
 		result := parseCertNotAfter(testCtx(), validCertPEM)
 		if result == nil {
 			t.Fatal("expected non-nil result for valid certificate")
+			return
 		}
 		// Check year is 2030
 		if result.Year() != 2030 {

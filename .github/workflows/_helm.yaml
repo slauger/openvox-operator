@@ -67,7 +67,7 @@ jobs:
         uses: azure/setup-helm@v5
 
       - name: Install helm-values-schema-json plugin
-        run: helm plugin install https://github.com/losisin/helm-values-schema-json.git
+        run: helm plugin install --verify=false https://github.com/losisin/helm-values-schema-json.git
 
       - name: Generate and check schema drift
         run: |

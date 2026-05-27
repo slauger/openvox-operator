@@ -71,10 +71,11 @@ jobs:
 
       - name: Generate and check schema drift
         run: |
-          helm schema -input charts/${{ matrix.chart }}/values.yaml -output /tmp/values.schema.json
-          if ! diff -q /tmp/values.schema.json charts/${{ matrix.chart }}/values.schema.json > /dev/null 2>&1; then
+          cd charts/${{ matrix.chart }}
+          helm schema -f values.yaml -o /tmp/values.schema.json
+          if ! diff -q /tmp/values.schema.json values.schema.json > /dev/null 2>&1; then
             echo "ERROR: values.schema.json for ${{ matrix.chart }} is out of date."
-            diff /tmp/values.schema.json charts/${{ matrix.chart }}/values.schema.json || true
+            diff /tmp/values.schema.json values.schema.json || true
             exit 1
           fi
           echo "Schema for ${{ matrix.chart }} is up to date."

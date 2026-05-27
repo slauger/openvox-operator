@@ -200,6 +200,7 @@ func TestBuildPodSpec_SecurityContext(t *testing.T) {
 	psc := podSpec.SecurityContext
 	if psc == nil {
 		t.Fatal("pod security context is nil")
+		return
 	}
 	if psc.RunAsUser == nil || *psc.RunAsUser != 1001 {
 		t.Errorf("expected RunAsUser=1001, got %v", psc.RunAsUser)
@@ -215,6 +216,7 @@ func TestBuildPodSpec_SecurityContext(t *testing.T) {
 	csc := podSpec.Containers[0].SecurityContext
 	if csc == nil {
 		t.Fatal("container security context is nil")
+		return
 	}
 	if csc.Capabilities == nil || len(csc.Capabilities.Drop) == 0 {
 		t.Error("expected capabilities Drop ALL")

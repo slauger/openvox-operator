@@ -63,21 +63,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Helm
-        uses: azure/setup-helm@v5
-
-      - name: Install helm-values-schema-json plugin
-        run: helm plugin install https://github.com/losisin/helm-values-schema-json
-
-      - name: Generate schema
-        run: helm schema -input charts/${{ matrix.chart }}/values.yaml -output /tmp/values.schema.json
+      - name: Generate schema for ${{ matrix.chart }}
+        uses: losisin/helm-values-schema-json-action@v2
+        with:
+          input: charts/${{ matrix.chart }}/values.yaml
+          output: charts/${{ matrix.chart }}/values.schema.json
 
       - name: Check for schema drift
         run: |
-          if ! diff -q /tmp/values.schema.json charts/${{ matrix.chart }}/values.schema.json > /dev/null 2>&1; then
+          if ! git diff --exit-code charts/${{ matrix.chart }}/values.schema.json; then
             echo ""
             echo "ERROR: values.schema.json for ${{ matrix.chart }} is out of date."
-            echo "Run 'helm schema -input charts/${{ matrix.chart }}/values.yaml -output charts/${{ matrix.chart }}/values.schema.json' and commit."
-            diff /tmp/values.schema.json charts/${{ matrix.chart }}/values.schema.json || true
+            echo "Run the helm-values-schema-json action locally and commit the result."
             exit 1
           fi

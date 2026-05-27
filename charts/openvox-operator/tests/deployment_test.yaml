@@ -17,7 +17,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "ghcr.io/slauger/openvox-operator:0.0.0"
+          value: "ghcr.io/slauger/openvox-operator:latest"
 
   - it: should use digest-based image when digest is set
     set:

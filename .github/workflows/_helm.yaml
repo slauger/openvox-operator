@@ -44,11 +44,11 @@ jobs:
         run: |
           cd /tmp
           curl -sSL "https://github.com/norwoodj/helm-docs/releases/download/v${HELM_DOCS_VERSION}/helm-docs_${HELM_DOCS_VERSION}_Linux_x86_64.tar.gz" \
-            -o helm-docs.tar.gz
+            -o "helm-docs_${HELM_DOCS_VERSION}_Linux_x86_64.tar.gz"
           curl -sSL "https://github.com/norwoodj/helm-docs/releases/download/v${HELM_DOCS_VERSION}/checksums.txt" \
-            -o helm-docs-checksums.txt
-          grep "helm-docs_${HELM_DOCS_VERSION}_Linux_x86_64.tar.gz" helm-docs-checksums.txt | sha256sum --check
-          tar -xzf helm-docs.tar.gz helm-docs
+            -o checksums.txt
+          grep "helm-docs_${HELM_DOCS_VERSION}_Linux_x86_64.tar.gz" checksums.txt | sha256sum --check
+          tar -xzf "helm-docs_${HELM_DOCS_VERSION}_Linux_x86_64.tar.gz" helm-docs
           sudo mv helm-docs /usr/local/bin/helm-docs
 
       - name: Run helm-docs
@@ -82,11 +82,11 @@ jobs:
         run: |
           cd /tmp
           curl -sSL "https://github.com/losisin/helm-values-schema-json/releases/download/v${SCHEMA_VERSION}/helm-values-schema-json_${SCHEMA_VERSION}_linux_amd64.tgz" \
-            -o helm-schema.tgz
+            -o "helm-values-schema-json_${SCHEMA_VERSION}_linux_amd64.tgz"
           curl -sSL "https://github.com/losisin/helm-values-schema-json/releases/download/v${SCHEMA_VERSION}/helm-values-schema-json-checksum.sha" \
-            -o helm-schema-checksums.txt
-          grep "helm-values-schema-json_${SCHEMA_VERSION}_linux_amd64.tgz" helm-schema-checksums.txt | sha256sum --check
-          tar -xzf helm-schema.tgz schema
+            -o helm-values-schema-json-checksum.sha
+          grep "helm-values-schema-json_${SCHEMA_VERSION}_linux_amd64.tgz" helm-values-schema-json-checksum.sha | sha256sum --check
+          tar -xzf "helm-values-schema-json_${SCHEMA_VERSION}_linux_amd64.tgz" schema
           sudo mv schema /usr/local/bin/helm-schema
 
       - name: Generate and check schema drift

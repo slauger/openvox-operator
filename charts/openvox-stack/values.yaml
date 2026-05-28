@@ -4,38 +4,52 @@
 # fullnameOverride: ""
 
 config:
+  # @schema description: Config resource name. Defaults to release name.
   # -- Config resource name. Defaults to release name.
   name: ""
+  # @schema description: Enable read-only root filesystem for server containers.
   # -- Enable read-only root filesystem for server containers.
   readOnlyRootFilesystem: false
   image:
+    # @schema description: OpenVox Server image repository.
     # -- OpenVox Server image repository.
     repository: ghcr.io/slauger/openvox-server
+    # @schema description: Image tag.
     # -- Image tag.
     tag: latest
     # @schema enum:[Always, IfNotPresent, Never]
+    # @schema description: Image pull policy.
     # -- Image pull policy.
     pullPolicy: Always
+    # @schema description: Image pull secrets.
     # -- Image pull secrets.
     pullSecrets: []
     # pullSecrets:
     #   - name: my-registry-secret
   puppetdb:
+    # @schema description: PuppetDB server URLs for report storage.
     # -- PuppetDB server URLs for report storage.
     serverUrls: []
   puppet:
+    # @schema description: Environment timeout setting.
     # -- Environment timeout setting.
     environmentTimeout: ""
+    # @schema description: Path to Puppet environments.
     # -- Path to Puppet environments.
     environmentPath: ""
+    # @schema description: Path to Hiera configuration file.
     # -- Path to Hiera configuration file.
     hieraConfig: ""
+    # @schema description: Enable stored configurations.
     # -- Enable stored configurations.
     storeconfigs: false
+    # @schema description: Storage backend for stored configurations.
     # -- Storage backend for stored configurations.
     storeBackend: ""
+    # @schema description: Enabled report processors.
     # -- Enabled report processors.
     reports: store
+    # @schema description: Extra puppet.conf sections and settings.
     # -- Extra puppet.conf sections and settings.
     extraConfig: {}
     # extraConfig:
@@ -45,13 +59,17 @@ config:
     #     strict_variables: "true"
     #   agent: {}
   code:
+    # @schema description: Init container image for Puppet code deployment.
     # -- Init container image for Puppet code deployment.
     image: ""
     # @schema enum:[Always, IfNotPresent, Never]
+    # @schema description: Pull policy for the code init container.
     # -- Pull policy for the code init container.
     imagePullPolicy: IfNotPresent
+    # @schema description: Pull secret for the code init container.
     # -- Pull secret for the code init container.
     imagePullSecret: ""
+    # @schema description: Existing PVC claim name for code volume.
     # -- Existing PVC claim name for code volume.
     claimName: ""
   # puppetserver:
@@ -77,8 +95,10 @@ config:
   #     port: 2003
 
 ca:
+  # @schema description: CA resource name. Defaults to {fullname}-ca.
   # -- CA resource name. Defaults to {fullname}-ca.
   name: ""
+  # @schema description: CA certificate time-to-live.
   # -- CA certificate time-to-live.
   ttl: 5y
   # allowSubjectAltNames: true
@@ -88,8 +108,10 @@ ca:
   # autoRenewalCertTTL: 90d
   # crlRefreshInterval: 5m
   storage:
+    # @schema description: PVC size for CA storage.
     # -- PVC size for CA storage.
     size: 1Gi
+    # @schema description: Storage class for CA PVC. Empty uses cluster default.
     # -- Storage class for CA PVC. Empty uses cluster default.
     storageClass: ""
   # resources:
@@ -104,6 +126,7 @@ ca:
   # external:
   #   url: https://ca.example.com
 
+# @schema description: Report processor endpoints.
 # -- Report processor endpoints.
 reportProcessors: []
 # reportProcessors:
@@ -114,6 +137,7 @@ reportProcessors: []
 #     url: https://my-puppetdb:8081
 #     processor: puppetdb
 
+# @schema description: Signing policies for certificate auto-signing.
 # -- Signing policies for certificate auto-signing.
 signingPolicies: []
 # signingPolicies:
@@ -125,71 +149,97 @@ signingPolicies: []
 #         value: "my-secret-token"
 
 nodeClassifier:
+  # @schema description: Enable external node classifier integration.
   # -- Enable external node classifier integration.
   enabled: false
+  # @schema description: NodeClassifier resource name. Defaults to {fullname}-enc.
   # -- NodeClassifier resource name. Defaults to {fullname}-enc.
   name: ""
+  # @schema description: URL of the external node classifier API.
   # -- URL of the external node classifier API.
   url: ""
   request:
+    # @schema description: HTTP method for ENC requests.
     # -- HTTP method for ENC requests.
     method: GET
+    # @schema description: Request path template. {certname} is replaced with the node name.
     # -- Request path template. {certname} is replaced with the node name.
     path: /node/{certname}
+    # @schema description: Request body template.
     # -- Request body template.
     body: ""
   response:
     # @schema enum:[yaml, json]
+    # @schema description: Response format from the ENC endpoint.
     # -- Response format from the ENC endpoint.
     format: yaml
   # @schema minimum:1
+  # @schema description: Timeout in seconds for ENC requests.
   # -- Timeout in seconds for ENC requests.
   timeoutSeconds: 10
   auth:
+    # @schema description: Enable mutual TLS authentication for ENC requests.
     # -- Enable mutual TLS authentication for ENC requests.
     mtls: false
   cache:
+    # @schema description: Enable response caching for ENC requests.
     # -- Enable response caching for ENC requests.
     enabled: false
+    # @schema description: Directory path for cached ENC responses.
     # -- Directory path for cached ENC responses.
     directory: /var/cache/openvox-enc
 
 database:
+  # @schema description: Enable PuppetDB database deployment.
   # -- Enable PuppetDB database deployment.
   enabled: false
+  # @schema description: Database resource name. Required when enabled.
   # -- Database resource name. Required when enabled.
   name: ""
   image:
+    # @schema description: OpenVox DB image repository.
     # -- OpenVox DB image repository.
     repository: ghcr.io/slauger/openvox-db
+    # @schema description: Image tag.
     # -- Image tag.
     tag: latest
     # @schema enum:[Always, IfNotPresent, Never]
+    # @schema description: Image pull policy.
     # -- Image pull policy.
     pullPolicy: IfNotPresent
   certificate:
+    # @schema description: Certificate common name for PuppetDB. Required when enabled.
     # -- Certificate common name for PuppetDB. Required when enabled.
     certname: ""
+    # @schema description: Additional DNS subject alternative names.
     # -- Additional DNS subject alternative names.
     dnsAltNames: []
   postgres:
+    # @schema description: PostgreSQL host. Required when enabled.
     # -- PostgreSQL host. Required when enabled.
     host: ""
     # @schema minimum:1;maximum:65535
+    # @schema description: PostgreSQL port.
     # -- PostgreSQL port.
     port: 5432
+    # @schema description: PostgreSQL database name.
     # -- PostgreSQL database name.
     database: openvoxdb
+    # @schema description: Name of Secret containing PostgreSQL credentials. Required when enabled.
     # -- Name of Secret containing PostgreSQL credentials. Required when enabled.
     credentialsSecretRef: ""
     # @schema enum:[disable, allow, prefer, require, verify-ca, verify-full]
+    # @schema description: PostgreSQL SSL mode.
     # -- PostgreSQL SSL mode.
     sslMode: require
   # @schema minimum:1
+  # @schema description: Number of PuppetDB replicas.
   # -- Number of PuppetDB replicas.
   replicas: 1
+  # @schema description: JVM arguments for PuppetDB.
   # -- JVM arguments for PuppetDB.
   javaArgs: ""
+  # @schema description: CPU/memory resource requests and limits for PuppetDB.
   # -- CPU/memory resource requests and limits for PuppetDB.
   resources:
     requests:
@@ -206,6 +256,7 @@ database:
   #   type: ClusterIP
   #   port: 8081
 
+# @schema description: Server definitions. Each entry creates a Server resource.
 # -- Server definitions. Each entry creates a Server resource.
 servers:
   - name: ca
@@ -264,11 +315,14 @@ servers:
     # priorityClassName: ""
 
 gateway:
+  # @schema description: Shared Gateway resource name for TLSRoute integration.
   # -- Shared Gateway resource name for TLSRoute integration.
   name: ""
+  # @schema description: Listener section name on the Gateway.
   # -- Listener section name on the Gateway.
   sectionName: ""
 
+# @schema description: Pool definitions. Each entry creates a Pool resource with a Service.
 # -- Pool definitions. Each entry creates a Pool resource with a Service.
 pools:
   - name: ca

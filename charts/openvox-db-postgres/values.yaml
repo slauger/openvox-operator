@@ -1,13 +1,19 @@
 # -- Cluster resource name. Defaults to release name.
 # name: ""
+# @schema minimum:1
+# @schema description: Number of PostgreSQL instances.
 # -- Number of PostgreSQL instances.
-instances: 1 # @schema minimum:1
+instances: 1
 storage:
+  # @schema description: PVC size for each PostgreSQL instance.
   # -- PVC size for each PostgreSQL instance.
   size: 1Gi
+  # @schema description: Storage class for PostgreSQL PVCs. Empty uses cluster default.
   # -- Storage class for PostgreSQL PVCs. Empty uses cluster default.
   storageClass: ""
+# @schema description: PostgreSQL database name.
 # -- PostgreSQL database name.
 database: openvoxdb
+# @schema description: Extra SQL statements to run after database creation (pg_trgm is always included).
 # -- Extra SQL statements to run after database creation (pg_trgm is always included).
 postInitSQL: []

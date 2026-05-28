@@ -237,6 +237,7 @@ All container images are:
 - **Signed** with [cosign](https://docs.sigstore.dev/cosign/) keyless signing (Sigstore OIDC)
 - **Attested** with [SLSA provenance](https://slsa.dev/) via `docker/build-push-action`
 - **SBOM** generated and attached to each image
+- **Validated** with [Conforma](https://github.com/conforma) policies (base image registries, signatures, SBOM, provenance)
 
 Verify image signatures:
 

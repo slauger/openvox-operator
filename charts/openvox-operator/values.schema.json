@@ -3,23 +3,28 @@
     "type": "object",
     "properties": {
         "affinity": {
+            "description": "Affinity rules for pod scheduling.",
             "type": "object"
         },
         "gatewayAPI": {
+            "description": "Gateway API integration configuration.",
             "type": "object",
             "properties": {
                 "enabled": {
+                    "description": "Enable TLSRoute support via Gateway API.",
                     "type": "boolean"
                 }
             }
         },
         "image": {
+            "description": "Container image configuration.",
             "type": "object",
             "required": [
                 "repository"
             ],
             "properties": {
                 "pullPolicy": {
+                    "description": "Image pull policy.",
                     "type": "string",
                     "enum": [
                         "Always",
@@ -28,30 +33,38 @@
                     ]
                 },
                 "repository": {
+                    "description": "Image repository.",
                     "type": "string"
                 },
                 "tag": {
+                    "description": "Image tag. Ignored if digest is set.",
                     "type": "string"
                 }
             }
         },
         "imagePullSecrets": {
+            "description": "Image pull secrets for private registries.",
             "type": "array"
         },
         "leaderElect": {
+            "description": "Enable leader election for controller manager.",
             "type": "boolean"
         },
         "nodeSelector": {
+            "description": "Node selector for pod scheduling.",
             "type": "object"
         },
         "podAnnotations": {
+            "description": "Annotations applied to the operator Pod template (e.g. for log collectors, Prometheus scraping, or forcing rollouts via a checksum annotation).",
             "type": "object"
         },
         "replicaCount": {
+            "description": "Number of operator pod replicas.",
             "type": "integer",
             "minimum": 1
         },
         "resources": {
+            "description": "CPU/memory resource requests and limits.",
             "type": "object",
             "properties": {
                 "limits": {
@@ -79,9 +92,11 @@
             }
         },
         "scope": {
+            "description": "Operator scope configuration.",
             "type": "object",
             "properties": {
                 "mode": {
+                    "description": "Operator scope mode. cluster: watches all namespaces (ClusterRole). namespace: watches a single namespace (Role).",
                     "type": "string",
                     "enum": [
                         "cluster",
@@ -89,48 +104,60 @@
                     ]
                 },
                 "watchNamespace": {
+                    "description": "Namespace to watch when mode is namespace. Defaults to release namespace if empty.",
                     "type": "string"
                 }
             }
         },
         "serviceAccount": {
+            "description": "Service account configuration.",
             "type": "object",
             "properties": {
                 "annotations": {
+                    "description": "Annotations added to the service account.",
                     "type": "object"
                 },
                 "create": {
+                    "description": "Create a service account for the operator.",
                     "type": "boolean"
                 },
                 "name": {
+                    "description": "Service account name. Auto-generated if empty.",
                     "type": "string"
                 }
             }
         },
         "tolerations": {
+            "description": "Tolerations for pod scheduling.",
             "type": "array"
         },
         "webhook": {
+            "description": "Webhook server configuration. Use either cert-manager or an existing Secret for TLS.",
             "type": "object",
             "properties": {
                 "certManager": {
                     "type": "object",
                     "properties": {
                         "duration": {
+                            "description": "Certificate duration (e.g. 8760h for 1 year).",
                             "type": "string"
                         },
                         "enabled": {
+                            "description": "Use cert-manager to provision webhook TLS certificates.",
                             "type": "boolean"
                         },
                         "renewBefore": {
+                            "description": "Renew certificate before expiry (e.g. 720h for 30 days).",
                             "type": "string"
                         }
                     }
                 },
                 "enabled": {
+                    "description": "Enable CRD validation/mutation webhooks.",
                     "type": "boolean"
                 },
                 "port": {
+                    "description": "Port for the webhook server.",
                     "type": "integer",
                     "maximum": 65535,
                     "minimum": 1
@@ -139,9 +166,11 @@
                     "type": "object",
                     "properties": {
                         "caBundle": {
+                            "description": "Base64-encoded CA certificate for the webhook configuration.",
                             "type": "string"
                         },
                         "certSecret": {
+                            "description": "Name of an existing TLS Secret containing tls.crt, tls.key, and ca.crt.",
                             "type": "string"
                         }
                     }

@@ -1,51 +1,69 @@
 # @schema minimum:1
+# @schema description: Number of operator pod replicas.
 # -- Number of operator pod replicas.
 replicaCount: 1
 
+# @schema description: Container image configuration.
 image:
   # @schema required:true
+  # @schema description: Image repository.
   # -- Image repository.
   repository: ghcr.io/slauger/openvox-operator
+  # @schema description: Image tag. Ignored if digest is set.
   # -- Image tag. Ignored if digest is set.
   tag: latest
   # @schema type:string;pattern:^sha256:[a-f0-9]{64}$
   # -- Image digest. Takes precedence over tag.
   digest: "" # @schema hidden
   # @schema enum:[Always, IfNotPresent, Never]
+  # @schema description: Image pull policy.
   # -- Image pull policy.
   pullPolicy: Always
 
+# @schema description: Image pull secrets for private registries.
 # -- Image pull secrets for private registries.
 imagePullSecrets: []
 
+# @schema description: Annotations applied to the operator Pod template (e.g. for log collectors, Prometheus scraping, or forcing rollouts via a checksum annotation).
 # -- Annotations applied to the operator Pod template (e.g. for log collectors,
 # Prometheus scraping, or forcing rollouts via a checksum annotation).
 podAnnotations: {}
 
+# @schema description: Service account configuration.
 serviceAccount:
+  # @schema description: Create a service account for the operator.
   # -- Create a service account for the operator.
   create: true
+  # @schema description: Service account name. Auto-generated if empty.
   # -- Service account name. Auto-generated if empty.
   name: ""
+  # @schema description: Annotations added to the service account.
   # -- Annotations added to the service account.
   annotations: {}
 
+# @schema description: Enable leader election for controller manager.
 # -- Enable leader election for controller manager.
 leaderElect: true
 
-# Operator scope configuration.
+# @schema description: Operator scope configuration.
 scope:
   # @schema enum:[cluster, namespace]
+  # @schema description: Operator scope mode. cluster: watches all namespaces (ClusterRole). namespace: watches a single namespace (Role).
   # -- Operator scope mode. cluster: watches all namespaces (ClusterRole).
   # namespace: watches a single namespace (Role).
   mode: cluster
+  # @schema description: Namespace to watch when mode is namespace. Defaults to release namespace if empty.
   # -- Namespace to watch when mode is namespace. Defaults to release namespace if empty.
   watchNamespace: ""
 
+# @schema description: Gateway API integration configuration.
 gatewayAPI:
+  # @schema description: Enable TLSRoute support via Gateway API.
   # -- Enable TLSRoute support via Gateway API.
   enabled: true
 
+# @schema description: CPU/memory resource requests and limits.
+# @schema description: CPU/memory resource requests and limits.
 # -- CPU/memory resource requests and limits.
 resources:
   limits:
@@ -57,29 +75,39 @@ resources:
 
 # Admission webhook configuration. When enabled the operator serves CRD
 # validation/mutation webhooks. The webhook needs a TLS server certificate;
-# use either cert-manager or an existing Secret.
+# @schema description: Webhook server configuration. Use either cert-manager or an existing Secret for TLS.
 webhook:
+  # @schema description: Enable CRD validation/mutation webhooks.
   # -- Enable CRD validation/mutation webhooks.
   enabled: false
   # @schema minimum:1;maximum:65535
+  # @schema description: Port for the webhook server.
   # -- Port for the webhook server.
   port: 9443
   certManager:
+    # @schema description: Use cert-manager to provision webhook TLS certificates.
     # -- Use cert-manager to provision webhook TLS certificates.
     enabled: true
+    # @schema description: Certificate duration (e.g. 8760h for 1 year).
     # -- Certificate duration (e.g. 8760h for 1 year).
     duration: 8760h
+    # @schema description: Renew certificate before expiry (e.g. 720h for 30 days).
     # -- Renew certificate before expiry (e.g. 720h for 30 days).
     renewBefore: 720h
   tls:
+    # @schema description: Name of an existing TLS Secret containing tls.crt, tls.key, and ca.crt.
     # -- Name of an existing TLS Secret containing tls.crt, tls.key, and ca.crt.
     certSecret: ""
+    # @schema description: Base64-encoded CA certificate for the webhook configuration.
     # -- Base64-encoded CA certificate for the webhook configuration.
     caBundle: ""
 
+# @schema description: Node selector for pod scheduling.
 # -- Node selector for pod scheduling.
 nodeSelector: {}
+# @schema description: Tolerations for pod scheduling.
 # -- Tolerations for pod scheduling.
 tolerations: []
+# @schema description: Affinity rules for pod scheduling.
 # -- Affinity rules for pod scheduling.
 affinity: {}

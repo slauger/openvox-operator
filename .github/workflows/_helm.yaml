@@ -34,6 +34,7 @@ jobs:
   docs:
     runs-on: ubuntu-latest
     env:
+      # renovate: datasource=github-releases depName=norwoodj/helm-docs
       HELM_DOCS_VERSION: "1.14.2"
     steps:
       - name: Checkout
@@ -65,6 +66,7 @@ jobs:
   schema:
     runs-on: ubuntu-latest
     env:
+      # renovate: datasource=github-releases depName=losisin/helm-values-schema-json
       SCHEMA_VERSION: "2.4.0"
     strategy:
       matrix:

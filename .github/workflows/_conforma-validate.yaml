@@ -1,0 +1,60 @@
+name: Conforma Validate
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: 'Full image reference (registry/owner/name:tag)'
+        required: true
+        type: string
+      digest:
+        description: 'Image manifest digest (sha256:...)'
+        required: true
+        type: string
+      strict:
+        description: 'Fail on policy violations'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      packages: read
+    env:
+      # renovate: datasource=github-releases depName=conforma/cli
+      EC_VERSION: "0.9.37"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install ec CLI
+        run: |
+          cd /tmp
+          curl -sSLO "https://github.com/conforma/cli/releases/download/v${EC_VERSION}/ec_linux_amd64"
+          curl -sSLO "https://github.com/conforma/cli/releases/download/v${EC_VERSION}/ec_linux_amd64.sha256"
+          sha256sum --check ec_linux_amd64.sha256
+          chmod +x ec_linux_amd64
+          sudo mv ec_linux_amd64 /usr/local/bin/ec
+
+      - name: Login to ghcr.io
+        run: echo "${{ github.token }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Validate image with Conforma
+        run: |
+          ARGS=(
+            validate image
+            --image "${{ inputs.image }}@${{ inputs.digest }}"
+            --policy .conforma/policy.yaml
+            --certificate-identity-regexp "https://github.com/${{ github.repository }}/"
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+            --show-successes
+            --output yaml
+          )
+          if [[ "${{ inputs.strict }}" == "true" ]]; then
+            ARGS+=(--strict)
+          fi
+          ec "${ARGS[@]}"

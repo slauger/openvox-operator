@@ -1,0 +1,14 @@
+sources:
+  - name: supply-chain-security
+    policy:
+      - github.com/conforma/policy//policy/lib
+      - github.com/conforma/policy//policy/release
+    config:
+      include:
+        - '@minimal'
+        - '@github'
+    data:
+      rule_data:
+        allowed_registry_prefixes:
+          - "registry.access.redhat.com/"
+          - "registry.redhat.io/"

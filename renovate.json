@@ -23,7 +23,8 @@
     {
       "customType": "regex",
       "managerFilePatterns": [
-        "/(^|/).github/workflows/_helm\\.yaml$/"
+        "/(^|/).github/workflows/_helm\\.yaml$/",
+        "/(^|/).github/workflows/_conforma-validate\\.yaml$/"
       ],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+\\w+_VERSION: \"(?<currentValue>[^\"]+)\""

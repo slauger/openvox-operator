@@ -95,6 +95,42 @@ jobs:
       latest: true
       image_tag: ${{ needs.semantic-release.outputs.new-release-version }}
 
+  validate-openvox-operator:
+    needs: [semantic-release, openvox-operator]
+    if: needs.semantic-release.outputs.new-release-published == 'true'
+    uses: ./.github/workflows/_conforma-validate.yaml
+    permissions:
+      contents: read
+      id-token: write
+      packages: read
+    with:
+      image: ${{ needs.openvox-operator.outputs.image }}
+      digest: ${{ needs.openvox-operator.outputs.digest }}
+
+  validate-openvox-server:
+    needs: [semantic-release, openvox-server]
+    if: needs.semantic-release.outputs.new-release-published == 'true'
+    uses: ./.github/workflows/_conforma-validate.yaml
+    permissions:
+      contents: read
+      id-token: write
+      packages: read
+    with:
+      image: ${{ needs.openvox-server.outputs.image }}
+      digest: ${{ needs.openvox-server.outputs.digest }}
+
+  validate-openvox-db:
+    needs: [semantic-release, openvox-db]
+    if: needs.semantic-release.outputs.new-release-published == 'true'
+    uses: ./.github/workflows/_conforma-validate.yaml
+    permissions:
+      contents: read
+      id-token: write
+      packages: read
+    with:
+      image: ${{ needs.openvox-db.outputs.image }}
+      digest: ${{ needs.openvox-db.outputs.digest }}
+
   helm-charts:
     needs: [semantic-release, openvox-operator, openvox-server, openvox-db]
     if: needs.semantic-release.outputs.new-release-published == 'true'

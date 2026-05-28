@@ -33,26 +33,39 @@ jobs:
 
   docs:
     runs-on: ubuntu-latest
+    env:
+      HELM_DOCS_VERSION: "1.14.2"
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Install helm-docs
+        run: |
+          curl -sSL "https://github.com/norwoodj/helm-docs/releases/download/v${HELM_DOCS_VERSION}/helm-docs_${HELM_DOCS_VERSION}_Linux_x86_64.tar.gz" \
+            -o /tmp/helm-docs.tar.gz
+          curl -sSL "https://github.com/norwoodj/helm-docs/releases/download/v${HELM_DOCS_VERSION}/checksums.txt" \
+            -o /tmp/helm-docs-checksums.txt
+          grep "helm-docs_${HELM_DOCS_VERSION}_Linux_x86_64.tar.gz" /tmp/helm-docs-checksums.txt | \
+            (cd /tmp && sha256sum --check)
+          tar -xzf /tmp/helm-docs.tar.gz -C /tmp helm-docs
+          sudo mv /tmp/helm-docs /usr/local/bin/helm-docs
+
       - name: Run helm-docs
-        uses: losisin/helm-docs-github-action@v1
-        with:
-          chart-search-root: charts
+        run: helm-docs --chart-search-root charts
 
       - name: Check for uncommitted changes
         run: |
           if ! git diff --exit-code; then
             echo ""
             echo "ERROR: helm-docs output is out of date."
-            echo "Run 'helm-docs' locally and commit the updated README.md files."
+            echo "Run 'helm-docs --chart-search-root charts' locally and commit the updated README.md files."
             exit 1
           fi
 
   schema:
     runs-on: ubuntu-latest
+    env:
+      SCHEMA_VERSION: "2.4.0"
     strategy:
       matrix:
         chart:
@@ -63,20 +76,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Helm
-        uses: azure/setup-helm@v5
-
-      - name: Install helm-values-schema-json plugin
-        run: helm plugin install --verify=false https://github.com/losisin/helm-values-schema-json.git
+      - name: Install helm-values-schema-json
+        run: |
+          curl -sSL "https://github.com/losisin/helm-values-schema-json/releases/download/v${SCHEMA_VERSION}/helm-values-schema-json_${SCHEMA_VERSION}_linux_amd64.tgz" \
+            -o /tmp/helm-schema.tgz
+          curl -sSL "https://github.com/losisin/helm-values-schema-json/releases/download/v${SCHEMA_VERSION}/helm-values-schema-json_${SCHEMA_VERSION}_checksums.txt" \
+            -o /tmp/helm-schema-checksums.txt
+          grep "helm-values-schema-json_${SCHEMA_VERSION}_linux_amd64.tgz" /tmp/helm-schema-checksums.txt | \
+            (cd /tmp && sha256sum --check)
+          tar -xzf /tmp/helm-schema.tgz -C /tmp schema
+          sudo mv /tmp/schema /usr/local/bin/helm-schema
 
       - name: Generate and check schema drift
         run: |
-          cd charts/${{ matrix.chart }}
-          helm schema -f values.yaml -o /tmp/values.schema.json
-          if ! diff -q /tmp/values.schema.json values.schema.json > /dev/null 2>&1; then
+          helm-schema -f charts/${{ matrix.chart }}/values.yaml -o /tmp/values.schema.json
+          if ! diff -q /tmp/values.schema.json charts/${{ matrix.chart }}/values.schema.json > /dev/null 2>&1; then
             echo "ERROR: values.schema.json for ${{ matrix.chart }} is out of date."
-            diff /tmp/values.schema.json values.schema.json || true
+            diff /tmp/values.schema.json charts/${{ matrix.chart }}/values.schema.json || true
             exit 1
           fi
           echo "Schema for ${{ matrix.chart }} is up to date."
-

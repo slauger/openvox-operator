@@ -33,6 +33,7 @@ func TestFindCAServerCert(t *testing.T) {
 
 		if found == nil {
 			t.Fatal("expected to find a certificate, got nil")
+			return
 		}
 		if found.Name != "ca-cert" {
 			t.Errorf("expected cert 'ca-cert', got %q", found.Name)
@@ -58,6 +59,7 @@ func TestFindCAServerCert(t *testing.T) {
 
 		if found == nil {
 			t.Fatal("expected fallback to first cert, got nil")
+			return
 		}
 		if found.Name != "first-cert" {
 			t.Errorf("expected 'first-cert', got %q", found.Name)

@@ -1,436 +1,436 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "type": "object",
-  "properties": {
-    "ca": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "description": "CA resource name. Defaults to {fullname}-ca.",
-          "type": "string"
-        },
-        "storage": {
-          "type": "object",
-          "properties": {
-            "size": {
-              "description": "PVC size for CA storage.",
-              "type": "string"
-            },
-            "storageClass": {
-              "description": "Storage class for CA PVC. Empty uses cluster default.",
-              "type": "string"
-            }
-          }
-        },
-        "ttl": {
-          "description": "CA certificate time-to-live.",
-          "type": "string"
-        }
-      }
-    },
-    "config": {
-      "type": "object",
-      "properties": {
-        "code": {
-          "type": "object",
-          "properties": {
-            "claimName": {
-              "description": "Existing PVC claim name for code volume.",
-              "type": "string"
-            },
-            "image": {
-              "description": "Init container image for Puppet code deployment.",
-              "type": "string"
-            },
-            "imagePullPolicy": {
-              "description": "Pull policy for the code init container.",
-              "type": "string",
-              "enum": [
-                "Always",
-                "IfNotPresent",
-                "Never"
-              ]
-            },
-            "imagePullSecret": {
-              "description": "Pull secret for the code init container.",
-              "type": "string"
-            }
-          }
-        },
-        "image": {
-          "type": "object",
-          "properties": {
-            "pullPolicy": {
-              "description": "Image pull policy.",
-              "type": "string",
-              "enum": [
-                "Always",
-                "IfNotPresent",
-                "Never"
-              ]
-            },
-            "pullSecrets": {
-              "description": "Image pull secrets.",
-              "type": "array"
-            },
-            "repository": {
-              "description": "OpenVox Server image repository.",
-              "type": "string"
-            },
-            "tag": {
-              "description": "Image tag.",
-              "type": "string"
-            }
-          }
-        },
-        "name": {
-          "description": "Config resource name. Defaults to release name.",
-          "type": "string"
-        },
-        "puppet": {
-          "type": "object",
-          "properties": {
-            "environmentPath": {
-              "description": "Path to Puppet environments.",
-              "type": "string"
-            },
-            "environmentTimeout": {
-              "description": "Environment timeout setting.",
-              "type": "string"
-            },
-            "extraConfig": {
-              "description": "Extra puppet.conf sections and settings.",
-              "type": "object"
-            },
-            "hieraConfig": {
-              "description": "Path to Hiera configuration file.",
-              "type": "string"
-            },
-            "reports": {
-              "description": "Enabled report processors.",
-              "type": "string"
-            },
-            "storeBackend": {
-              "description": "Storage backend for stored configurations.",
-              "type": "string"
-            },
-            "storeconfigs": {
-              "description": "Enable stored configurations.",
-              "type": "boolean"
-            }
-          }
-        },
-        "puppetdb": {
-          "type": "object",
-          "properties": {
-            "serverUrls": {
-              "description": "PuppetDB server URLs for report storage.",
-              "type": "array"
-            }
-          }
-        },
-        "readOnlyRootFilesystem": {
-          "description": "Enable read-only root filesystem for server containers.",
-          "type": "boolean"
-        }
-      }
-    },
-    "database": {
-      "type": "object",
-      "properties": {
-        "certificate": {
-          "type": "object",
-          "properties": {
-            "certname": {
-              "description": "Certificate common name for PuppetDB. Required when enabled.",
-              "type": "string"
-            },
-            "dnsAltNames": {
-              "description": "Additional DNS subject alternative names.",
-              "type": "array"
-            }
-          }
-        },
-        "enabled": {
-          "description": "Enable PuppetDB database deployment.",
-          "type": "boolean"
-        },
-        "image": {
-          "type": "object",
-          "properties": {
-            "pullPolicy": {
-              "description": "Image pull policy.",
-              "type": "string",
-              "enum": [
-                "Always",
-                "IfNotPresent",
-                "Never"
-              ]
-            },
-            "repository": {
-              "description": "OpenVox DB image repository.",
-              "type": "string"
-            },
-            "tag": {
-              "description": "Image tag.",
-              "type": "string"
-            }
-          }
-        },
-        "javaArgs": {
-          "description": "JVM arguments for PuppetDB.",
-          "type": "string"
-        },
-        "name": {
-          "description": "Database resource name. Required when enabled.",
-          "type": "string"
-        },
-        "postgres": {
-          "type": "object",
-          "properties": {
-            "credentialsSecretRef": {
-              "description": "Name of Secret containing PostgreSQL credentials. Required when enabled.",
-              "type": "string"
-            },
-            "database": {
-              "description": "PostgreSQL database name.",
-              "type": "string"
-            },
-            "host": {
-              "description": "PostgreSQL host. Required when enabled.",
-              "type": "string"
-            },
-            "port": {
-              "description": "PostgreSQL port.",
-              "type": "integer",
-              "maximum": 65535,
-              "minimum": 1
-            },
-            "sslMode": {
-              "description": "PostgreSQL SSL mode.",
-              "type": "string",
-              "enum": [
-                "disable",
-                "allow",
-                "prefer",
-                "require",
-                "verify-ca",
-                "verify-full"
-              ]
-            }
-          }
-        },
-        "replicas": {
-          "description": "Number of PuppetDB replicas.",
-          "type": "integer",
-          "minimum": 1
-        },
-        "resources": {
-          "description": "CPU/memory resource requests and limits for PuppetDB.",
-          "type": "object",
-          "properties": {
-            "limits": {
-              "type": "object",
-              "properties": {
-                "memory": {
-                  "type": "string"
-                }
-              }
-            },
-            "requests": {
-              "type": "object",
-              "properties": {
-                "cpu": {
-                  "type": "string"
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+        "ca": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "description": "CA resource name. Defaults to {fullname}-ca.",
+                    "type": "string"
                 },
-                "memory": {
-                  "type": "string"
+                "storage": {
+                    "type": "object",
+                    "properties": {
+                        "size": {
+                            "description": "PVC size for CA storage.",
+                            "type": "string"
+                        },
+                        "storageClass": {
+                            "description": "Storage class for CA PVC. Empty uses cluster default.",
+                            "type": "string"
+                        }
+                    }
+                },
+                "ttl": {
+                    "description": "CA certificate time-to-live.",
+                    "type": "string"
                 }
-              }
             }
-          }
-        }
-      }
-    },
-    "gateway": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "description": "Shared Gateway resource name for TLSRoute integration.",
-          "type": "string"
         },
-        "sectionName": {
-          "description": "Listener section name on the Gateway.",
-          "type": "string"
-        }
-      }
-    },
-    "nodeClassifier": {
-      "type": "object",
-      "properties": {
-        "auth": {
-          "type": "object",
-          "properties": {
-            "mtls": {
-              "description": "Enable mutual TLS authentication for ENC requests.",
-              "type": "boolean"
-            }
-          }
-        },
-        "cache": {
-          "type": "object",
-          "properties": {
-            "directory": {
-              "description": "Directory path for cached ENC responses.",
-              "type": "string"
-            },
-            "enabled": {
-              "description": "Enable response caching for ENC requests.",
-              "type": "boolean"
-            }
-          }
-        },
-        "enabled": {
-          "description": "Enable external node classifier integration.",
-          "type": "boolean"
-        },
-        "name": {
-          "description": "NodeClassifier resource name. Defaults to {fullname}-enc.",
-          "type": "string"
-        },
-        "request": {
-          "type": "object",
-          "properties": {
-            "body": {
-              "description": "Request body template.",
-              "type": "string"
-            },
-            "method": {
-              "description": "HTTP method for ENC requests.",
-              "type": "string"
-            },
-            "path": {
-              "description": "Request path template. {certname} is replaced with the node name.",
-              "type": "string"
-            }
-          }
-        },
-        "response": {
-          "type": "object",
-          "properties": {
-            "format": {
-              "description": "Response format from the ENC endpoint.",
-              "type": "string",
-              "enum": [
-                "yaml",
-                "json"
-              ]
-            }
-          }
-        },
-        "timeoutSeconds": {
-          "description": "Timeout in seconds for ENC requests.",
-          "type": "integer",
-          "minimum": 1
-        },
-        "url": {
-          "description": "URL of the external node classifier API.",
-          "type": "string"
-        }
-      }
-    },
-    "pools": {
-      "description": "Pool definitions. Each entry creates a Pool resource with a Service.",
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "service": {
+        "config": {
             "type": "object",
             "properties": {
-              "port": {
-                "type": "integer"
-              },
-              "type": {
-                "type": "string"
-              }
+                "code": {
+                    "type": "object",
+                    "properties": {
+                        "claimName": {
+                            "description": "Existing PVC claim name for code volume.",
+                            "type": "string"
+                        },
+                        "image": {
+                            "description": "Init container image for Puppet code deployment.",
+                            "type": "string"
+                        },
+                        "imagePullPolicy": {
+                            "description": "Pull policy for the code init container.",
+                            "type": "string",
+                            "enum": [
+                                "Always",
+                                "IfNotPresent",
+                                "Never"
+                            ]
+                        },
+                        "imagePullSecret": {
+                            "description": "Pull secret for the code init container.",
+                            "type": "string"
+                        }
+                    }
+                },
+                "image": {
+                    "type": "object",
+                    "properties": {
+                        "pullPolicy": {
+                            "description": "Image pull policy.",
+                            "type": "string",
+                            "enum": [
+                                "Always",
+                                "IfNotPresent",
+                                "Never"
+                            ]
+                        },
+                        "pullSecrets": {
+                            "description": "Image pull secrets.",
+                            "type": "array"
+                        },
+                        "repository": {
+                            "description": "OpenVox Server image repository.",
+                            "type": "string"
+                        },
+                        "tag": {
+                            "description": "Image tag.",
+                            "type": "string"
+                        }
+                    }
+                },
+                "name": {
+                    "description": "Config resource name. Defaults to release name.",
+                    "type": "string"
+                },
+                "puppet": {
+                    "type": "object",
+                    "properties": {
+                        "environmentPath": {
+                            "description": "Path to Puppet environments.",
+                            "type": "string"
+                        },
+                        "environmentTimeout": {
+                            "description": "Environment timeout setting.",
+                            "type": "string"
+                        },
+                        "extraConfig": {
+                            "description": "Extra puppet.conf sections and settings.",
+                            "type": "object"
+                        },
+                        "hieraConfig": {
+                            "description": "Path to Hiera configuration file.",
+                            "type": "string"
+                        },
+                        "reports": {
+                            "description": "Enabled report processors.",
+                            "type": "string"
+                        },
+                        "storeBackend": {
+                            "description": "Storage backend for stored configurations.",
+                            "type": "string"
+                        },
+                        "storeconfigs": {
+                            "description": "Enable stored configurations.",
+                            "type": "boolean"
+                        }
+                    }
+                },
+                "puppetdb": {
+                    "type": "object",
+                    "properties": {
+                        "serverUrls": {
+                            "description": "PuppetDB server URLs for report storage.",
+                            "type": "array"
+                        }
+                    }
+                },
+                "readOnlyRootFilesystem": {
+                    "description": "Enable read-only root filesystem for server containers.",
+                    "type": "boolean"
+                }
             }
-          }
-        }
-      }
-    },
-    "reportProcessors": {
-      "description": "Report processor endpoints.",
-      "type": "array"
-    },
-    "servers": {
-      "description": "Server definitions. Each entry creates a Server resource.",
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "ca": {
-            "type": "boolean"
-          },
-          "certificate": {
+        },
+        "database": {
             "type": "object",
             "properties": {
-              "certname": {
-                "type": "string"
-              },
-              "dnsAltNames": {
-                "type": "array"
-              }
+                "certificate": {
+                    "type": "object",
+                    "properties": {
+                        "certname": {
+                            "description": "Certificate common name for PuppetDB. Required when enabled.",
+                            "type": "string"
+                        },
+                        "dnsAltNames": {
+                            "description": "Additional DNS subject alternative names.",
+                            "type": "array"
+                        }
+                    }
+                },
+                "enabled": {
+                    "description": "Enable PuppetDB database deployment.",
+                    "type": "boolean"
+                },
+                "image": {
+                    "type": "object",
+                    "properties": {
+                        "pullPolicy": {
+                            "description": "Image pull policy.",
+                            "type": "string",
+                            "enum": [
+                                "Always",
+                                "IfNotPresent",
+                                "Never"
+                            ]
+                        },
+                        "repository": {
+                            "description": "OpenVox DB image repository.",
+                            "type": "string"
+                        },
+                        "tag": {
+                            "description": "Image tag.",
+                            "type": "string"
+                        }
+                    }
+                },
+                "javaArgs": {
+                    "description": "JVM arguments for PuppetDB.",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Database resource name. Required when enabled.",
+                    "type": "string"
+                },
+                "postgres": {
+                    "type": "object",
+                    "properties": {
+                        "credentialsSecretRef": {
+                            "description": "Name of Secret containing PostgreSQL credentials. Required when enabled.",
+                            "type": "string"
+                        },
+                        "database": {
+                            "description": "PostgreSQL database name.",
+                            "type": "string"
+                        },
+                        "host": {
+                            "description": "PostgreSQL host. Required when enabled.",
+                            "type": "string"
+                        },
+                        "port": {
+                            "description": "PostgreSQL port.",
+                            "type": "integer",
+                            "maximum": 65535,
+                            "minimum": 1
+                        },
+                        "sslMode": {
+                            "description": "PostgreSQL SSL mode.",
+                            "type": "string",
+                            "enum": [
+                                "disable",
+                                "allow",
+                                "prefer",
+                                "require",
+                                "verify-ca",
+                                "verify-full"
+                            ]
+                        }
+                    }
+                },
+                "replicas": {
+                    "description": "Number of PuppetDB replicas.",
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "resources": {
+                    "description": "CPU/memory resource requests and limits for PuppetDB.",
+                    "type": "object",
+                    "properties": {
+                        "limits": {
+                            "type": "object",
+                            "properties": {
+                                "memory": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "requests": {
+                            "type": "object",
+                            "properties": {
+                                "cpu": {
+                                    "type": "string"
+                                },
+                                "memory": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                }
             }
-          },
-          "name": {
-            "type": "string"
-          },
-          "poolRefs": {
+        },
+        "gateway": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "description": "Shared Gateway resource name for TLSRoute integration.",
+                    "type": "string"
+                },
+                "sectionName": {
+                    "description": "Listener section name on the Gateway.",
+                    "type": "string"
+                }
+            }
+        },
+        "nodeClassifier": {
+            "type": "object",
+            "properties": {
+                "auth": {
+                    "type": "object",
+                    "properties": {
+                        "mtls": {
+                            "description": "Enable mutual TLS authentication for ENC requests.",
+                            "type": "boolean"
+                        }
+                    }
+                },
+                "cache": {
+                    "type": "object",
+                    "properties": {
+                        "directory": {
+                            "description": "Directory path for cached ENC responses.",
+                            "type": "string"
+                        },
+                        "enabled": {
+                            "description": "Enable response caching for ENC requests.",
+                            "type": "boolean"
+                        }
+                    }
+                },
+                "enabled": {
+                    "description": "Enable external node classifier integration.",
+                    "type": "boolean"
+                },
+                "name": {
+                    "description": "NodeClassifier resource name. Defaults to {fullname}-enc.",
+                    "type": "string"
+                },
+                "request": {
+                    "type": "object",
+                    "properties": {
+                        "body": {
+                            "description": "Request body template.",
+                            "type": "string"
+                        },
+                        "method": {
+                            "description": "HTTP method for ENC requests.",
+                            "type": "string"
+                        },
+                        "path": {
+                            "description": "Request path template. {certname} is replaced with the node name.",
+                            "type": "string"
+                        }
+                    }
+                },
+                "response": {
+                    "type": "object",
+                    "properties": {
+                        "format": {
+                            "description": "Response format from the ENC endpoint.",
+                            "type": "string",
+                            "enum": [
+                                "yaml",
+                                "json"
+                            ]
+                        }
+                    }
+                },
+                "timeoutSeconds": {
+                    "description": "Timeout in seconds for ENC requests.",
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "url": {
+                    "description": "URL of the external node classifier API.",
+                    "type": "string"
+                }
+            }
+        },
+        "pools": {
+            "description": "Pool definitions. Each entry creates a Pool resource with a Service.",
             "type": "array",
             "items": {
-              "type": "string"
-            }
-          },
-          "replicas": {
-            "type": "integer"
-          },
-          "resources": {
-            "type": "object",
-            "properties": {
-              "limits": {
                 "type": "object",
                 "properties": {
-                  "memory": {
-                    "type": "string"
-                  }
+                    "name": {
+                        "type": "string"
+                    },
+                    "service": {
+                        "type": "object",
+                        "properties": {
+                            "port": {
+                                "type": "integer"
+                            },
+                            "type": {
+                                "type": "string"
+                            }
+                        }
+                    }
                 }
-              },
-              "requests": {
+            }
+        },
+        "reportProcessors": {
+            "description": "Report processor endpoints.",
+            "type": "array"
+        },
+        "servers": {
+            "description": "Server definitions. Each entry creates a Server resource.",
+            "type": "array",
+            "items": {
                 "type": "object",
                 "properties": {
-                  "cpu": {
-                    "type": "string"
-                  },
-                  "memory": {
-                    "type": "string"
-                  }
+                    "ca": {
+                        "type": "boolean"
+                    },
+                    "certificate": {
+                        "type": "object",
+                        "properties": {
+                            "certname": {
+                                "type": "string"
+                            },
+                            "dnsAltNames": {
+                                "type": "array"
+                            }
+                        }
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "poolRefs": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "replicas": {
+                        "type": "integer"
+                    },
+                    "resources": {
+                        "type": "object",
+                        "properties": {
+                            "limits": {
+                                "type": "object",
+                                "properties": {
+                                    "memory": {
+                                        "type": "string"
+                                    }
+                                }
+                            },
+                            "requests": {
+                                "type": "object",
+                                "properties": {
+                                    "cpu": {
+                                        "type": "string"
+                                    },
+                                    "memory": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "server": {
+                        "type": "boolean"
+                    }
                 }
-              }
             }
-          },
-          "server": {
-            "type": "boolean"
-          }
+        },
+        "signingPolicies": {
+            "description": "Signing policies for certificate auto-signing.",
+            "type": "array"
         }
-      }
-    },
-    "signingPolicies": {
-      "description": "Signing policies for certificate auto-signing.",
-      "type": "array"
     }
-  }
 }

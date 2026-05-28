@@ -171,11 +171,11 @@ func (r *ConfigReconciler) reconcileConfigMap(ctx context.Context, cfg *openvoxv
 			Data: data,
 		}
 		if err := controllerutil.SetControllerReference(cfg, cm, r.Scheme); err != nil {
-			return err
+			return fmt.Errorf("setting owner reference on ConfigMap %s: %w", configMapName, err)
 		}
 		return r.Create(ctx, cm)
 	} else if err != nil {
-		return err
+		return fmt.Errorf("getting ConfigMap %s: %w", configMapName, err)
 	}
 
 	cm.Data = data
@@ -198,11 +198,11 @@ func (r *ConfigReconciler) reconcileSecret(ctx context.Context, cfg *openvoxv1al
 			Data: data,
 		}
 		if err := controllerutil.SetControllerReference(cfg, secret, r.Scheme); err != nil {
-			return err
+			return fmt.Errorf("setting owner reference on Secret %s: %w", name, err)
 		}
 		return r.Create(ctx, secret)
 	} else if err != nil {
-		return err
+		return fmt.Errorf("getting Secret %s: %w", name, err)
 	}
 
 	existing.Data = data

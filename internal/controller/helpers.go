@@ -138,11 +138,11 @@ func createOrUpdateSecret(ctx context.Context, c client.Client, scheme *runtime.
 			Data: data,
 		}
 		if err := controllerutil.SetControllerReference(owner, secret, scheme); err != nil {
-			return err
+			return fmt.Errorf("setting owner reference on Secret %s: %w", name, err)
 		}
 		return c.Create(ctx, secret)
 	} else if err != nil {
-		return err
+		return fmt.Errorf("getting Secret %s: %w", name, err)
 	}
 
 	secret.Data = data

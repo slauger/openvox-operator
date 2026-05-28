@@ -3,6 +3,7 @@
 # -- Number of operator pod replicas.
 replicaCount: 1
 
+# @schema description: Container image configuration.
 image:
   # @schema required:true
   # @schema description: Image repository.
@@ -28,6 +29,7 @@ imagePullSecrets: []
 # Prometheus scraping, or forcing rollouts via a checksum annotation).
 podAnnotations: {}
 
+# @schema description: Service account configuration.
 serviceAccount:
   # @schema description: Create a service account for the operator.
   # -- Create a service account for the operator.
@@ -43,7 +45,7 @@ serviceAccount:
 # -- Enable leader election for controller manager.
 leaderElect: true
 
-# Operator scope configuration.
+# @schema description: Operator scope configuration.
 scope:
   # @schema enum:[cluster, namespace]
   # @schema description: Operator scope mode. cluster: watches all namespaces (ClusterRole). namespace: watches a single namespace (Role).
@@ -54,11 +56,13 @@ scope:
   # -- Namespace to watch when mode is namespace. Defaults to release namespace if empty.
   watchNamespace: ""
 
+# @schema description: Gateway API integration configuration.
 gatewayAPI:
   # @schema description: Enable TLSRoute support via Gateway API.
   # -- Enable TLSRoute support via Gateway API.
   enabled: true
 
+# @schema description: CPU/memory resource requests and limits.
 # @schema description: CPU/memory resource requests and limits.
 # -- CPU/memory resource requests and limits.
 resources:
@@ -71,7 +75,7 @@ resources:
 
 # Admission webhook configuration. When enabled the operator serves CRD
 # validation/mutation webhooks. The webhook needs a TLS server certificate;
-# use either cert-manager or an existing Secret.
+# @schema description: Webhook server configuration. Use either cert-manager or an existing Secret for TLS.
 webhook:
   # @schema description: Enable CRD validation/mutation webhooks.
   # -- Enable CRD validation/mutation webhooks.

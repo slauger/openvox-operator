@@ -7,6 +7,7 @@
             "type": "object"
         },
         "gatewayAPI": {
+            "description": "Gateway API integration configuration.",
             "type": "object",
             "properties": {
                 "enabled": {
@@ -16,6 +17,7 @@
             }
         },
         "image": {
+            "description": "Container image configuration.",
             "type": "object",
             "required": [
                 "repository"
@@ -90,6 +92,7 @@
             }
         },
         "scope": {
+            "description": "Operator scope configuration.",
             "type": "object",
             "properties": {
                 "mode": {
@@ -107,6 +110,7 @@
             }
         },
         "serviceAccount": {
+            "description": "Service account configuration.",
             "type": "object",
             "properties": {
                 "annotations": {
@@ -128,6 +132,7 @@
             "type": "array"
         },
         "webhook": {
+            "description": "Webhook server configuration. Use either cert-manager or an existing Secret for TLS.",
             "type": "object",
             "properties": {
                 "certManager": {

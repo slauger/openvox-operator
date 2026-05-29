@@ -73,6 +73,30 @@ resources:
     cpu: 10m
     memory: 128Mi
 
+# @schema description: Prometheus metrics configuration.
+metrics:
+  # @schema description: Enable the metrics endpoint.
+  # -- Enable the metrics endpoint.
+  enabled: true
+  # @schema minimum:1;maximum:65535
+  # @schema description: Port for the metrics endpoint.
+  # -- Port for the metrics endpoint.
+  port: 8080
+  service:
+    # @schema description: Create a Service for the metrics endpoint.
+    # -- Create a Service for the metrics endpoint.
+    enabled: true
+  serviceMonitor:
+    # @schema description: Create a Prometheus ServiceMonitor resource.
+    # -- Create a Prometheus ServiceMonitor resource.
+    enabled: false
+    # @schema description: Scrape interval for the ServiceMonitor.
+    # -- Scrape interval for the ServiceMonitor.
+    interval: 30s
+    # @schema description: Additional labels for the ServiceMonitor.
+    # -- Additional labels for the ServiceMonitor.
+    labels: {}
+
 # Admission webhook configuration. When enabled the operator serves CRD
 # validation/mutation webhooks. The webhook needs a TLS server certificate;
 # @schema description: Webhook server configuration. Use either cert-manager or an existing Secret for TLS.

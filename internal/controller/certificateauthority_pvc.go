@@ -46,9 +46,11 @@ func (r *CertificateAuthorityReconciler) reconcileCAPVC(ctx context.Context, ca 
 		}
 
 		if err := controllerutil.SetControllerReference(ca, pvc, r.Scheme); err != nil {
-			return err
+			return fmt.Errorf("setting owner reference on PVC %s: %w", pvcName, err)
 		}
 		return r.Create(ctx, pvc)
+	} else if err != nil {
+		return fmt.Errorf("getting PVC %s: %w", pvcName, err)
 	}
-	return err
+	return nil
 }

@@ -35,12 +35,39 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --leader-elect
 
-  - it: should not have any args when leaderElect is false
+  - it: should not have leader-elect arg when leaderElect is false
     set:
       leaderElect: false
     asserts:
-      - isEmpty:
+      - notContains:
           path: spec.template.spec.containers[0].args
+          content: --leader-elect
+
+  - it: should have metrics port by default
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --metrics-bind-address=:8080
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: metrics
+            containerPort: 8080
+            protocol: TCP
+
+  - it: should disable metrics when metrics.enabled is false
+    set:
+      metrics:
+        enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --metrics-bind-address=0
+      - notContains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: metrics
+          any: true
 
   - it: should not have webhook port or args when webhook is disabled
     asserts:

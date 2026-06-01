@@ -59,7 +59,7 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("getting CertificateAuthority %s: %w", req.NamespacedName, err)
 	}
 
 	// Set initial phase
@@ -67,7 +67,7 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 		if err := updateStatusWithRetry(ctx, r.Client, ca, func() {
 			ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhasePending
 		}); err != nil {
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("setting initial phase for CertificateAuthority %s: %w", ca.Name, err)
 		}
 	}
 
@@ -157,7 +157,7 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 			LastTransitionTime: metav1.Now(),
 		})
 	}); err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("updating CertificateAuthority status %s: %w", ca.Name, err)
 	}
 
 	if !wasReady {
@@ -280,7 +280,7 @@ func (r *CertificateAuthorityReconciler) reconcileExternalCA(ctx context.Context
 			LastTransitionTime: metav1.Now(),
 		})
 	}); err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("updating external CertificateAuthority status %s: %w", ca.Name, err)
 	}
 
 	if !wasExternal {
@@ -306,7 +306,7 @@ func (r *CertificateAuthorityReconciler) adoptSecret(ctx context.Context, ca *op
 		if errors.IsNotFound(err) {
 			return nil
 		}
-		return err
+		return fmt.Errorf("getting Secret %s: %w", secretName, err)
 	}
 
 	for _, ref := range secret.OwnerReferences {
@@ -316,7 +316,7 @@ func (r *CertificateAuthorityReconciler) adoptSecret(ctx context.Context, ca *op
 	}
 
 	if err := controllerutil.SetControllerReference(ca, secret, r.Scheme); err != nil {
-		return err
+		return fmt.Errorf("setting owner reference on Secret %s: %w", secretName, err)
 	}
 	return r.Update(ctx, secret)
 }

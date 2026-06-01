@@ -64,7 +64,7 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("getting Database %s: %w", req.NamespacedName, err)
 	}
 
 	// Set initial phase
@@ -72,7 +72,7 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err := updateStatusWithRetry(ctx, r.Client, db, func() {
 			db.Status.Phase = openvoxv1alpha1.DatabasePhasePending
 		}); err != nil {
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("updating initial status for Database %s: %w", db.Name, err)
 		}
 	}
 
@@ -83,7 +83,7 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			logger.Info("waiting for Certificate", "certificateRef", db.Spec.CertificateRef)
 			return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("getting Certificate %s: %w", db.Spec.CertificateRef, err)
 	}
 
 	if cert.Status.Phase != openvoxv1alpha1.CertificatePhaseSigned || cert.Status.SecretName == "" {
@@ -103,7 +103,7 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			logger.Info("waiting for CertificateAuthority", "authorityRef", cert.Spec.AuthorityRef)
 			return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("getting CertificateAuthority %s: %w", cert.Spec.AuthorityRef, err)
 	}
 
 	// Validate PG credentials Secret exists
@@ -113,7 +113,7 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			logger.Info("waiting for PostgreSQL credentials Secret", "secretRef", db.Spec.Postgres.CredentialsSecretRef)
 			return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("getting Secret %s: %w", db.Spec.Postgres.CredentialsSecretRef, err)
 	}
 
 	// Reconcile ConfigMap (jetty.ini, config.ini)
@@ -174,7 +174,7 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			db.Status.Phase = openvoxv1alpha1.DatabasePhasePending
 		}
 	}); err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("updating status for Database %s: %w", db.Name, err)
 	}
 
 	if ready > 0 {
@@ -207,11 +207,11 @@ func (r *DatabaseReconciler) reconcileConfigMap(ctx context.Context, db *openvox
 			Data: data,
 		}
 		if err := controllerutil.SetControllerReference(db, cm, r.Scheme); err != nil {
-			return err
+			return fmt.Errorf("setting owner reference on ConfigMap %s: %w", cmName, err)
 		}
 		return r.Create(ctx, cm)
 	} else if err != nil {
-		return err
+		return fmt.Errorf("getting ConfigMap %s: %w", cmName, err)
 	}
 
 	existing.Data = data
@@ -221,7 +221,7 @@ func (r *DatabaseReconciler) reconcileConfigMap(ctx context.Context, db *openvox
 func (r *DatabaseReconciler) reconcileDatabaseSecret(ctx context.Context, db *openvoxv1alpha1.Database) error {
 	dbIni, err := r.renderDatabaseIni(ctx, db)
 	if err != nil {
-		return err
+		return fmt.Errorf("rendering database.ini for Database %s: %w", db.Name, err)
 	}
 
 	secretName := fmt.Sprintf("%s-db", db.Name)
@@ -277,11 +277,11 @@ func (r *DatabaseReconciler) reconcileService(ctx context.Context, db *openvoxv1
 			},
 		}
 		if err := controllerutil.SetControllerReference(db, svc, r.Scheme); err != nil {
-			return err
+			return fmt.Errorf("setting owner reference on Service %s: %w", svcName, err)
 		}
 		return r.Create(ctx, svc)
 	} else if err != nil {
-		return err
+		return fmt.Errorf("getting Service %s: %w", svcName, err)
 	}
 
 	// Update existing
@@ -317,7 +317,7 @@ func (r *DatabaseReconciler) reconcilePDB(ctx context.Context, db *openvoxv1alph
 		if err == nil {
 			logger.Info("deleting PDB (disabled)", "name", pdbName)
 			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
-				return err
+				return fmt.Errorf("deleting PodDisruptionBudget %s: %w", pdbName, err)
 			}
 			r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabasePDBDeleted, "Reconcile", "PodDisruptionBudget %s deleted", pdbName)
 		}
@@ -331,19 +331,19 @@ func (r *DatabaseReconciler) reconcilePDB(ctx context.Context, db *openvoxv1alph
 	if errors.IsNotFound(err) {
 		logger.Info("creating PDB", "name", pdbName)
 		if err := r.Create(ctx, desired); err != nil {
-			return err
+			return fmt.Errorf("creating PodDisruptionBudget %s: %w", pdbName, err)
 		}
 		r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabasePDBCreated, "Reconcile", "PodDisruptionBudget %s created", pdbName)
 		return nil
 	}
 	if err != nil {
-		return err
+		return fmt.Errorf("getting PodDisruptionBudget %s: %w", pdbName, err)
 	}
 
 	// Update existing
 	existing.Spec = desired.Spec
 	if err := r.Update(ctx, existing); err != nil {
-		return err
+		return fmt.Errorf("updating PodDisruptionBudget %s: %w", pdbName, err)
 	}
 	r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabasePDBUpdated, "Reconcile", "PodDisruptionBudget %s updated", pdbName)
 	return nil
@@ -388,7 +388,7 @@ func (r *DatabaseReconciler) reconcileNetworkPolicy(ctx context.Context, db *ope
 		if err == nil {
 			logger.Info("deleting NetworkPolicy (disabled)", "name", npName)
 			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
-				return err
+				return fmt.Errorf("deleting NetworkPolicy %s: %w", npName, err)
 			}
 			r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabaseNetworkPolicyDeleted, "Reconcile", "NetworkPolicy %s deleted", npName)
 		}
@@ -402,18 +402,18 @@ func (r *DatabaseReconciler) reconcileNetworkPolicy(ctx context.Context, db *ope
 	if errors.IsNotFound(err) {
 		logger.Info("creating NetworkPolicy", "name", npName)
 		if err := r.Create(ctx, desired); err != nil {
-			return err
+			return fmt.Errorf("creating NetworkPolicy %s: %w", npName, err)
 		}
 		r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabaseNetworkPolicyCreated, "Reconcile", "NetworkPolicy %s created", npName)
 		return nil
 	}
 	if err != nil {
-		return err
+		return fmt.Errorf("getting NetworkPolicy %s: %w", npName, err)
 	}
 
 	existing.Spec = desired.Spec
 	if err := r.Update(ctx, existing); err != nil {
-		return err
+		return fmt.Errorf("updating NetworkPolicy %s: %w", npName, err)
 	}
 	r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabaseNetworkPolicyUpdated, "Reconcile", "NetworkPolicy %s updated", npName)
 	return nil

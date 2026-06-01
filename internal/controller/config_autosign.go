@@ -45,7 +45,7 @@ func (r *ConfigReconciler) reconcileAutosignSecrets(ctx context.Context, cfg *op
 		if errors.IsNotFound(err) {
 			return nil
 		}
-		return err
+		return fmt.Errorf("getting CertificateAuthority %s: %w", cfg.Spec.AuthorityRef, err)
 	}
 	if err := r.reconcileAutosignSecret(ctx, cfg, ca); err != nil {
 		return fmt.Errorf("reconciling autosign Secret for CA %s: %w", ca.Name, err)

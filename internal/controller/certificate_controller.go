@@ -83,7 +83,7 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("getting Certificate %s: %w", req.NamespacedName, err)
 	}
 
 	// Handle deletion: clean the certificate on the Puppet CA before removing the finalizer.
@@ -117,7 +117,7 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			patch := client.MergeFrom(cert.DeepCopy())
 			controllerutil.RemoveFinalizer(cert, certificateFinalizer)
 			if err := r.Patch(ctx, cert, patch); err != nil {
-				return ctrl.Result{}, err
+				return ctrl.Result{}, fmt.Errorf("removing finalizer from Certificate %s: %w", cert.Name, err)
 			}
 		}
 		return ctrl.Result{}, nil
@@ -128,7 +128,7 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		patch := client.MergeFrom(cert.DeepCopy())
 		controllerutil.AddFinalizer(cert, certificateFinalizer)
 		if err := r.Patch(ctx, cert, patch); err != nil {
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("adding finalizer to Certificate %s: %w", cert.Name, err)
 		}
 	}
 
@@ -137,7 +137,7 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
 			cert.Status.Phase = openvoxv1alpha1.CertificatePhasePending
 		}); err != nil {
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("setting initial phase for Certificate %s: %w", cert.Name, err)
 		}
 	}
 
@@ -148,7 +148,7 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			logger.Info("waiting for CertificateAuthority", "authorityRef", cert.Spec.AuthorityRef)
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("getting CertificateAuthority %s: %w", cert.Spec.AuthorityRef, err)
 	}
 
 	// Wait for CA to be ready (accept both Ready and External phases)
@@ -315,7 +315,7 @@ func (r *CertificateReconciler) createOrUpdateTLSSecret(ctx context.Context, cer
 func (r *CertificateReconciler) adoptTLSSecret(ctx context.Context, cert *openvoxv1alpha1.Certificate, secretName string) error {
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cert.Namespace}, secret); err != nil {
-		return err
+		return fmt.Errorf("getting Secret %s: %w", secretName, err)
 	}
 
 	for _, ref := range secret.OwnerReferences {
@@ -325,7 +325,7 @@ func (r *CertificateReconciler) adoptTLSSecret(ctx context.Context, cert *openvo
 	}
 
 	if err := controllerutil.SetControllerReference(cert, secret, r.Scheme); err != nil {
-		return err
+		return fmt.Errorf("setting owner reference on Secret %s: %w", secretName, err)
 	}
 	return r.Update(ctx, secret)
 }
@@ -491,7 +491,7 @@ func (r *CertificateReconciler) handleCertificateCleanup(ctx context.Context, ce
 			logger.Info("CertificateAuthority not found, skipping cleanup", "authorityRef", cert.Spec.AuthorityRef)
 			return nil
 		}
-		return err
+		return fmt.Errorf("getting CertificateAuthority %s for cleanup: %w", cert.Spec.AuthorityRef, err)
 	}
 
 	// Skip cleanup for external CAs without a signing secret (no admin access)
@@ -504,7 +504,7 @@ func (r *CertificateReconciler) handleCertificateCleanup(ctx context.Context, ce
 	caBaseURL := fmt.Sprintf("https://%s.%s.svc:8140", caInternalServiceName(ca.Name), cert.Namespace)
 
 	if err := r.cleanCertViaAPI(ctx, cert, ca, caBaseURL, cert.Namespace); err != nil {
-		return err
+		return fmt.Errorf("cleaning certificate %s via CA API: %w", cert.Spec.Certname, err)
 	}
 
 	r.Recorder.Eventf(cert, nil, corev1.EventTypeNormal, EventReasonCertificateCleaned, "Reconcile",

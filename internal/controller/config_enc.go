@@ -31,7 +31,7 @@ func (r *ConfigReconciler) reconcileENCSecret(ctx context.Context, cfg *openvoxv
 		if errors.IsNotFound(err) {
 			return nil
 		}
-		return err
+		return fmt.Errorf("getting NodeClassifier %s: %w", cfg.Spec.NodeClassifierRef, err)
 	}
 
 	encYAML, renderErr := r.renderENCConfig(ctx, cfg, nc)

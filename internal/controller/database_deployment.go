@@ -96,11 +96,11 @@ func (r *DatabaseReconciler) reconcileDeployment(ctx context.Context, db *openvo
 		}
 
 		if err := controllerutil.SetControllerReference(db, deploy, r.Scheme); err != nil {
-			return err
+			return fmt.Errorf("setting owner reference on Deployment %s: %w", deployName, err)
 		}
 		return r.Create(ctx, deploy)
 	} else if err != nil {
-		return err
+		return fmt.Errorf("getting Deployment %s: %w", deployName, err)
 	}
 
 	// Update existing Deployment

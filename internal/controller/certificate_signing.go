@@ -234,7 +234,7 @@ func (r *CertificateReconciler) submitCSR(ctx context.Context, cert *openvoxv1al
 			Data: map[string][]byte{"key.pem": keyPEM},
 		}
 		if err := controllerutil.SetControllerReference(cert, secret, r.Scheme); err != nil {
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("setting owner reference on pending Secret %s: %w", pendingSecretName, err)
 		}
 		if err := r.Create(ctx, secret); err != nil && !errors.IsAlreadyExists(err) {
 			return ctrl.Result{}, fmt.Errorf("creating pending Secret: %w", err)
@@ -582,7 +582,7 @@ func (r *CertificateReconciler) renewCertificate(ctx context.Context, cert *open
 
 	csrPEM, err := buildCSR(certname, cert.Spec.DNSAltNames, cert.Spec.CSRExtensions, privateKey)
 	if err != nil {
-		return err
+		return fmt.Errorf("building CSR for %s: %w", certname, err)
 	}
 
 	// Build mTLS HTTP client using existing cert for authentication
@@ -592,7 +592,7 @@ func (r *CertificateReconciler) renewCertificate(ctx context.Context, cert *open
 	}
 	httpClient, err := mTLSHTTPClient(caCertPEM, existingCertPEM, existingKeyPEM)
 	if err != nil {
-		return err
+		return fmt.Errorf("building mTLS client for renewal of %s: %w", certname, err)
 	}
 
 	// POST /puppet-ca/v1/certificate_renewal
@@ -701,7 +701,7 @@ func (r *CertificateReconciler) ensurePendingKey(ctx context.Context, cert *open
 		Data: map[string][]byte{"key.pem": keyPEM},
 	}
 	if err := controllerutil.SetControllerReference(cert, secret, r.Scheme); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("setting owner reference on pending Secret %s: %w", pendingSecretName, err)
 	}
 	if err := r.Create(ctx, secret); err != nil && !errors.IsAlreadyExists(err) {
 		return nil, fmt.Errorf("creating pending Secret: %w", err)
@@ -737,7 +737,7 @@ func (r *CertificateReconciler) cleanCertViaAPI(ctx context.Context, cert *openv
 
 	httpClient, err := mTLSHTTPClient(caCertPEM, clientCertPEM, clientKeyPEM)
 	if err != nil {
-		return err
+		return fmt.Errorf("building mTLS client for clean of %s: %w", certname, err)
 	}
 
 	// PUT /puppet-ca/v1/clean
@@ -798,7 +798,7 @@ func (r *CertificateReconciler) signCSRViaAPI(ctx context.Context, cert *openvox
 	// Build mTLS HTTP client
 	httpClient, err := mTLSHTTPClient(caCertPEM, clientCertPEM, clientKeyPEM)
 	if err != nil {
-		return err
+		return fmt.Errorf("building mTLS client for signing %s: %w", certname, err)
 	}
 
 	// PUT /puppet-ca/v1/certificate_status/{certname}?environment=production

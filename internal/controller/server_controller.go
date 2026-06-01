@@ -151,6 +151,9 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		server.Status.Desired = replicas
 		server.Status.Ready = ready
 
+		serverReplicasDesired.WithLabelValues(server.Name, server.Namespace).Set(float64(replicas))
+		serverReplicasReady.WithLabelValues(server.Name, server.Namespace).Set(float64(ready))
+
 		if ready > 0 {
 			server.Status.Phase = openvoxv1alpha1.ServerPhaseRunning
 			meta.SetStatusCondition(&server.Status.Conditions, metav1.Condition{

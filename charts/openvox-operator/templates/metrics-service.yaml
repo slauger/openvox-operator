@@ -1,0 +1,18 @@
+{{- if and .Values.metrics.enabled .Values.metrics.service.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "openvox-operator.fullname" . }}-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openvox-operator.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: metrics
+      port: {{ .Values.metrics.port | default 8080 }}
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    {{- include "openvox-operator.selectorLabels" . | nindent 4 }}
+{{- end }}

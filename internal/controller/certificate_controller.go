@@ -201,6 +201,9 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}); err != nil {
 			return ctrl.Result{}, err
 		}
+		if notAfter != nil {
+			certificateExpiryTimestamp.WithLabelValues(cert.Name, cert.Namespace).Set(float64(notAfter.Unix()))
+		}
 		r.Recorder.Eventf(cert, nil, corev1.EventTypeNormal, EventReasonCertificateSigned, "Reconcile", "Certificate signed and available in Secret %s", tlsSecretName)
 		if cert.Status.NotAfter == nil {
 			return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
@@ -286,6 +289,9 @@ func (r *CertificateReconciler) reconcileCertSigning(ctx context.Context, cert *
 		})
 	}); err != nil {
 		return ctrl.Result{}, err
+	}
+	if notAfter != nil {
+		certificateExpiryTimestamp.WithLabelValues(cert.Name, cert.Namespace).Set(float64(notAfter.Unix()))
 	}
 
 	if cert.Status.NotAfter == nil {

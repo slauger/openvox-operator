@@ -46,6 +46,12 @@ To deploy a complete OpenVox stack after installing the operator, use the
 | image.tag | string | `"latest"` | Image tag. Ignored if digest is set. |
 | imagePullSecrets | list | `[]` | Image pull secrets for private registries. |
 | leaderElect | bool | `true` | Enable leader election for controller manager. |
+| metrics.enabled | bool | `true` | Enable the metrics endpoint. |
+| metrics.port | int | `8080` | Port for the metrics endpoint. |
+| metrics.service.enabled | bool | `true` | Create a Service for the metrics endpoint. |
+| metrics.serviceMonitor.enabled | bool | `false` | Create a Prometheus ServiceMonitor resource. |
+| metrics.serviceMonitor.interval | string | `"30s"` | Scrape interval for the ServiceMonitor. |
+| metrics.serviceMonitor.labels | object | `{}` | Additional labels for the ServiceMonitor. |
 | nodeSelector | object | `{}` | Node selector for pod scheduling. |
 | podAnnotations | object | `{}` | Annotations applied to the operator Pod template (e.g. for log collectors, Prometheus scraping, or forcing rollouts via a checksum annotation). |
 | replicaCount | int | `1` | Number of operator pod replicas. |

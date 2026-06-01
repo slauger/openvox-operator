@@ -50,6 +50,48 @@
             "description": "Enable leader election for controller manager.",
             "type": "boolean"
         },
+        "metrics": {
+            "description": "Prometheus metrics configuration.",
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "description": "Enable the metrics endpoint.",
+                    "type": "boolean"
+                },
+                "port": {
+                    "description": "Port for the metrics endpoint.",
+                    "type": "integer",
+                    "maximum": 65535,
+                    "minimum": 1
+                },
+                "service": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "description": "Create a Service for the metrics endpoint.",
+                            "type": "boolean"
+                        }
+                    }
+                },
+                "serviceMonitor": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "description": "Create a Prometheus ServiceMonitor resource.",
+                            "type": "boolean"
+                        },
+                        "interval": {
+                            "description": "Scrape interval for the ServiceMonitor.",
+                            "type": "string"
+                        },
+                        "labels": {
+                            "description": "Additional labels for the ServiceMonitor.",
+                            "type": "object"
+                        }
+                    }
+                }
+            }
+        },
         "nodeSelector": {
             "description": "Node selector for pod scheduling.",
             "type": "object"

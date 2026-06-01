@@ -1,0 +1,78 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: metrics
+spec:
+  namespace: e2e-metrics
+  steps:
+    - name: Install openvox-stack (single-node)
+      try:
+        - script:
+            timeout: 2m
+            content: |
+              REPO_ROOT=$(git rev-parse --show-toplevel)
+              IMAGE_TAG=${IMAGE_TAG:-$(git describe --always)}
+              IMAGE_REGISTRY=${IMAGE_REGISTRY:-ghcr.io/slauger}
+              helm upgrade --install openvox-stack-metrics "${REPO_ROOT}/charts/openvox-stack" \
+                --namespace e2e-metrics --create-namespace \
+                --values "${REPO_ROOT}/charts/openvox-stack/ci/single-node-values.yaml" \
+                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server \
+                --set config.image.tag="${IMAGE_TAG}" \
+                --set config.image.pullPolicy=Always
+      catch:
+        - events: {}
+
+    - name: Assert Server is Running
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: openvox-stack-metrics-ca
+              status:
+                phase: Running
+                ready: 1
+                desired: 1
+
+    - name: Verify metrics endpoint exposes custom metrics
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              OPERATOR_POD=$(kubectl get pods -n openvox-system \
+                -l app.kubernetes.io/name=openvox-operator \
+                -o jsonpath='{.items[0].metadata.name}')
+              METRICS=$(kubectl exec -n openvox-system "${OPERATOR_POD}" \
+                -- wget -qO- http://localhost:8080/metrics 2>/dev/null \
+                || kubectl exec -n openvox-system "${OPERATOR_POD}" \
+                -- curl -sf http://localhost:8080/metrics 2>/dev/null)
+
+              echo "--- Checking openvox_server_replicas_desired ---"
+              echo "${METRICS}" | grep '^openvox_server_replicas_desired'
+              if ! echo "${METRICS}" | grep -q '^openvox_server_replicas_desired'; then
+                echo "FAIL: openvox_server_replicas_desired metric not found"
+                exit 1
+              fi
+
+              echo "--- Checking openvox_server_replicas_ready ---"
+              echo "${METRICS}" | grep '^openvox_server_replicas_ready'
+              if ! echo "${METRICS}" | grep -q '^openvox_server_replicas_ready'; then
+                echo "FAIL: openvox_server_replicas_ready metric not found"
+                exit 1
+              fi
+
+              echo "--- Checking openvox_certificate_expiry_timestamp_seconds ---"
+              echo "${METRICS}" | grep '^openvox_certificate_expiry_timestamp_seconds'
+              if ! echo "${METRICS}" | grep -q '^openvox_certificate_expiry_timestamp_seconds'; then
+                echo "FAIL: openvox_certificate_expiry_timestamp_seconds metric not found"
+                exit 1
+              fi
+
+              echo "All custom metrics present."
+      finally:
+        - script:
+            timeout: 2m
+            content: |
+              helm uninstall openvox-stack-metrics --namespace e2e-metrics --wait 2>/dev/null || true
+              kubectl delete namespace e2e-metrics --ignore-not-found 2>/dev/null || true

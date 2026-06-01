@@ -128,6 +128,9 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 	// CA is ready
 	wasReady := ca.Status.Phase == openvoxv1alpha1.CertificateAuthorityPhaseReady
 	notAfter := r.extractCANotAfter(ctx, caSecretName, ca.Namespace)
+	if notAfter != nil {
+		certificateExpiryTimestamp.WithLabelValues(ca.Name, ca.Namespace).Set(float64(notAfter.Unix()))
+	}
 	serviceName := caInternalServiceName(ca.Name)
 
 	// Only use Init-Job cert as signingSecret if operator-signing cert is not yet active
@@ -258,6 +261,9 @@ func (r *CertificateAuthorityReconciler) reconcileExternalCA(ctx context.Context
 
 	wasExternal := ca.Status.Phase == openvoxv1alpha1.CertificateAuthorityPhaseExternal
 	notAfter := r.extractCANotAfter(ctx, caSecretName, ca.Namespace)
+	if notAfter != nil {
+		certificateExpiryTimestamp.WithLabelValues(ca.Name, ca.Namespace).Set(float64(notAfter.Unix()))
+	}
 	extMsg := fmt.Sprintf("External CA configured at %s", ext.URL)
 
 	// Note: ServiceName is intentionally not set for external CAs -

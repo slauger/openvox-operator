@@ -50,7 +50,7 @@ func (r *ConfigReconciler) hasReportProcessors(ctx context.Context, cfg *openvox
 func (r *ConfigReconciler) reconcileReportWebhookSecret(ctx context.Context, cfg *openvoxv1alpha1.Config) error {
 	processors, err := r.findReportProcessors(ctx, cfg)
 	if err != nil {
-		return err
+		return fmt.Errorf("finding ReportProcessors for Config %s: %w", cfg.Name, err)
 	}
 
 	if len(processors) == 0 {

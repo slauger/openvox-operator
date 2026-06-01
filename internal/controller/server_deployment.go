@@ -137,17 +137,17 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 			deploy.Spec.Replicas = &replicas
 		}
 		if err := controllerutil.SetControllerReference(server, deploy, r.Scheme); err != nil {
-			return err
+			return fmt.Errorf("setting owner reference on Deployment %s: %w", deployName, err)
 		}
 		return r.Create(ctx, deploy)
 	} else if err != nil {
-		return err
+		return fmt.Errorf("getting Deployment %s: %w", deployName, err)
 	}
 
 	// Update existing Deployment with conflict retry
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		if err := r.Get(ctx, types.NamespacedName{Name: deployName, Namespace: server.Namespace}, deploy); err != nil {
-			return err
+			return fmt.Errorf("getting Deployment %s: %w", deployName, err)
 		}
 		if !server.Spec.Autoscaling.Enabled {
 			deploy.Spec.Replicas = &replicas
@@ -508,7 +508,7 @@ func resolveJavaArgs(server *openvoxv1alpha1.Server) string {
 func (r *ServerReconciler) configMapHash(ctx context.Context, name, namespace string) (string, error) {
 	cm := &corev1.ConfigMap{}
 	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, cm); err != nil {
-		return "", err
+		return "", fmt.Errorf("getting ConfigMap %s: %w", name, err)
 	}
 	return hashStringMap(cm.Data), nil
 }
@@ -517,7 +517,7 @@ func (r *ServerReconciler) configMapHash(ctx context.Context, name, namespace st
 func (r *ServerReconciler) secretHash(ctx context.Context, name, namespace string) (string, error) {
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, secret); err != nil {
-		return "", err
+		return "", fmt.Errorf("getting Secret %s: %w", name, err)
 	}
 	data := make(map[string]string, len(secret.Data))
 	for k, v := range secret.Data {

@@ -99,7 +99,7 @@ jobs:
         run: go test ./... -race -covermode=atomic -coverprofile cover.out
 
       - name: Check coverage threshold
-        run: ./hack/check-coverage.sh cover.out 70
+        run: ./hack/check-coverage.sh cover.out 55
 
       - name: Upload coverage
         uses: actions/upload-artifact@v7

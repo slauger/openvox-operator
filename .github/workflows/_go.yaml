@@ -96,7 +96,10 @@ jobs:
           echo "KUBEBUILDER_ASSETS=$(setup-envtest use -p path)" >> "$GITHUB_ENV"
 
       - name: Run tests
-        run: go test ./... -coverprofile cover.out
+        run: go test ./... -race -covermode=atomic -coverprofile cover.out
+
+      - name: Check coverage threshold
+        run: ./hack/check-coverage.sh cover.out 70
 
       - name: Upload coverage
         uses: actions/upload-artifact@v7

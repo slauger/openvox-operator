@@ -132,6 +132,7 @@ func TestBuildPodSpec_CodeVolumeImage(t *testing.T) {
 		if v.Name == "code" {
 			if v.Image == nil {
 				t.Fatal("code volume should be an image volume")
+				return
 			}
 			if v.Image.Reference != "ghcr.io/slauger/puppet-code:v1.0" {
 				t.Errorf("expected code image %q, got %q", "ghcr.io/slauger/puppet-code:v1.0", v.Image.Reference)
@@ -178,15 +179,27 @@ func TestBuildPodSpec_NoCodeVolume(t *testing.T) {
 	}
 }
 
-func TestBuildPodSpec_ReadOnlyRootFilesystem(t *testing.T) {
-	cfg := newConfig("production", withReadOnlyRootFS(true))
+func TestBuildPodSpec_ReadOnlyRootFilesystem_Default(t *testing.T) {
+	cfg := newConfig("production")
 	server := newServer("test-server")
 
 	podSpec := testBuildPodSpec(server, cfg)
 
 	sc := podSpec.Containers[0].SecurityContext
 	if sc == nil || sc.ReadOnlyRootFilesystem == nil || !*sc.ReadOnlyRootFilesystem {
-		t.Error("readOnlyRootFilesystem should be true")
+		t.Error("readOnlyRootFilesystem should be true by default")
+	}
+}
+
+func TestBuildPodSpec_ReadOnlyRootFilesystem_Disabled(t *testing.T) {
+	cfg := newConfig("production", withReadOnlyRootFS(false))
+	server := newServer("test-server")
+
+	podSpec := testBuildPodSpec(server, cfg)
+
+	sc := podSpec.Containers[0].SecurityContext
+	if sc == nil || sc.ReadOnlyRootFilesystem == nil || *sc.ReadOnlyRootFilesystem {
+		t.Error("readOnlyRootFilesystem should be false when explicitly disabled")
 	}
 }
 
@@ -200,6 +213,7 @@ func TestBuildPodSpec_SecurityContext(t *testing.T) {
 	psc := podSpec.SecurityContext
 	if psc == nil {
 		t.Fatal("pod security context is nil")
+		return
 	}
 	if psc.RunAsUser == nil || *psc.RunAsUser != 1001 {
 		t.Errorf("expected RunAsUser=1001, got %v", psc.RunAsUser)
@@ -215,6 +229,7 @@ func TestBuildPodSpec_SecurityContext(t *testing.T) {
 	csc := podSpec.Containers[0].SecurityContext
 	if csc == nil {
 		t.Fatal("container security context is nil")
+		return
 	}
 	if csc.Capabilities == nil || len(csc.Capabilities.Drop) == 0 {
 		t.Error("expected capabilities Drop ALL")

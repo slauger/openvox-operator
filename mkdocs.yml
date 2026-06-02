@@ -67,6 +67,9 @@ nav:
       - Quick Start: getting-started/quickstart.md
   - Guides:
       - CA Import & External CA: guides/ca-import.md
+      - Monitoring: guides/monitoring.md
+      - Supply Chain Security: guides/supply-chain-security.md
+      - Troubleshooting: troubleshooting.md
   - Examples:
       - Overview: examples/index.md
   - Development:
@@ -76,6 +79,9 @@ nav:
       - Mock Server: development/mock-server.md
   - Reference:
       - Overview: reference/index.md
+      - openvox-operator: ../charts/openvox-operator/README.md
+      - openvox-stack: ../charts/openvox-stack/README.md
+      - openvox-db-postgres: ../charts/openvox-db-postgres/README.md
       - Helper Binaries: reference/binaries.md
       - Config: reference/config.md
       - CertificateAuthority: reference/certificateauthority.md

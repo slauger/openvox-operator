@@ -60,7 +60,7 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("getting Pool %s: %w", req.NamespacedName, err)
 	}
 
 	// Reconcile Service
@@ -128,7 +128,7 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		pool.Status.ServiceName = pool.Name
 		pool.Status.Endpoints = endpoints
 	}); err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("updating Pool status %s: %w", pool.Name, err)
 	}
 
 	return ctrl.Result{}, nil
@@ -234,15 +234,15 @@ func (r *PoolReconciler) reconcileService(ctx context.Context, pool *openvoxv1al
 		}
 
 		if err := controllerutil.SetControllerReference(pool, svc, r.Scheme); err != nil {
-			return err
+			return fmt.Errorf("setting owner reference on Service %s: %w", svcName, err)
 		}
 		if err := r.Create(ctx, svc); err != nil {
-			return err
+			return fmt.Errorf("creating Service %s: %w", svcName, err)
 		}
 		r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonServiceSynced, "Reconcile", "Service %s created", svcName)
 		return nil
 	} else if err != nil {
-		return err
+		return fmt.Errorf("getting Service %s: %w", svcName, err)
 	}
 
 	// Update existing service
@@ -281,7 +281,7 @@ func (r *PoolReconciler) reconcileService(ctx context.Context, pool *openvoxv1al
 	}
 	svc.Spec.ExternalIPs = pool.Spec.Service.ExternalIPs
 	if err := r.Update(ctx, svc); err != nil {
-		return err
+		return fmt.Errorf("updating Service %s: %w", svcName, err)
 	}
 	r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonServiceSynced, "Reconcile", "Service %s updated", svcName)
 	return nil
@@ -352,21 +352,21 @@ func (r *PoolReconciler) reconcileTLSRoute(ctx context.Context, pool *openvoxv1a
 	if errors.IsNotFound(err) {
 		logger.Info("creating TLSRoute", "name", pool.Name, "hostname", pool.Spec.Route.Hostname)
 		if err := controllerutil.SetControllerReference(pool, desired, r.Scheme); err != nil {
-			return err
+			return fmt.Errorf("setting owner reference on TLSRoute %s: %w", pool.Name, err)
 		}
 		if err := r.Create(ctx, desired); err != nil {
-			return err
+			return fmt.Errorf("creating TLSRoute %s: %w", pool.Name, err)
 		}
 		r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonTLSRouteCreated, "Reconcile", "TLSRoute %s created for hostname %s", pool.Name, pool.Spec.Route.Hostname)
 		return nil
 	} else if err != nil {
-		return err
+		return fmt.Errorf("getting TLSRoute %s: %w", pool.Name, err)
 	}
 
 	// Update existing TLSRoute
 	existing.Spec = desired.Spec
 	if err := r.Update(ctx, existing); err != nil {
-		return err
+		return fmt.Errorf("updating TLSRoute %s: %w", pool.Name, err)
 	}
 	r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonTLSRouteUpdated, "Reconcile", "TLSRoute %s updated", pool.Name)
 	return nil

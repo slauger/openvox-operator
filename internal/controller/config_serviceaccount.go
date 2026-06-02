@@ -29,11 +29,11 @@ func (r *ConfigReconciler) reconcileServerServiceAccount(ctx context.Context, cf
 			AutomountServiceAccountToken: &automount,
 		}
 		if err := controllerutil.SetControllerReference(cfg, sa, r.Scheme); err != nil {
-			return err
+			return fmt.Errorf("setting owner reference on ServiceAccount %s: %w", saName, err)
 		}
 		return r.Create(ctx, sa)
 	} else if err != nil {
-		return err
+		return fmt.Errorf("getting ServiceAccount %s: %w", saName, err)
 	}
 	return nil
 }

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -49,11 +50,11 @@ func (r *CertificateAuthorityReconciler) reconcileCAService(ctx context.Context,
 			},
 		}
 		if err := controllerutil.SetControllerReference(ca, svc, r.Scheme); err != nil {
-			return err
+			return fmt.Errorf("setting owner reference on Service %s: %w", svcName, err)
 		}
 		return r.Create(ctx, svc)
 	} else if err != nil {
-		return err
+		return fmt.Errorf("getting Service %s: %w", svcName, err)
 	}
 
 	// Update existing service

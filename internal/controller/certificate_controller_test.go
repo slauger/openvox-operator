@@ -518,6 +518,7 @@ func TestExtractNotAfter_ValidCert(t *testing.T) {
 	notAfter := r.extractNotAfter(testCtx(), "test-tls", testNamespace)
 	if notAfter == nil {
 		t.Fatal("expected non-nil NotAfter")
+		return
 	}
 	if notAfter.Time.Before(time.Now()) {
 		t.Error("expected NotAfter to be in the future")

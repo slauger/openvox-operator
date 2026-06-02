@@ -68,7 +68,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("getting Server %s: %w", req.NamespacedName, err)
 	}
 
 	// Set initial phase
@@ -76,7 +76,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if err := updateStatusWithRetry(ctx, r.Client, server, func() {
 			server.Status.Phase = openvoxv1alpha1.ServerPhasePending
 		}); err != nil {
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("updating initial status for Server %s: %w", server.Name, err)
 		}
 	}
 
@@ -87,7 +87,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			logger.Info("waiting for Config", "configRef", server.Spec.ConfigRef)
 			return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("getting Config %s: %w", server.Spec.ConfigRef, err)
 	}
 
 	// Resolve Certificate -- wait until phase is Signed
@@ -97,7 +97,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			logger.Info("waiting for Certificate", "certificateRef", server.Spec.CertificateRef)
 			return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("getting Certificate %s: %w", server.Spec.CertificateRef, err)
 	}
 
 	if cert.Status.Phase != openvoxv1alpha1.CertificatePhaseSigned || cert.Status.SecretName == "" {
@@ -117,7 +117,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			logger.Info("waiting for CertificateAuthority", "authorityRef", cert.Spec.AuthorityRef)
 			return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("getting CertificateAuthority %s: %w", cert.Spec.AuthorityRef, err)
 	}
 
 	// Reconcile Deployment
@@ -151,6 +151,9 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		server.Status.Desired = replicas
 		server.Status.Ready = ready
 
+		serverReplicasDesired.WithLabelValues(server.Name, server.Namespace).Set(float64(replicas))
+		serverReplicasReady.WithLabelValues(server.Name, server.Namespace).Set(float64(ready))
+
 		if ready > 0 {
 			server.Status.Phase = openvoxv1alpha1.ServerPhaseRunning
 			meta.SetStatusCondition(&server.Status.Conditions, metav1.Condition{
@@ -171,7 +174,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			})
 		}
 	}); err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("updating status for Server %s: %w", server.Name, err)
 	}
 
 	if ready > 0 {
@@ -191,7 +194,7 @@ func (r *ServerReconciler) reconcilePDB(ctx context.Context, server *openvoxv1al
 		if err == nil {
 			logger.Info("deleting PDB (disabled)", "name", pdbName)
 			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
-				return err
+				return fmt.Errorf("deleting PodDisruptionBudget %s: %w", pdbName, err)
 			}
 			r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonPDBDeleted, "Reconcile", "PodDisruptionBudget %s deleted", pdbName)
 		}
@@ -205,19 +208,19 @@ func (r *ServerReconciler) reconcilePDB(ctx context.Context, server *openvoxv1al
 	if errors.IsNotFound(err) {
 		logger.Info("creating PDB", "name", pdbName)
 		if err := r.Create(ctx, desired); err != nil {
-			return err
+			return fmt.Errorf("creating PodDisruptionBudget %s: %w", pdbName, err)
 		}
 		r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonPDBCreated, "Reconcile", "PodDisruptionBudget %s created", pdbName)
 		return nil
 	}
 	if err != nil {
-		return err
+		return fmt.Errorf("getting PodDisruptionBudget %s: %w", pdbName, err)
 	}
 
 	// Update existing
 	existing.Spec = desired.Spec
 	if err := r.Update(ctx, existing); err != nil {
-		return err
+		return fmt.Errorf("updating PodDisruptionBudget %s: %w", pdbName, err)
 	}
 	r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonPDBUpdated, "Reconcile", "PodDisruptionBudget %s updated", pdbName)
 	return nil
@@ -267,7 +270,7 @@ func (r *ServerReconciler) reconcileHPA(ctx context.Context, server *openvoxv1al
 		if err == nil {
 			logger.Info("deleting HPA (disabled)", "name", hpaName)
 			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
-				return err
+				return fmt.Errorf("deleting HorizontalPodAutoscaler %s: %w", hpaName, err)
 			}
 			r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonHPADeleted, "Reconcile", "HorizontalPodAutoscaler %s deleted", hpaName)
 		}
@@ -281,19 +284,19 @@ func (r *ServerReconciler) reconcileHPA(ctx context.Context, server *openvoxv1al
 	if errors.IsNotFound(err) {
 		logger.Info("creating HPA", "name", hpaName)
 		if err := r.Create(ctx, desired); err != nil {
-			return err
+			return fmt.Errorf("creating HorizontalPodAutoscaler %s: %w", hpaName, err)
 		}
 		r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonHPACreated, "Reconcile", "HorizontalPodAutoscaler %s created", hpaName)
 		return nil
 	}
 	if err != nil {
-		return err
+		return fmt.Errorf("getting HorizontalPodAutoscaler %s: %w", hpaName, err)
 	}
 
 	// Update existing
 	existing.Spec = desired.Spec
 	if err := r.Update(ctx, existing); err != nil {
-		return err
+		return fmt.Errorf("updating HorizontalPodAutoscaler %s: %w", hpaName, err)
 	}
 	r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonHPAUpdated, "Reconcile", "HorizontalPodAutoscaler %s updated", hpaName)
 	return nil
@@ -358,7 +361,7 @@ func (r *ServerReconciler) reconcileNetworkPolicy(ctx context.Context, server *o
 		if err == nil {
 			logger.Info("deleting NetworkPolicy (disabled)", "name", npName)
 			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
-				return err
+				return fmt.Errorf("deleting NetworkPolicy %s: %w", npName, err)
 			}
 			r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonNetworkPolicyDeleted, "Reconcile", "NetworkPolicy %s deleted", npName)
 		}
@@ -372,18 +375,18 @@ func (r *ServerReconciler) reconcileNetworkPolicy(ctx context.Context, server *o
 	if errors.IsNotFound(err) {
 		logger.Info("creating NetworkPolicy", "name", npName)
 		if err := r.Create(ctx, desired); err != nil {
-			return err
+			return fmt.Errorf("creating NetworkPolicy %s: %w", npName, err)
 		}
 		r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonNetworkPolicyCreated, "Reconcile", "NetworkPolicy %s created", npName)
 		return nil
 	}
 	if err != nil {
-		return err
+		return fmt.Errorf("getting NetworkPolicy %s: %w", npName, err)
 	}
 
 	existing.Spec = desired.Spec
 	if err := r.Update(ctx, existing); err != nil {
-		return err
+		return fmt.Errorf("updating NetworkPolicy %s: %w", npName, err)
 	}
 	r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonNetworkPolicyUpdated, "Reconcile", "NetworkPolicy %s updated", npName)
 	return nil

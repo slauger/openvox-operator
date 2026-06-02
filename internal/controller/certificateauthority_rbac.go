@@ -55,12 +55,13 @@ func (r *CertificateAuthorityReconciler) ensureCAServiceAccount(ctx context.Cont
 			},
 		}
 		if err := controllerutil.SetControllerReference(owner, sa, r.Scheme); err != nil {
-			return err
+			return fmt.Errorf("setting owner reference on ServiceAccount %s: %w", name, err)
 		}
 		return r.Create(ctx, sa)
-	} else {
-		return err
+	} else if err != nil {
+		return fmt.Errorf("getting ServiceAccount %s: %w", name, err)
 	}
+	return nil
 }
 
 func (r *CertificateAuthorityReconciler) ensureCARole(ctx context.Context, name, namespace string, labels map[string]string, resourceNames []string, owner *openvoxv1alpha1.CertificateAuthority) error {
@@ -88,11 +89,11 @@ func (r *CertificateAuthorityReconciler) ensureCARole(ctx context.Context, name,
 			},
 		}
 		if err := controllerutil.SetControllerReference(owner, role, r.Scheme); err != nil {
-			return err
+			return fmt.Errorf("setting owner reference on Role %s: %w", name, err)
 		}
 		return r.Create(ctx, role)
 	} else if err != nil {
-		return err
+		return fmt.Errorf("getting Role %s: %w", name, err)
 	}
 
 	role.Rules = []rbacv1.PolicyRule{
@@ -135,11 +136,11 @@ func (r *CertificateAuthorityReconciler) ensureCARoleBinding(ctx context.Context
 			},
 		}
 		if err := controllerutil.SetControllerReference(owner, rb, r.Scheme); err != nil {
-			return err
+			return fmt.Errorf("setting owner reference on RoleBinding %s: %w", name, err)
 		}
 		return r.Create(ctx, rb)
 	} else if err != nil {
-		return err
+		return fmt.Errorf("getting RoleBinding %s: %w", name, err)
 	}
 
 	rb.Subjects = []rbacv1.Subject{

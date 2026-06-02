@@ -79,6 +79,7 @@ func newConfig(name string, opts ...configOption) *openvoxv1alpha1.Config {
 			Namespace: testNamespace,
 		},
 		Spec: openvoxv1alpha1.ConfigSpec{
+			ReadOnlyRootFilesystem: true,
 			Image: openvoxv1alpha1.ImageSpec{
 				Repository: "ghcr.io/slauger/openvox-server",
 				Tag:        "latest",

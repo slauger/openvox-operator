@@ -48,6 +48,9 @@ on:
       image:
         description: 'Full image reference'
         value: ${{ jobs.manifest.outputs.image }}
+      digest:
+        description: 'Image manifest digest'
+        value: ${{ jobs.manifest.outputs.digest }}
 
 jobs:
   prepare:
@@ -152,6 +155,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.result.outputs.image }}
+      digest: ${{ steps.result.outputs.digest }}
     permissions:
       packages: write
       id-token: write
@@ -199,4 +203,8 @@ jobs:
       - name: Set output
         id: result
         run: |
-          echo "image=ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}:${{ needs.prepare.outputs.version }}" >> $GITHUB_OUTPUT
+          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}"
+          VERSION="${{ needs.prepare.outputs.version }}"
+          DIGEST=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{json .Manifest}}' | jq -r '.digest')
+          echo "image=${IMAGE}:${VERSION}" >> $GITHUB_OUTPUT
+          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT

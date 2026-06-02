@@ -79,9 +79,6 @@ nav:
       - Mock Server: development/mock-server.md
   - Reference:
       - Overview: reference/index.md
-      - openvox-operator: ../charts/openvox-operator/README.md
-      - openvox-stack: ../charts/openvox-stack/README.md
-      - openvox-db-postgres: ../charts/openvox-db-postgres/README.md
       - Helper Binaries: reference/binaries.md
       - Config: reference/config.md
       - CertificateAuthority: reference/certificateauthority.md

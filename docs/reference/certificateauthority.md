@@ -35,7 +35,7 @@ Autosigning is configured via [SigningPolicy](signingpolicy.md) resources that r
 
 ### ExternalCASpec
 
-Configures an external CA running outside the cluster. When set, the operator delegates CSR signing and CRL fetching to the external CA URL instead of managing its own CA infrastructure. See the [External CA guide](../guides/ca-import.md#option-b-external-ca-ongoing-delegation) for step-by-step setup instructions.
+Configures an external CA running outside the cluster. When set, the operator delegates CSR signing and CRL fetching to the external CA URL instead of managing its own CA infrastructure. See the [External CA guide](../guides/ca-import.md#external-ca-ongoing-delegation) for step-by-step setup instructions.
 
 !!! warning "Mutual exclusivity"
     `spec.external` and custom `spec.storage` are mutually exclusive. A CEL validation rule rejects resources that set both. External CAs do not need local storage.

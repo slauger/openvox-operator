@@ -37,7 +37,7 @@ spec:
 | `logging` | [LoggingSpec](#loggingspec) | - | Logback.xml log level configuration |
 | `metrics` | [MetricsSpec](#metricsspec) | - | Puppet Server metrics (JMX, Graphite) |
 | `code` | [CodeSpec](index.md#codespec) | - | Puppet code source (OCI image or PVC) for all Servers |
-| `readOnlyRootFilesystem` | bool | `false` | Enable read-only root filesystem on all Server pods for security hardening |
+| `readOnlyRootFilesystem` | bool | `true` | Enable read-only root filesystem on all Server pods for security hardening |
 
 ### PuppetSpec
 

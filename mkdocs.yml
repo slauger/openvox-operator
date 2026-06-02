@@ -67,6 +67,8 @@ nav:
       - Quick Start: getting-started/quickstart.md
   - Guides:
       - CA Import & External CA: guides/ca-import.md
+      - Monitoring: guides/monitoring.md
+      - Supply Chain Security: guides/supply-chain-security.md
       - Troubleshooting: troubleshooting.md
   - Examples:
       - Overview: examples/index.md

@@ -179,15 +179,27 @@ func TestBuildPodSpec_NoCodeVolume(t *testing.T) {
 	}
 }
 
-func TestBuildPodSpec_ReadOnlyRootFilesystem(t *testing.T) {
-	cfg := newConfig("production", withReadOnlyRootFS(true))
+func TestBuildPodSpec_ReadOnlyRootFilesystem_Default(t *testing.T) {
+	cfg := newConfig("production")
 	server := newServer("test-server")
 
 	podSpec := testBuildPodSpec(server, cfg)
 
 	sc := podSpec.Containers[0].SecurityContext
 	if sc == nil || sc.ReadOnlyRootFilesystem == nil || !*sc.ReadOnlyRootFilesystem {
-		t.Error("readOnlyRootFilesystem should be true")
+		t.Error("readOnlyRootFilesystem should be true by default")
+	}
+}
+
+func TestBuildPodSpec_ReadOnlyRootFilesystem_Disabled(t *testing.T) {
+	cfg := newConfig("production", withReadOnlyRootFS(false))
+	server := newServer("test-server")
+
+	podSpec := testBuildPodSpec(server, cfg)
+
+	sc := podSpec.Containers[0].SecurityContext
+	if sc == nil || sc.ReadOnlyRootFilesystem == nil || *sc.ReadOnlyRootFilesystem {
+		t.Error("readOnlyRootFilesystem should be false when explicitly disabled")
 	}
 }
 

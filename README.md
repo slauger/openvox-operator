@@ -23,6 +23,8 @@ A Kubernetes Operator that maps [OpenVox Server](https://github.com/OpenVoxProje
 - 🗄️ **Managed OpenVox DB** - Deploy OpenVox DB (PuppetDB) with external PostgreSQL - TLS, config, and credentials managed by the operator
 - 📊 **Report Processing** - Forward Puppet reports to OpenVox DB or custom HTTP endpoints via declarative webhook configuration
 - 🔃 **Automatic Config Rollout** - Config and certificate changes trigger rolling restarts automatically
+- 📈 **Prometheus Metrics** - Server replica counts, certificate expiry timestamps, and controller-runtime metrics with optional ServiceMonitor
+- 🛡️ **Supply Chain Security** - Cosign signed images, SLSA provenance, SBOM, and Conforma policy validation
 - ☸️ **Kubernetes-Native** - All config via ConfigMaps/Secrets - no entrypoint scripts, no ENV translation
 <!-- /features -->
 ## Architecture

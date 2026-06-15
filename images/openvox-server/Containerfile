@@ -17,7 +17,7 @@ ARG OPENVOX_VERSION=8.27.0
 ################################################################################
 # Stage: base — JRE + minimal runtime deps (no Ruby)
 ################################################################################
-FROM registry.access.redhat.com/ubi9/ubi:9.8-1780376557 AS base
+FROM registry.access.redhat.com/ubi9/ubi:9.8-1781496985 AS base
 
 ARG JDK_VERSION=21
 
@@ -161,7 +161,7 @@ RUN find / -path '*/openvoxserver-ca-*/lib/puppetserver/ca/action/setup.rb' \
 ################################################################################
 # Stage: autosign — compile the openvox-autosign Go binary
 ################################################################################
-FROM docker.io/library/golang:1.26.3 AS autosign
+FROM docker.io/library/golang:1.26.4 AS autosign
 
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -174,7 +174,7 @@ RUN CGO_ENABLED=0 go build -o /openvox-autosign ./cmd/autosign/
 ################################################################################
 # Stage: enc — compile the openvox-enc Go binary
 ################################################################################
-FROM docker.io/library/golang:1.26.3 AS enc
+FROM docker.io/library/golang:1.26.4 AS enc
 
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -186,7 +186,7 @@ RUN CGO_ENABLED=0 go build -o /openvox-enc ./cmd/enc/
 ################################################################################
 # Stage: report — compile the openvox-report Go binary
 ################################################################################
-FROM docker.io/library/golang:1.26.3 AS report
+FROM docker.io/library/golang:1.26.4 AS report
 
 WORKDIR /src
 COPY go.mod go.sum ./

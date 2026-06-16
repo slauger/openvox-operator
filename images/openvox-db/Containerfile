@@ -9,12 +9,12 @@
 #   podman run --rm openvox-db:latest
 
 # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
-ARG OPENVOXDB_VERSION=8.13.0
+ARG OPENVOXDB_VERSION=8.14.0
 
 ################################################################################
 # Stage: base — JRE + minimal runtime deps
 ################################################################################
-FROM registry.access.redhat.com/ubi9/ubi:9.8-1780376557 AS base
+FROM registry.access.redhat.com/ubi9/ubi:9.8-1781496985 AS base
 
 ARG JDK_VERSION=21
 

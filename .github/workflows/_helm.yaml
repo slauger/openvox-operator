@@ -67,7 +67,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # renovate: datasource=github-releases depName=losisin/helm-values-schema-json
-      SCHEMA_VERSION: "2.4.0"
+      SCHEMA_VERSION: "2.5.0"
     strategy:
       matrix:
         chart:

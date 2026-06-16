@@ -7,9 +7,9 @@
 #   podman run --rm openvox-agent:latest agent --test --server puppet
 
 # renovate: datasource=github-releases depName=OpenVoxProject/openvox
-ARG OPENVOX_AGENT_VERSION=8.27.0
+ARG OPENVOX_AGENT_VERSION=8.28.0
 
-FROM registry.access.redhat.com/ubi9/ubi:9.8-1780376557
+FROM registry.access.redhat.com/ubi9/ubi:9.8-1781496985
 
 ARG OPENVOX_AGENT_VERSION
 

@@ -36,6 +36,7 @@ jobs:
           cd /tmp
           curl -sSLO "https://github.com/conforma/cli/releases/download/v${EC_VERSION}/ec_linux_amd64"
           curl -sSLO "https://github.com/conforma/cli/releases/download/v${EC_VERSION}/ec_linux_amd64.sha256"
+          sed -i 's|dist/||' ec_linux_amd64.sha256
           sha256sum --check ec_linux_amd64.sha256
           chmod +x ec_linux_amd64
           sudo mv ec_linux_amd64 /usr/local/bin/ec

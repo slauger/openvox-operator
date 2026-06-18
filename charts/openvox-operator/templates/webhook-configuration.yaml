@@ -2,7 +2,7 @@
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
-  name: {{ include "openvox-operator.fullname" . }}
+  name: {{ include "openvox-operator.fullname" . }}-validating-webhook-configuration
   {{- if .Values.webhook.certManager.enabled }}
   annotations:
     cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "openvox-operator.fullname" . }}-webhook

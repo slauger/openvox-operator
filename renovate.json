@@ -76,7 +76,22 @@
       "matchDatasources": [
         "github-releases"
       ],
+      "matchPackageNames": [
+        "OpenVoxProject/*"
+      ],
       "groupName": "OpenVox versions"
+    },
+    {
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "!OpenVoxProject/*"
+      ],
+      "groupName": "CI tooling"
     }
   ]
 }

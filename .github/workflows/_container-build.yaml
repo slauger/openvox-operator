@@ -159,6 +159,7 @@ jobs:
     permissions:
       packages: write
       id-token: write
+      attestations: write
     steps:
       - name: Login to ghcr.io
         uses: docker/login-action@v4
@@ -192,19 +193,31 @@ jobs:
             docker buildx imagetools create -t "${IMAGE}:latest" ${SOURCES}
           fi
 
-      - name: Sign image with cosign (keyless)
-        if: inputs.sign
+      - name: Get manifest digest
+        id: digest
         run: |
           IMAGE="ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}"
           VERSION="${{ needs.prepare.outputs.version }}"
           DIGEST=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{json .Manifest}}' | jq -r '.digest')
-          cosign sign --yes "${IMAGE}@${DIGEST}"
+          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+
+      - name: Sign image with cosign (keyless)
+        if: inputs.sign
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}"
+          cosign sign --yes "${IMAGE}@${{ steps.digest.outputs.digest }}"
+
+      - name: Attest manifest index
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          push-to-registry: true
 
       - name: Set output
         id: result
         run: |
           IMAGE="ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}"
           VERSION="${{ needs.prepare.outputs.version }}"
-          DIGEST=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{json .Manifest}}' | jq -r '.digest')
           echo "image=${IMAGE}:${VERSION}" >> $GITHUB_OUTPUT
-          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+          echo "digest=${{ steps.digest.outputs.digest }}" >> $GITHUB_OUTPUT

@@ -57,5 +57,7 @@ jobs:
           )
           if [[ "${{ inputs.strict }}" == "true" ]]; then
             ARGS+=(--strict)
+          else
+            ARGS+=(--strict=false)
           fi
           ec "${ARGS[@]}"

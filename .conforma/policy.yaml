@@ -5,7 +5,6 @@ sources:
       - github.com/conforma/policy//policy/release?ref=v1.0.22
     config:
       include:
-        - '@minimal'
         - '@github'
     ruleData:
       allowed_registry_prefixes:

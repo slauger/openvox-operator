@@ -24,6 +24,7 @@ spec:
 | `authorityRef` | string | **required** | Reference to the CertificateAuthority |
 | `certname` | string | `puppet` | Certificate common name (CN) |
 | `dnsAltNames` | []string | - | DNS subject alternative names |
+| `renewBefore` | string | `60d` | Duration before expiration when the certificate should be renewed (e.g. `60d`, `720h`) |
 | `csrExtensions` | CSRExtensionsSpec | - | Puppet CSR extension attributes to embed in the CSR |
 
 ## Status
@@ -43,6 +44,7 @@ spec:
 | `Requesting` | Certificate signing in progress |
 | `WaitingForSigning` | CSR submitted, waiting for CA to sign (backoff polling in progress) |
 | `Signed` | TLS Secret created, Servers can mount it |
+| `Renewing` | Certificate is within its `renewBefore` window and is being re-signed |
 | `Error` | Certificate signing failed |
 
 ### CSR Poll Backoff

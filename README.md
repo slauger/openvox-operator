@@ -124,7 +124,7 @@ All resources use the API group `openvox.voxpupuli.org/v1alpha1`.
 | Kind | Purpose | Creates |
 |---|---|---|
 | **`Config`** | Shared config (puppet.conf, auth.conf, etc.), OpenVox DB connection | ConfigMaps, Secrets, ServiceAccount |
-| **`CertificateAuthority`** | CA infrastructure: keys, signing, split Secrets (cert, key, CRL) | PVC, Job, ServiceAccount, Role, RoleBinding, 3 Secrets |
+| **`CertificateAuthority`** | CA infrastructure: keys, signing, split Secrets (cert, key, CRL) | PVC, Job, Service, ServiceAccount, Role, RoleBinding, 3 Secrets |
 | **`SigningPolicy`** | Declarative CSR signing policy (any, pattern, DNS SANs, CSR attributes) | *(rendered into Config's autosign Secret)* |
 | **`NodeClassifier`** | External Node Classifier (ENC) endpoint (custom HTTP) | *(rendered into Config's ENC Secret)* |
 | **`ReportProcessor`** | Report forwarding endpoint (generic webhook or PuppetDB Wire Format v8) | *(rendered into Config's report-webhook Secret)* |
@@ -225,7 +225,7 @@ make local-stack IMAGE_TAG=my-feature STACK_VALUES=charts/openvox-stack/ci/multi
 ## Testing
 
 ```bash
-make ci           # Run all offline checks (lint, vet, test, vulncheck, helm-lint, helm-unittest)
+make ci           # Run all CI checks (lint, vet, test, check-manifests, vulncheck, helm-lint, helm-unittest)
 make test         # Go unit tests only
 make e2e-all      # Run all E2E test groups (requires cluster + images in ghcr.io)
 ```

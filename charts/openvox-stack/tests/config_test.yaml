@@ -18,19 +18,20 @@ tests:
           path: spec.image.repository
           value: ghcr.io/slauger/openvox-server
 
-  - it: should set readOnlyRootFilesystem when true
-    set:
-      config:
-        readOnlyRootFilesystem: true
+  - it: should set readOnlyRootFilesystem to true by default
     asserts:
       - equal:
           path: spec.readOnlyRootFilesystem
           value: true
 
-  - it: should not set readOnlyRootFilesystem when false (default)
+  - it: should set readOnlyRootFilesystem to false when configured
+    set:
+      config:
+        readOnlyRootFilesystem: false
     asserts:
-      - isNull:
+      - equal:
           path: spec.readOnlyRootFilesystem
+          value: false
 
   - it: should use databaseRef when database is enabled and no serverUrls
     set:

@@ -59,7 +59,7 @@ helm install openvox oci://ghcr.io/slauger/charts/openvox-stack
 | config.puppet.storeBackend | string | `""` | Storage backend for stored configurations. |
 | config.puppet.storeconfigs | bool | `false` | Enable stored configurations. |
 | config.puppetdb.serverUrls | list | `[]` | PuppetDB server URLs for report storage. |
-| config.readOnlyRootFilesystem | bool | `false` | Enable read-only root filesystem for server containers. |
+| config.readOnlyRootFilesystem | bool | `true` | Enable read-only root filesystem for server containers. |
 | database.certificate.certname | string | `""` | Certificate common name for PuppetDB. Required when enabled. |
 | database.certificate.dnsAltNames | list | `[]` | Additional DNS subject alternative names. |
 | database.enabled | bool | `false` | Enable PuppetDB database deployment. |

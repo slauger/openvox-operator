@@ -9,7 +9,7 @@ config:
   name: ""
   # @schema description: Enable read-only root filesystem for server containers.
   # -- Enable read-only root filesystem for server containers.
-  readOnlyRootFilesystem: false
+  readOnlyRootFilesystem: true
   image:
     # @schema description: OpenVox Server image repository.
     # -- OpenVox Server image repository.

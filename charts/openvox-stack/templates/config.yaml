@@ -22,9 +22,7 @@ spec:
   {{- else if and .Values.database.enabled .Values.database.name }}
   databaseRef: {{ .Values.database.name }}
   {{- end }}
-  {{- if .Values.config.readOnlyRootFilesystem }}
-  readOnlyRootFilesystem: true
-  {{- end }}
+  readOnlyRootFilesystem: {{ .Values.config.readOnlyRootFilesystem }}
   puppet:
     {{- with .Values.config.puppet.environmentTimeout }}
     environmentTimeout: {{ . }}

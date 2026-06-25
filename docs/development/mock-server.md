@@ -12,6 +12,9 @@
 | `GET` | `/api/reports` | List all received reports (JSON) |
 | `GET` | `/api/pdb-commands` | List all received PDB commands (JSON) |
 | `GET` | `/api/classifications` | List all served classifications (JSON) |
+| `POST` | `/services/collector/event` | HEC (HTTP Event Collector) event receiver |
+| `GET` | `/api/hec-events` | List all received HEC events (JSON) |
+| `DELETE` | `/api/reset` | Clear all stored data (reports, PDB commands, classifications, HEC events) |
 | `GET` | `/healthz` | Health check |
 
 The `/api/*` endpoints are useful for assertions in E2E tests. They return all data the mock has received or served during its lifetime.

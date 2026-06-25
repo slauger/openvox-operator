@@ -17,15 +17,17 @@ go build ./...
 
 ## Tool Dependencies
 
-Go tool dependencies are managed via the `tool` directive in `go.mod`. This includes `controller-gen`, `govulncheck`, and `chainsaw`. No manual installation is needed -- Go resolves them automatically:
+Go tool dependencies are managed via the `tool` directive in `go.mod`. This includes `controller-gen` and `govulncheck`. No manual installation is needed -- Go resolves them automatically:
 
 ```bash
 go tool controller-gen --version
 go tool govulncheck -version
-go tool chainsaw version
 ```
 
-`golangci-lint` is the only tool managed externally. In CI it is provided by [golangci-lint-action](https://github.com/golangci/golangci-lint-action). For local usage, install it via [the official instructions](https://golangci-lint.run/welcome/install/).
+Other tools are managed externally:
+
+- **golangci-lint** -- In CI provided by [golangci-lint-action](https://github.com/golangci/golangci-lint-action). For local usage, install via [the official instructions](https://golangci-lint.run/welcome/install/).
+- **chainsaw** -- Downloaded automatically by the Makefile (`make chainsaw`). Version is pinned via `CHAINSAW_VERSION` in the Makefile.
 
 ## Deploy to Local Cluster
 
@@ -50,8 +52,8 @@ make local-stack STACK_VALUES=charts/openvox-stack/ci/multi-server-values.yaml
 Override the image tag:
 
 ```bash
-make local-deploy LOCAL_TAG=my-feature
-make local-stack LOCAL_TAG=my-feature
+make local-deploy IMAGE_TAG=my-feature
+make local-stack IMAGE_TAG=my-feature
 ```
 
 ## Teardown
@@ -83,7 +85,7 @@ make check-manifests
 | `build` | Build operator binary |
 | `manifests` | Generate CRD manifests |
 | `generate` | Generate deepcopy methods |
-| `local-build` | Build all container images with the current git commit as tag |
+| `local-build` | Build all container images with the current `git describe --always` as tag |
 | `local-deploy` | Build images and deploy the operator via Helm |
 | `local-install` | Deploy operator via Helm with local images (no build) |
 | `local-stack` | Deploy openvox-stack via Helm with local images |

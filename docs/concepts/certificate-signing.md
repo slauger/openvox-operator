@@ -180,6 +180,10 @@ Pending -> Initializing -> Ready
                 |
                 v
               Error
+
+(External CAs skip Initializing and go directly to External)
+
+Pending -> External
 ```
 
 | Phase | Description |
@@ -187,14 +191,15 @@ Pending -> Initializing -> Ready
 | `Pending` | Waiting for Config with `authorityRef` pointing to this CA |
 | `Initializing` | CA setup Job is running |
 | `Ready` | CA Secrets created, certificates can be signed |
+| `External` | External CA configured via `spec.external`, no setup Job |
 | `Error` | Setup Job failed (retried up to 3 times) |
 
 ### Certificate
 
 ```
-Pending -> Requesting -> WaitingForSigning -> Signed
-              |                  |
-              +------> Error <---+
+Pending -> Requesting -> WaitingForSigning -> Signed -> Renewing -> Signed
+              |                  |                         |
+              +------> Error <---+-------------------------+
 ```
 
 | Phase | Description |
@@ -203,6 +208,20 @@ Pending -> Requesting -> WaitingForSigning -> Signed
 | `Requesting` | CSR submitted, polling for signed certificate |
 | `WaitingForSigning` | Polled 10+ times without success, backed off to a longer poll interval |
 | `Signed` | TLS Secret created, Server can mount it |
+| `Renewing` | Certificate is within its `renewBefore` window and is being re-signed |
 | `Error` | Signing failed |
+
+## Certificate Renewal
+
+Certificates are automatically renewed before expiration. The `renewBefore` field on the Certificate spec (default: `60d`) controls how early renewal starts.
+
+When a certificate enters its renewal window (`notAfter - renewBefore`), the controller:
+
+1. Transitions the Certificate to the `Renewing` phase
+2. Generates a new RSA key pair and submits a new CSR
+3. Once the new certificate is signed, updates the TLS Secret
+4. Transitions back to `Signed`
+
+The rolling restart mechanism (annotation hash) ensures Server pods pick up the renewed certificate automatically. No manual intervention is required.
 
 For the full CRD reference, see [Certificate](../reference/certificate.md).

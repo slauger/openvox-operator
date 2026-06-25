@@ -39,6 +39,7 @@ spec:
 | `topologySpreadConstraints` | []TopologySpreadConstraint | - | Pod spread constraints across topology domains |
 | `affinity` | Affinity | - | Pod affinity/anti-affinity rules |
 | `pdb` | [PDBSpec](#pdbspec) | - | PodDisruptionBudget configuration |
+| `priorityClassName` | string | - | PriorityClass name for Server pods |
 | `networkPolicy` | [NetworkPolicySpec](#networkpolicyspec) | - | NetworkPolicy configuration |
 
 ### PDBSpec

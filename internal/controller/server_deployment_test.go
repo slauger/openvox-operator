@@ -172,9 +172,54 @@ func TestBuildPodSpec_NoCodeVolume(t *testing.T) {
 
 	podSpec := testBuildPodSpec(server, cfg)
 
+	// Without a code source, a writable emptyDir is mounted at the environment
+	// path so Puppetserver can bootstrap its default environment under a
+	// read-only root filesystem.
+	var codeVol *corev1.Volume
+	for i := range podSpec.Volumes {
+		if podSpec.Volumes[i].Name == "code" {
+			codeVol = &podSpec.Volumes[i]
+			break
+		}
+	}
+	if codeVol == nil {
+		t.Fatal("code volume not found")
+	}
+	if codeVol.EmptyDir == nil {
+		t.Error("code volume should be an emptyDir when no code spec is set")
+	}
+	if codeVol.Image != nil || codeVol.PersistentVolumeClaim != nil {
+		t.Error("code volume should not reference an image or PVC when no code spec is set")
+	}
+
+	var codeMount *corev1.VolumeMount
+	for i := range podSpec.Containers[0].VolumeMounts {
+		if podSpec.Containers[0].VolumeMounts[i].Name == "code" {
+			codeMount = &podSpec.Containers[0].VolumeMounts[i]
+			break
+		}
+	}
+	if codeMount == nil {
+		t.Fatal("code volume mount not found")
+	}
+	if codeMount.MountPath != cfg.Spec.Puppet.EnvironmentPath {
+		t.Errorf("expected code mount path %q, got %q", cfg.Spec.Puppet.EnvironmentPath, codeMount.MountPath)
+	}
+	if codeMount.ReadOnly {
+		t.Error("code emptyDir mount should be writable (not read-only)")
+	}
+}
+
+func TestBuildPodSpec_NoCodeVolume_CAOnly(t *testing.T) {
+	cfg := newConfig("production") // no code spec
+	// CA-only pod (server:false) does not compile catalogs, so no code volume.
+	server := newServer("test-server", withServerRole(false), withCA(true))
+
+	podSpec := testBuildPodSpec(server, cfg)
+
 	for _, v := range podSpec.Volumes {
 		if v.Name == "code" {
-			t.Error("pod should not have code volume when no code spec is set")
+			t.Error("CA-only pod should not have a code volume")
 		}
 	}
 }

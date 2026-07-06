@@ -325,6 +325,19 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 					},
 				})
 			}
+		} else {
+			// No external code source configured: mount a writable emptyDir at the
+			// environment path so Puppetserver can bootstrap its default environment
+			// (environments/production) on startup. Without this, a read-only root
+			// filesystem prevents creating the directory and the pod crash-loops.
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      "code",
+				MountPath: cfg.Spec.Puppet.EnvironmentPath,
+			})
+			volumes = append(volumes, corev1.Volume{
+				Name:         "code",
+				VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+			})
 		}
 	}
 

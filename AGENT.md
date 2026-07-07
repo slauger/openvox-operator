@@ -54,7 +54,7 @@ make generate manifests   # regenerate deepcopy + CRD YAML + Helm CRDs
 go build ./...
 go vet ./...
 go test ./internal/controller/ -v
-make ci                   # full CI: lint + test + helm-lint + check-manifests
+make ci                   # full CI: lint + vet + test + check-manifests + vulncheck + helm-lint + helm-unittest
 ```
 
 Always run `make generate manifests` after modifying `api/v1alpha1/*_types.go`.
@@ -68,7 +68,8 @@ internal/controller/       Reconcilers, deployment builders, rendering, tests
 config/crd/bases/          Generated CRD YAML
 charts/openvox-operator/   Helm chart (CRDs copied from config/crd/bases/)
 charts/openvox-stack/      Example stack chart
-images/                    Containerfiles (openvox-server, openvox-db, openvox-operator)
+charts/openvox-db-postgres/ Helm chart for CNPG PostgreSQL cluster
+images/                    Containerfiles (openvox-operator, openvox-server, openvox-db, openvox-agent, openvox-mock, openvox-e2e-code, openvox-server-reference)
 tests/e2e/                 Chainsaw E2E tests
 cmd/                       Entrypoints (operator, ENC, autosign, report, mock)
 docs/                      Documentation
@@ -76,7 +77,7 @@ docs/                      Documentation
 
 ## Code Conventions
 
-- Shared API types (e.g. `PDBSpec`, `NetworkPolicySpec`, `ImageSpec`, `CodeSpec`) live in `api/v1alpha1/server_types.go`
+- Shared API types: `PDBSpec` and `NetworkPolicySpec` live in `api/v1alpha1/server_types.go`; `ImageSpec` and `CodeSpec` live in `api/v1alpha1/config_types.go`
 - Controller tests use the builder pattern from `testutil_test.go` (`newServer()`, `newDatabase()` with option funcs like `withPDBEnabled()`, `withReplicas()`)
 - Follow existing patterns when adding sub-resources to a controller:
   1. Add RBAC marker comment (`+kubebuilder:rbac:...`)

@@ -15,7 +15,7 @@ spec:
     repository: ghcr.io/slauger/openvox-server
     tag: "8.12.1"
   puppet:
-    environmentTimeout: unlimited
+    environmentTimeout: "0"
     storeconfigs: true
     reports: puppetdb
   puppetdb:
@@ -43,7 +43,7 @@ spec:
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `environmentTimeout` | string | `unlimited` | How long Puppet caches environments |
+| `environmentTimeout` | string | - | How long Puppet caches environments. When unset, Puppet's default (`0` = no caching) applies |
 | `environmentPath` | string | `/etc/puppetlabs/code/environments` | Path to Puppet environments |
 | `hieraConfig` | string | `$confdir/hiera.yaml` | Path to Hiera configuration |
 | `storeconfigs` | bool | `true` | Enable storeconfigs |

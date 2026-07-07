@@ -26,7 +26,7 @@ make build
 make test          # Unit tests
 make lint          # Linting
 make helm-lint     # Helm chart linting
-make ci            # All CI checks (lint, test, vet, helm-lint, check-manifests)
+make ci            # All CI checks (lint, vet, test, check-manifests, vulncheck, helm-lint, helm-unittest)
 ```
 
 ### Local Development
@@ -48,7 +48,7 @@ make local-stack
 E2E tests use [Chainsaw](https://kyverno.github.io/chainsaw/) and require a running cluster:
 
 ```bash
-make e2e
+make e2e-all
 ```
 
 ## Development Workflow
@@ -101,7 +101,7 @@ This regenerates CRD manifests, deepcopy methods, and copies CRDs into the Helm 
 api/v1alpha1/              CRD type definitions
 cmd/                       Entrypoints (operator, ENC, autosign, report, mock)
 internal/controller/       Reconcilers
-charts/                    Helm charts (openvox-operator, openvox-stack)
+charts/                    Helm charts (openvox-operator, openvox-stack, openvox-db-postgres)
 config/crd/bases/          Generated CRD manifests
 tests/e2e/                 Chainsaw E2E tests
 images/                    Containerfiles

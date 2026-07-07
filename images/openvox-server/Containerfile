@@ -9,15 +9,15 @@
 #   podman run --rm openvox-server:latest
 
 # renovate: datasource=github-releases depName=OpenVoxProject/openvox-server
-ARG OPENVOXSERVER_VERSION=8.14.0
+ARG OPENVOXSERVER_VERSION=8.14.1
 # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
-ARG OPENVOXDB_TERMINI_VERSION=8.14.0
+ARG OPENVOXDB_TERMINI_VERSION=8.14.1
 # renovate: datasource=github-releases depName=OpenVoxProject/openvox
 ARG OPENVOX_VERSION=8.28.0
 ################################################################################
 # Stage: base — JRE + minimal runtime deps (no Ruby)
 ################################################################################
-FROM registry.access.redhat.com/ubi9/ubi:9.8-1782121068 AS base
+FROM registry.access.redhat.com/ubi9/ubi:9.8-1782841664 AS base
 
 ARG JDK_VERSION=21
 
@@ -148,8 +148,7 @@ RUN printf '%s\n' \
         'INSTALL_DIR="/opt/puppetlabs/server/apps/puppetserver"' \
         'CONFIG="/etc/puppetlabs/puppetserver/conf.d"' \
         > /etc/sysconfig/puppetserver \
-    && puppetserver gem install --no-document openvox -v "${OPENVOX_VERSION}" \
-    && puppetserver gem install --no-document jruby-openssl -v 0.15.7
+    && puppetserver gem install --no-document openvox -v "${OPENVOX_VERSION}"
 
 # Patch openvoxserver-ca to skip cadir symlink and chown (fails rootless)
 RUN find / -path '*/openvoxserver-ca-*/lib/puppetserver/ca/action/setup.rb' \

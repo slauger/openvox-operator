@@ -41,6 +41,7 @@ spec:
 | `resources` | ResourceRequirements | - | CPU/memory requests and limits |
 | `replicas` | int32 | `1` | Number of pod replicas |
 | `javaArgs` | string | - | JVM arguments |
+| `priorityClassName` | string | - | PriorityClass name for Database pods |
 | `pdb` | [PDBSpec](#pdbspec) | - | PodDisruptionBudget configuration |
 | `networkPolicy` | [NetworkPolicySpec](#networkpolicyspec) | - | NetworkPolicy configuration |
 | `service` | [DatabaseServiceSpec](#databaseservicespec) | - | Service configuration |

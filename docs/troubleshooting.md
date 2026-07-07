@@ -118,9 +118,9 @@ kubectl logs <pod-name> -n <namespace> --previous
       nc -zv <service-name>.<namespace>.svc 8140
     ```
 
-### Gateway API HTTPRoute not working
+### Gateway API TLSRoute not working
 
-**Symptoms:** External traffic doesn't reach the server via HTTPRoute.
+**Symptoms:** External traffic doesn't reach the server via TLSRoute.
 
 **Possible causes:**
 
@@ -131,7 +131,7 @@ kubectl logs <pod-name> -n <namespace> --previous
 
 ```bash
 kubectl get gateway -A
-kubectl get httproute -n <namespace> -o yaml
+kubectl get tlsroute -n <namespace> -o yaml
 ```
 
 ## Operator Issues

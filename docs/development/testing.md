@@ -33,6 +33,8 @@ make ci
 | E2E Images | `e2e-images.yaml` | Manual only | Builds + pushes all 6 E2E images to ghcr.io |
 | E2E | `e2e.yaml` | Manual only | Runs all E2E test groups sequentially against pre-built images |
 | E2E (single) | `e2e-single.yaml` | Manual only | Run a single test, group, or all tests for an operator variant |
+| Auto PR | `auto-pr.yaml` | Push to develop (CI success) | Automatically creates a PR from `develop` to `main` |
+| Docs | `docs.yaml` | Push to main | Builds and deploys MkDocs site to GitHub Pages |
 | Release | `release.yaml` | Manual (main only) | semantic-release, builds operator/server/db with version tag + `:latest`, publishes Helm charts |
 
 ### Reusable Workflows
@@ -40,6 +42,8 @@ make ci
 | Workflow | File | Purpose |
 |----------|------|---------|
 | Container Build | `_container-build.yaml` | Multi-arch image build, optional push, signing, SBOM |
+| Conforma Validate | `_conforma-validate.yaml` | Conforma (Enterprise Contract) policy validation |
+| Cleanup Images | `_cleanup-images.yaml` | Delete container image tags from ghcr.io |
 | E2E Run | `_e2e-run.yaml` | Reusable: operator setup, matrix test execution, cleanup |
 | Go | `_go.yaml` | Go build, test, vet, vulncheck, lint |
 | Helm | `_helm.yaml` | Helm lint + unittest |
@@ -161,6 +165,7 @@ Tests are organized into groups. Each group installs the operator with specific 
 | enc | webhook=false, gatewayAPI=false | agent-enc, agent-full | `make e2e-group-enc` |
 | gateway | webhook=false, gatewayAPI=true | pool-gateway | `make e2e-group-gateway` |
 | webhooks-cm | webhook=true, cert-manager | webhook-validation-server, webhook-validation-config, webhook-validation-database, webhook-smoke | `make e2e-group-webhooks-cm` |
+| ca | webhook=false, gatewayAPI=false | external-ca | `make e2e-group-ca` |
 
 Run all groups sequentially:
 
@@ -176,7 +181,7 @@ Some tests require external operators:
 - **Envoy Gateway** -- Gateway API implementation for `pool-gateway` test
 - **cert-manager** -- Webhook TLS automation for `webhooks-cm` test
 
-In CI, these are pre-installed on the persistent E2E cluster via ArgoCD. The workflow only waits for readiness (`make e2e-wait`).
+In CI, these are pre-installed on the persistent E2E cluster via ArgoCD. The workflow waits for readiness before starting tests.
 
 For local development, install them with `setup.sh`:
 

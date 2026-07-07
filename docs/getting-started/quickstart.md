@@ -40,7 +40,7 @@ This guide sets up an OpenVox Server deployment. Choose between the Helm chart (
 
     ### Multi-Node (Default)
 
-    The chart defaults deploy a dedicated CA server and a separate server pool with 2 replicas. This layout is suitable for environments that need independent scaling or rolling upgrades without CA downtime.
+    The chart defaults deploy a combined CA+server and a separate server pool with 2 replicas. This layout is suitable for environments that need independent scaling or rolling upgrades without CA downtime.
 
     No custom `values.yaml` is needed for the default layout. You only need to add overrides for settings you want to change, for example a signing policy:
 
@@ -143,23 +143,23 @@ kubectl get config,certificateauthority,signingpolicy,certificate,server,pool
 ```
 
 ```
-NAME                                        CA       PHASE     AGE
-config.openvox.voxpupuli.org/lab            lab-ca   Running   2m
+NAME                                        CA       IMAGE    PHASE     AGE
+config.openvox.voxpupuli.org/lab            lab-ca   latest   Running   2m
 
-NAME                                                PHASE   AGE
-certificateauthority.openvox.voxpupuli.org/lab-ca   Ready   2m
+NAME                                                PHASE   NOTAFTER             AGE
+certificateauthority.openvox.voxpupuli.org/lab-ca   Ready   2031-06-23T12:00Z    2m
 
 NAME                                                     CA       PHASE    AGE
 signingpolicy.openvox.voxpupuli.org/lab-autosign         lab-ca   Active   2m
 
-NAME                                              AUTHORITY   CERTNAME   PHASE    AGE
-certificate.openvox.voxpupuli.org/lab-cert        lab-ca      puppet     Signed   2m
+NAME                                              AUTHORITY   CERTNAME   PHASE    NOTAFTER             AGE
+certificate.openvox.voxpupuli.org/lab-cert        lab-ca      puppet     Signed   2031-06-23T12:00Z    2m
 
-NAME                                        CONFIG   REPLICAS   READY   PHASE     AGE
-server.openvox.voxpupuli.org/puppet         lab      1          1       Running   2m
+NAME                                        CONFIG   CA     REPLICAS   READY   PHASE     AGE
+server.openvox.voxpupuli.org/puppet         lab      true   1          1       Running   2m
 
-NAME                                        CONFIG   TYPE        ENDPOINTS   AGE
-pool.openvox.voxpupuli.org/puppet           lab      ClusterIP   1           2m
+NAME                                        TYPE        ENDPOINTS   AGE
+pool.openvox.voxpupuli.org/puppet           ClusterIP   1           2m
 ```
 
 ## Next Steps

@@ -13,7 +13,7 @@ ARG OPENVOXSERVER_VERSION=8.14.1
 # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
 ARG OPENVOXDB_TERMINI_VERSION=8.14.1
 # renovate: datasource=github-releases depName=OpenVoxProject/openvox
-ARG OPENVOX_VERSION=8.28.0
+ARG OPENVOX_VERSION=8.28.1
 ################################################################################
 # Stage: base — JRE + minimal runtime deps (no Ruby)
 ################################################################################

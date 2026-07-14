@@ -16,7 +16,15 @@ Create a `Containerfile` that copies your Puppet environments into the image:
 
 ```dockerfile
 FROM scratch
-COPY environments/ /etc/puppetlabs/code/environments/
+COPY environments/ /
+```
+
+The operator mounts the image at the configured `environmentPath` (default `/etc/puppetlabs/code/environments`). Kubernetes maps the **root of the image** to that mount path, so your environment directories must live at the root of the image, one directory per environment:
+
+```
+/                 (image root, mounted at /etc/puppetlabs/code/environments)
+  production/
+  staging/
 ```
 
 Build and push:
@@ -26,7 +34,7 @@ docker build -t ghcr.io/example/puppet-code:v1.0.0 -f Containerfile .
 docker push ghcr.io/example/puppet-code:v1.0.0
 ```
 
-A typical control repository layout:
+A typical control repository layout, where `COPY environments/ /` copies the contents of `environments/` (the `production/`, `staging/`, ... directories) to the image root:
 
 ```
 control-repo/
@@ -178,7 +186,7 @@ spec:
     claimName: puppet-code
 ```
 
-The PVC must contain the environments directory at `/etc/puppetlabs/code/environments`.
+Like the image volume, the PVC is mounted at the configured `environmentPath` (default `/etc/puppetlabs/code/environments`), so its root must contain the environment directories directly (`production/`, `staging/`, ...).
 
 | Setup | Access Mode | Requirement |
 |---|---|---|

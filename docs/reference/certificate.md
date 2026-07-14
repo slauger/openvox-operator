@@ -53,16 +53,12 @@ When the CA does not immediately sign the CSR (e.g. autosigning is disabled), th
 
 | Attempts | Interval |
 |---|---|
-| 0--2 | 5s |
-| 3--5 | 30s |
-| 6--9 | 2m |
+| 0-2 | 5s |
+| 3-5 | 30s |
+| 6-9 | 2m |
 | 10+ | 5m |
 
-The poll attempt count is tracked via the annotation `openvox.voxpupuli.org/csr-poll-attempts` on the pending Secret `{name}-tls-pending`. To resolve manually, sign the CSR on the CA and the controller will pick it up on the next poll:
-
-```bash
-puppetserver ca sign --certname <certname>
-```
+The poll attempt count is tracked via the annotation `openvox.voxpupuli.org/csr-poll-attempts` on the pending Secret `{name}-tls-pending`. To resolve manually, sign the pending CSR on the CA server (for example via a matching [SigningPolicy](signingpolicy.md) or the CA's signing API); the controller picks it up on the next poll.
 
 ## CSR Extensions
 

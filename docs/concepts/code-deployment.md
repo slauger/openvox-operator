@@ -27,8 +27,6 @@ The operator mounts the image at the configured `environmentPath` (default `/etc
   staging/
 ```
 
-Do **not** nest the environments under `/etc/puppetlabs/code/environments/` inside the image. That path would be duplicated at runtime (`/etc/puppetlabs/code/environments/etc/puppetlabs/code/environments/production`) and Puppet server would not find any environment.
-
 Build and push:
 
 ```bash
@@ -188,7 +186,7 @@ spec:
     claimName: puppet-code
 ```
 
-Like the image volume, the PVC is mounted at the configured `environmentPath` (default `/etc/puppetlabs/code/environments`), so its root must contain the environment directories directly (`production/`, `staging/`, ...), not a nested `etc/puppetlabs/code/environments/` path.
+Like the image volume, the PVC is mounted at the configured `environmentPath` (default `/etc/puppetlabs/code/environments`), so its root must contain the environment directories directly (`production/`, `staging/`, ...).
 
 | Setup | Access Mode | Requirement |
 |---|---|---|

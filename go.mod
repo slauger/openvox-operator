@@ -2,6 +2,8 @@ module github.com/slauger/openvox-operator
 
 go 1.26.4
 
+toolchain go1.26.5
+
 require (
 	github.com/prometheus/client_golang v1.23.2
 	gopkg.in/yaml.v3 v3.0.1

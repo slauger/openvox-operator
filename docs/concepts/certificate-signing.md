@@ -9,7 +9,7 @@ The operator's certificate lifecycle (the `Certificate` CRD and the signing stra
 **Agent and managed node certificates are not part of the operator's lifecycle.** When a node submits a CSR, it is handled by the CA server pod exactly as in a standard deployment:
 
 - If a [SigningPolicy](../reference/signingpolicy.md) matches the CSR, the `openvox-autosign` script in the CA pod auto-signs it at request time.
-- Otherwise the CSR waits for manual signing (`puppetserver ca sign --certname <certname>`) or an external autosign mechanism.
+- Otherwise the CSR waits for manual signing or an external autosign mechanism.
 
 The operator does not create a `Certificate` resource per node, does not track node CSRs, and does not reconcile agent certificate renewal or revocation; Puppetserver in the CA pod owns that flow end to end. You only create `Certificate` resources for infrastructure components. Agents follow the normal enrollment path against the CA server.
 
@@ -137,13 +137,7 @@ Polling for a signed certificate uses exponential backoff to avoid hammering the
 | 6-9 | 2m |
 | 10+ | 5m |
 
-The attempt counter is stored as the annotation `openvox.voxpupuli.org/csr-poll-attempts` on the pending Secret `{cert}-tls-pending`. Manual resolution from the CA pod:
-
-```bash
-puppetserver ca sign --certname <certname>
-```
-
-The controller picks up the signed certificate on the next poll cycle.
+The attempt counter is stored as the annotation `openvox.voxpupuli.org/csr-poll-attempts` on the pending Secret `{cert}-tls-pending`. To resolve manually, sign the pending CSR on the CA server (for example via a matching [SigningPolicy](../reference/signingpolicy.md) or the CA's signing API). The controller picks up the signed certificate on the next poll cycle.
 
 ### CSR Extensions
 

@@ -4,14 +4,14 @@ This guide explains how the operator bootstraps a Certificate Authority, signs c
 
 ## Scope: what the operator manages
 
-The operator's certificate lifecycle (the `Certificate` CRD and the signing strategies below) covers **infrastructure certificates only** -- the CA server's own certificate and the certificates of compile servers managed by the operator. These are the certs the operator needs in order to stand up and wire together the Puppet infrastructure.
+The operator's certificate lifecycle (the `Certificate` CRD and the signing strategies below) covers **infrastructure certificates only**: the CA server's own certificate and the certificates of compile servers managed by the operator. These are the certs the operator needs in order to stand up and wire together the infrastructure.
 
-**Puppet agent / managed node certificates are not part of the operator's lifecycle.** When a normal Puppet agent submits a CSR, it is handled by the CA server pod exactly as in a standard Puppet deployment:
+**Agent and managed node certificates are not part of the operator's lifecycle.** When a node submits a CSR, it is handled by the CA server pod exactly as in a standard deployment:
 
 - If a [SigningPolicy](../reference/signingpolicy.md) matches the CSR, the `openvox-autosign` script in the CA pod auto-signs it at request time.
 - Otherwise the CSR waits for manual signing (`puppetserver ca sign --certname <certname>`) or an external autosign mechanism.
 
-The operator does not create a `Certificate` resource per node, does not track node CSRs, and does not reconcile agent certificate renewal or revocation -- Puppetserver in the CA pod owns that flow end to end. You only create `Certificate` resources for infrastructure components; agents follow the normal Puppet enrollment path against the CA server.
+The operator does not create a `Certificate` resource per node, does not track node CSRs, and does not reconcile agent certificate renewal or revocation; Puppetserver in the CA pod owns that flow end to end. You only create `Certificate` resources for infrastructure components. Agents follow the normal enrollment path against the CA server.
 
 ## CA Bootstrap
 
@@ -50,9 +50,9 @@ The setup Job:
 The Job is idempotent: if the CA is already initialized on the PVC, it skips setup and only ensures the Secrets exist.
 
 !!! note "Where the CA private key actually lives"
-    The `{ca}-ca-key` Secret is never mounted as a volume into any pod -- not even the CA server pod. It exists solely so the key material can be exported/backed up via the Kubernetes API.
+    The `{ca}-ca-key` Secret is never mounted as a volume into any pod, not even the CA server pod. It exists solely so the key material can be exported/backed up via the Kubernetes API.
 
-    The CA private key is, however, present inside the running CA server pod: it lives as a file on the `{ca}-data` PVC (under `/etc/puppetlabs/puppetserver/ca`), which the CA pod mounts. **Puppetserver in the CA pod performs the actual cryptographic signing** using that key -- the operator never signs CSRs itself and never has access to the CA private key. When the operator "signs" a CSR (Strategy 2 below), it merely authenticates to the CA HTTP API via mTLS and asks Puppetserver to sign; the private key never leaves the CA pod.
+    The CA private key is, however, present inside the running CA server pod: it lives as a file on the `{ca}-data` PVC (under `/etc/puppetlabs/puppetserver/ca`), which the CA pod mounts. **Puppetserver in the CA pod performs the actual cryptographic signing** using that key; the operator never signs CSRs itself and never has access to the CA private key. When the operator "signs" a CSR (Strategy 2 below), it merely authenticates to the CA HTTP API via mTLS and asks Puppetserver to sign; the private key never leaves the CA pod.
 
 ### Operator Signing Certificate
 
@@ -63,7 +63,7 @@ Once the operator-signing Certificate is itself `Signed`, the controller:
 1. Sets `status.signingSecretName` on the CertificateAuthority to the resulting TLS Secret name (`{ca}-operator-signing-tls`)
 2. Sets the `OperatorSigningReady` condition to `True`
 
-From this point on, the Certificate controller uses this Secret for mTLS-authenticated CSR signing against the CA HTTP API (see Strategy 2 below). The operator never reuses the CA server's own certificate for signing -- the operator signing cert is rotated independently and can be revoked without disrupting CA traffic.
+From this point on, the Certificate controller uses this Secret for mTLS-authenticated CSR signing against the CA HTTP API (see Strategy 2 below). The operator never reuses the CA server's own certificate for signing; the operator signing cert is rotated independently and can be revoked without disrupting CA traffic.
 
 External CAs do not get an operator-signing Certificate: they manage their own signing credentials externally.
 
@@ -152,7 +152,7 @@ The `Certificate` CRD's `csrExtensions` field lets you embed Puppet CSR extensio
 | Field | Purpose |
 |---|---|
 | `ppCliAuth: true` | Adds `pp_cli_auth=true`, granting the certificate authority to call the CA signing endpoint. Used by the auto-managed operator-signing cert. |
-| `ppRole` | Sets `pp_role` -- often consumed by ENC or trusted facts. |
+| `ppRole` | Sets `pp_role`, often consumed by ENC or trusted facts. |
 | `ppEnvironment` | Sets `pp_environment`. |
 | `customExtensions` | Map of arbitrary `pp_*` extension names to string values. |
 

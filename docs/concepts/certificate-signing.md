@@ -2,6 +2,17 @@
 
 This guide explains how the operator bootstraps a Certificate Authority, signs certificates, and distributes CRLs.
 
+## Scope: what the operator manages
+
+The operator's certificate lifecycle (the `Certificate` CRD and the signing strategies below) covers **infrastructure certificates only** -- the CA server's own certificate and the certificates of compile servers managed by the operator. These are the certs the operator needs in order to stand up and wire together the Puppet infrastructure.
+
+**Puppet agent / managed node certificates are not part of the operator's lifecycle.** When a normal Puppet agent submits a CSR, it is handled by the CA server pod exactly as in a standard Puppet deployment:
+
+- If a [SigningPolicy](../reference/signingpolicy.md) matches the CSR, the `openvox-autosign` script in the CA pod auto-signs it at request time.
+- Otherwise the CSR waits for manual signing (`puppetserver ca sign --certname <certname>`) or an external autosign mechanism.
+
+The operator does not create a `Certificate` resource per node, does not track node CSRs, and does not reconcile agent certificate renewal or revocation -- Puppetserver in the CA pod owns that flow end to end. You only create `Certificate` resources for infrastructure components; agents follow the normal Puppet enrollment path against the CA server.
+
 ## CA Bootstrap
 
 When a CertificateAuthority resource is created, the operator runs a setup Job that initializes the CA on a PVC:

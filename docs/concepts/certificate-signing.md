@@ -32,11 +32,16 @@ The setup Job:
 1. Runs `puppetserver ca setup` on the PVC to generate the CA key pair and self-signed certificate
 2. Exports three Secrets via the Kubernetes API:
     - **`{ca}-ca`** - public CA certificate (`ca_crt.pem`), mounted in all pods
-    - **`{ca}-ca-key`** - CA private key (`ca_key.pem`), never mounted in pods
+    - **`{ca}-ca-key`** - CA private key (`ca_key.pem`), never mounted as a volume in any pod (see note below)
     - **`{ca}-ca-crl`** - certificate revocation list, mounted in non-CA pods
 3. If a Certificate resource already exists for the CA server, the Job also signs and exports its TLS Secret
 
 The Job is idempotent: if the CA is already initialized on the PVC, it skips setup and only ensures the Secrets exist.
+
+!!! note "Where the CA private key actually lives"
+    The `{ca}-ca-key` Secret is never mounted as a volume into any pod -- not even the CA server pod. It exists solely so the key material can be exported/backed up via the Kubernetes API.
+
+    The CA private key is, however, present inside the running CA server pod: it lives as a file on the `{ca}-data` PVC (under `/etc/puppetlabs/puppetserver/ca`), which the CA pod mounts. **Puppetserver in the CA pod performs the actual cryptographic signing** using that key -- the operator never signs CSRs itself and never has access to the CA private key. When the operator "signs" a CSR (Strategy 2 below), it merely authenticates to the CA HTTP API via mTLS and asks Puppetserver to sign; the private key never leaves the CA pod.
 
 ### Operator Signing Certificate
 
@@ -166,7 +171,7 @@ Non-CA pods mount the CRL Secret as a **directory volume** (without SubPath), wh
 | Secret | Contents | Created By | Mounted In |
 |--------|----------|------------|------------|
 | `{ca}-ca` | `ca_crt.pem` | CA setup Job | All pods (trust chain) |
-| `{ca}-ca-key` | `ca_key.pem` | CA setup Job | Never (API access only) |
+| `{ca}-ca-key` | `ca_key.pem` | CA setup Job | Never as a volume (API export/backup only; CA pod reads the key from the `{ca}-data` PVC) |
 | `{ca}-ca-crl` | `ca_crl.pem` | CA setup Job, then operator refresh | Non-CA pods (directory mount) |
 | `{cert}-tls` | `cert.pem`, `key.pem` | CA setup Job or Certificate controller | Server pods (SSL) |
 | `{cert}-tls-pending` | `key.pem` | Certificate controller | Never (temporary, deleted after signing) |

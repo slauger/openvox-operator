@@ -105,6 +105,15 @@ func TestConfigReconcile_PuppetConfRendering(t *testing.T) {
 			contains: []string{"environmentpath = /custom/code/environments"},
 		},
 		{
+			// Regression for #463: an empty environmentPath must still emit the
+			// default so puppet.conf and the code volume mountPath stay consistent.
+			name: "default environmentPath when unset",
+			opts: []configOption{withPuppetSpec(openvoxv1alpha1.PuppetSpec{
+				Reports: "puppetdb",
+			})},
+			contains: []string{"environmentpath = /etc/puppetlabs/code/environments"},
+		},
+		{
 			name: "custom hieraConfig",
 			opts: []configOption{withPuppetSpec(openvoxv1alpha1.PuppetSpec{
 				HieraConfig: "/etc/puppetlabs/custom/hiera.yaml",

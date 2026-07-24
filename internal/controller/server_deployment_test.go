@@ -143,6 +143,32 @@ func TestBuildPodSpec_CodeVolumeImage(t *testing.T) {
 	t.Error("code volume not found")
 }
 
+// TestBuildPodSpec_CodeVolumeDefaultsMountPath is a regression test for #463:
+// when spec.code is set but spec.puppet.environmentPath is empty (e.g. a
+// hand-written Config that omits the whole spec.puppet block, so the CRD default
+// is never applied), the code volume must still render a valid mountPath rather
+// than "", which the Kubernetes API rejects.
+func TestBuildPodSpec_CodeVolumeDefaultsMountPath(t *testing.T) {
+	cfg := newConfig("production", withCodeImage("ghcr.io/slauger/puppet-code:v1.0"))
+	cfg.Spec.Puppet.EnvironmentPath = ""
+	server := newServer("test-server", withServerRole(true))
+
+	podSpec := testBuildPodSpec(server, cfg)
+
+	found := false
+	for _, vm := range podSpec.Containers[0].VolumeMounts {
+		if vm.Name == "code" {
+			found = true
+			if vm.MountPath != defaultEnvironmentPath {
+				t.Errorf("expected code mountPath %q, got %q", defaultEnvironmentPath, vm.MountPath)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("code volume mount not found")
+	}
+}
+
 func TestBuildPodSpec_CodeVolumePVC(t *testing.T) {
 	cfg := newConfig("production", withCodePVC("puppet-code-pvc"))
 	server := newServer("test-server", withServerRole(true))

@@ -21,9 +21,7 @@ func (r *ConfigReconciler) renderPuppetConf(ctx context.Context, cfg *openvoxv1a
 	sb.WriteString("rundir = /var/run/puppetlabs\n")
 	sb.WriteString("manage_internal_file_permissions = false\n")
 
-	if cfg.Spec.Puppet.EnvironmentPath != "" {
-		fmt.Fprintf(&sb, "environmentpath = %s\n", cfg.Spec.Puppet.EnvironmentPath)
-	}
+	fmt.Fprintf(&sb, "environmentpath = %s\n", resolveEnvironmentPath(cfg))
 
 	if cfg.Spec.Puppet.HieraConfig != "" {
 		fmt.Fprintf(&sb, "hiera_config = %s\n", cfg.Spec.Puppet.HieraConfig)

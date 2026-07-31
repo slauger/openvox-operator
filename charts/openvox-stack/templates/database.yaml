@@ -32,7 +32,7 @@ spec:
   certificateRef: {{ .Values.database.name }}
   image:
     repository: {{ .Values.database.image.repository }}
-    tag: {{ .Values.database.image.tag | quote }}
+    tag: {{ .Values.database.image.tag | default .Chart.AppVersion | quote }}
     pullPolicy: {{ .Values.database.image.pullPolicy }}
   postgres:
     host: {{ .Values.database.postgres.host }}

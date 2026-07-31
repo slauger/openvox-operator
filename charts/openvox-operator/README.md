@@ -43,7 +43,7 @@ To deploy a complete OpenVox stack after installing the operator, use the
 | image.digest | string | `""` | Image digest. Takes precedence over tag. |
 | image.pullPolicy | string | `"Always"` | Image pull policy. |
 | image.repository | string | `"ghcr.io/slauger/openvox-operator"` | Image repository. |
-| image.tag | string | `"latest"` | Image tag. Ignored if digest is set. |
+| image.tag | string | `""` | Image tag. Defaults to the chart appVersion. Ignored if digest is set. |
 | imagePullSecrets | list | `[]` | Image pull secrets for private registries. |
 | leaderElect | bool | `true` | Enable leader election for controller manager. |
 | metrics.enabled | bool | `true` | Enable the metrics endpoint. |

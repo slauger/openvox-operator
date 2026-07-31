@@ -14,9 +14,9 @@ config:
     # @schema description: OpenVox Server image repository.
     # -- OpenVox Server image repository.
     repository: ghcr.io/slauger/openvox-server
-    # @schema description: Image tag.
-    # -- Image tag.
-    tag: latest
+    # @schema description: Image tag. Defaults to the chart appVersion.
+    # -- Image tag. Defaults to the chart appVersion.
+    tag: ""
     # @schema enum:[Always, IfNotPresent, Never]
     # @schema description: Image pull policy.
     # -- Image pull policy.
@@ -200,9 +200,9 @@ database:
     # @schema description: OpenVox DB image repository.
     # -- OpenVox DB image repository.
     repository: ghcr.io/slauger/openvox-db
-    # @schema description: Image tag.
-    # -- Image tag.
-    tag: latest
+    # @schema description: Image tag. Defaults to the chart appVersion.
+    # -- Image tag. Defaults to the chart appVersion.
+    tag: ""
     # @schema enum:[Always, IfNotPresent, Never]
     # @schema description: Image pull policy.
     # -- Image pull policy.

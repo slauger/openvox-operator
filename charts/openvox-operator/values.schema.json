@@ -37,7 +37,7 @@
                     "type": "string"
                 },
                 "tag": {
-                    "description": "Image tag. Ignored if digest is set.",
+                    "description": "Image tag. Defaults to the chart appVersion. Ignored if digest is set.",
                     "type": "string"
                 }
             }

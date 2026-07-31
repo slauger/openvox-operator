@@ -13,11 +13,20 @@ tests:
           path: spec.replicas
           value: 1
 
-  - it: should use tag-based image by default
+  - it: should default the image tag to the chart appVersion
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "ghcr.io/slauger/openvox-operator:latest"
+          value: "ghcr.io/slauger/openvox-operator:0.0.0"
+
+  - it: should use an explicit image tag when set
+    set:
+      image:
+        tag: v1.2.3
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/slauger/openvox-operator:v1.2.3"
 
   - it: should use digest-based image when digest is set
     set:

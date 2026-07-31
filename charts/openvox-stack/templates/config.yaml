@@ -9,7 +9,7 @@ spec:
   {{- end }}
   image:
     repository: {{ .Values.config.image.repository }}
-    tag: {{ .Values.config.image.tag | quote }}
+    tag: {{ .Values.config.image.tag | default .Chart.AppVersion | quote }}
     pullPolicy: {{ .Values.config.image.pullPolicy }}
     {{- with .Values.config.image.pullSecrets }}
     pullSecrets:

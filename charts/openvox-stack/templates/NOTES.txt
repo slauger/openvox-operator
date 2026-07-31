@@ -4,7 +4,7 @@ The OpenVox stack has been deployed.
   Namespace: {{ .Release.Namespace }}
   Config:    {{ include "openvox-stack.configName" . }}
   CA:        {{ include "openvox-stack.caName" . }}
-  Image:     {{ .Values.config.image.repository }}:{{ .Values.config.image.tag }}
+  Image:     {{ .Values.config.image.repository }}:{{ .Values.config.image.tag | default .Chart.AppVersion }}
 
 Resources created:
 

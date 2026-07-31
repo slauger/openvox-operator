@@ -78,7 +78,7 @@
                             "type": "string"
                         },
                         "tag": {
-                            "description": "Image tag.",
+                            "description": "Image tag. Defaults to the chart appVersion.",
                             "type": "string"
                         }
                     }
@@ -172,7 +172,7 @@
                             "type": "string"
                         },
                         "tag": {
-                            "description": "Image tag.",
+                            "description": "Image tag. Defaults to the chart appVersion.",
                             "type": "string"
                         }
                     }

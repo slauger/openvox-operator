@@ -17,6 +17,19 @@ tests:
       - equal:
           path: spec.image.repository
           value: ghcr.io/slauger/openvox-server
+      - equal:
+          path: spec.image.tag
+          value: "0.0.0"
+
+  - it: should use an explicit image tag when set
+    set:
+      config:
+        image:
+          tag: v1.2.3
+    asserts:
+      - equal:
+          path: spec.image.tag
+          value: v1.2.3
 
   - it: should set readOnlyRootFilesystem to true by default
     asserts:

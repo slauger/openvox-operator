@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -119,7 +120,7 @@ func classify(cfg *ENCConfig, certname string) (string, error) {
 		bodyReader = strings.NewReader(bodyData)
 	}
 
-	req, err := http.NewRequest(cfg.Method, reqURL, bodyReader)
+	req, err := http.NewRequestWithContext(context.Background(), cfg.Method, reqURL, bodyReader)
 	if err != nil {
 		return "", fmt.Errorf("creating request: %w", err)
 	}

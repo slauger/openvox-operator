@@ -202,43 +202,12 @@ func (r *CertificateReconciler) submitCSR(ctx context.Context, cert *openvoxv1al
 	}
 
 	pendingSecretName := fmt.Sprintf("%s-tls-pending", cert.Name)
-	var keyPEM []byte
 
-	// Check if we already have a pending key (from a previous attempt)
-	pendingSecret := &corev1.Secret{}
-	err := r.Get(ctx, types.NamespacedName{Name: pendingSecretName, Namespace: namespace}, pendingSecret)
-	if err == nil {
-		keyPEM = pendingSecret.Data["key.pem"]
-	}
-
-	if len(keyPEM) == 0 {
-		// Generate new RSA 4096-bit key
-		privateKey, err := rsa.GenerateKey(rand.Reader, RSAKeySize)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("generating RSA key: %w", err)
-		}
-		keyPEM = pem.EncodeToMemory(&pem.Block{
-			Type:  "RSA PRIVATE KEY",
-			Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
-		})
-
-		// Store key in pending Secret
-		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      pendingSecretName,
-				Namespace: namespace,
-				Labels: map[string]string{
-					"openvox.voxpupuli.org/certificate": cert.Name,
-				},
-			},
-			Data: map[string][]byte{"key.pem": keyPEM},
-		}
-		if err := controllerutil.SetControllerReference(cert, secret, r.Scheme); err != nil {
-			return ctrl.Result{}, fmt.Errorf("setting owner reference on pending Secret %s: %w", pendingSecretName, err)
-		}
-		if err := r.Create(ctx, secret); err != nil && !errors.IsAlreadyExists(err) {
-			return ctrl.Result{}, fmt.Errorf("creating pending Secret: %w", err)
-		}
+	// Reuse an existing pending key from a previous attempt, or generate and
+	// persist a new one.
+	keyPEM, err := r.ensurePendingKey(ctx, cert, pendingSecretName, namespace)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	// Parse private key from PEM to build CSR

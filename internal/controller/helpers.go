@@ -169,6 +169,23 @@ func caInternalServiceName(caName string) string {
 	return fmt.Sprintf("%s-internal", caName)
 }
 
+// defaultEnvironmentPath is the fallback puppet environmentpath used when
+// spec.puppet.environmentPath is unset. It mirrors the kubebuilder default on
+// PuppetSpec.EnvironmentPath, which is not applied by the API server when the
+// whole spec.puppet object is omitted (nested defaults require the parent object
+// to be present). Resolving it here keeps hand-written Configs from rendering an
+// empty volume mountPath, which the Kubernetes API rejects.
+const defaultEnvironmentPath = "/etc/puppetlabs/code/environments"
+
+// resolveEnvironmentPath returns the configured puppet environmentpath, falling
+// back to defaultEnvironmentPath when unset.
+func resolveEnvironmentPath(cfg *openvoxv1alpha1.Config) string {
+	if cfg.Spec.Puppet.EnvironmentPath != "" {
+		return cfg.Spec.Puppet.EnvironmentPath
+	}
+	return defaultEnvironmentPath
+}
+
 // resolveCode determines the code source for a Server.
 // Priority: Server override > Config default.
 func resolveCode(server *openvoxv1alpha1.Server, cfg *openvoxv1alpha1.Config) *openvoxv1alpha1.CodeSpec {

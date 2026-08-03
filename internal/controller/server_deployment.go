@@ -296,7 +296,7 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 		if code := resolveCode(server, cfg); code != nil {
 			volumeMounts = append(volumeMounts, corev1.VolumeMount{
 				Name:      "code",
-				MountPath: cfg.Spec.Puppet.EnvironmentPath,
+				MountPath: resolveEnvironmentPath(cfg),
 				ReadOnly:  true,
 			})
 			switch {
@@ -332,7 +332,7 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 			// filesystem prevents creating the directory and the pod crash-loops.
 			volumeMounts = append(volumeMounts, corev1.VolumeMount{
 				Name:      "code",
-				MountPath: cfg.Spec.Puppet.EnvironmentPath,
+				MountPath: resolveEnvironmentPath(cfg),
 			})
 			volumes = append(volumes, corev1.Volume{
 				Name:         "code",

@@ -9,9 +9,9 @@ image:
   # @schema description: Image repository.
   # -- Image repository.
   repository: ghcr.io/slauger/openvox-operator
-  # @schema description: Image tag. Ignored if digest is set.
-  # -- Image tag. Ignored if digest is set.
-  tag: latest
+  # @schema description: Image tag. Defaults to the chart appVersion. Ignored if digest is set.
+  # -- Image tag. Defaults to the chart appVersion. Ignored if digest is set.
+  tag: ""
   # @schema type:string;pattern:^sha256:[a-f0-9]{64}$
   # -- Image digest. Takes precedence over tag.
   digest: "" # @schema hidden

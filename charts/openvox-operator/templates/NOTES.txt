@@ -2,7 +2,7 @@ The OpenVox Operator has been installed.
 
   Release:   {{ .Release.Name }}
   Namespace: {{ .Release.Namespace }}
-  Image:     {{ .Values.image.repository }}:{{ .Values.image.tag }}
+  Image:     {{ if .Values.image.digest }}{{ .Values.image.repository }}@{{ .Values.image.digest }}{{ else }}{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}{{ end }}
 
 The operator is now watching for OpenVox CRDs in all namespaces.
 

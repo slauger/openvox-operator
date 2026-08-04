@@ -236,6 +236,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
       - name: Download chart artifacts
         uses: actions/download-artifact@v8
         with:
@@ -248,3 +251,21 @@ jobs:
         run: |
           VERSION="${{ needs.semantic-release.outputs.new-release-version }}"
           gh release upload "v${VERSION}" *.tgz
+
+      - name: Append OpenVox component versions to release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          VERSION="${{ needs.semantic-release.outputs.new-release-version }}"
+          ROWS=$(yq -r '.include[] | "| " + .major + " | " + .server + " | " + .db + " | " + .agent + " |"' images/openvox-versions.yaml)
+          BODY=$(gh release view "v${VERSION}" --json body -q .body)
+          {
+            printf '%s\n\n' "${BODY}"
+            printf '## OpenVox component versions\n\n'
+            printf 'Content images shipped with this release. Major 8 is the default and the only one tagged `:latest`; major 9 is a pre-release.\n\n'
+            printf '| Major | openvox-server | openvox-db | openvox-agent |\n'
+            printf '|---|---|---|---|\n'
+            printf '%s\n' "${ROWS}"
+          } > release-notes.md
+          gh release edit "v${VERSION}" --notes-file release-notes.md

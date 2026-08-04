@@ -30,7 +30,9 @@ spec:
     `spec.image.repository: ghcr.io/slauger/openvox-server-9`. OpenVox 9 is a pre-release
     (Jetty 12, JRuby 10, Java 17 dropped), never tagged `:latest`, and not recommended
     for production yet. The previously published unsuffixed images (`openvox-server`,
-    `openvox-db`) are no longer built.
+    `openvox-db`) are no longer built. The exact OpenVox versions baked into each image
+    are pinned in `images/openvox-versions.yaml`, and every operator release lists the
+    shipped component versions in its GitHub release notes.
 
 ## Spec
 

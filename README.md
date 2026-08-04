@@ -212,6 +212,10 @@ major, the **tag** stays the operator release version.
 | Server | `ghcr.io/slauger/openvox-server-8` | `ghcr.io/slauger/openvox-server-9` |
 | DB | `ghcr.io/slauger/openvox-db-8` | `ghcr.io/slauger/openvox-db-9` |
 
+The exact OpenVox versions baked into each image are pinned in
+[`images/openvox-versions.yaml`](images/openvox-versions.yaml) (kept current by Renovate),
+and every operator release lists the shipped component versions in its GitHub release notes.
+
 The operator defaults to OpenVox 8 everywhere (chart values, CRD defaults, samples) and
 only the `-8` images are tagged `:latest`. To opt a Config into OpenVox 9, set the image
 repository explicitly:

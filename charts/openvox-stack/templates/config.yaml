@@ -25,7 +25,7 @@ spec:
   readOnlyRootFilesystem: {{ .Values.config.readOnlyRootFilesystem }}
   puppet:
     {{- with .Values.config.puppet.environmentTimeout }}
-    environmentTimeout: {{ . }}
+    environmentTimeout: {{ . | quote }}
     {{- end }}
     {{- with .Values.config.puppet.environmentPath }}
     environmentPath: {{ . }}

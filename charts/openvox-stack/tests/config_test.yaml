@@ -246,3 +246,13 @@ tests:
       - equal:
           path: spec.metrics.jmx.enabled
           value: true
+
+  - it: should quote a numeric-looking environmentTimeout
+    set:
+      config:
+        puppet:
+          environmentTimeout: "0"
+    asserts:
+      - equal:
+          path: spec.puppet.environmentTimeout
+          value: "0"

@@ -36,6 +36,11 @@ on:
         required: false
         type: boolean
         default: false
+      build_args:
+        description: 'Build-time arguments passed to docker build (one KEY=VALUE per line)'
+        required: false
+        type: string
+        default: ''
       sign:
         description: 'Sign images with cosign keyless signing'
         required: false
@@ -143,6 +148,7 @@ jobs:
           file: ${{ inputs.dockerfile }}
           platforms: ${{ matrix.platform }}
           push: ${{ inputs.push }}
+          build-args: ${{ inputs.build_args }}
           provenance: true
           sbom: true
           tags: ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}:${{ needs.prepare.outputs.version }}-${{ steps.platform.outputs.suffix }}

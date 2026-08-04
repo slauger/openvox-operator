@@ -8,12 +8,8 @@
 # Renovate keeps the pins current: the "8" entry tracks the stable 8.x line. Major 8
 # is the default and the only one tagged :latest.
 #
-# Major 9 is TEMPORARILY DISABLED (commented out below) until OpenVox 9.0 GA. The 9.x
-# pre-releases cannot be built reproducibly today: the server/db images install from a
-# release tarball, but 9.0.0 betas publish only RPMs/DEBs (no tarball), and the version
-# strings differ per artifact (RPM/repo use ~beta, the openvox gem uses .pre.beta, the
-# GitHub tag uses -beta). Re-enable at GA by uncommenting the entry below and updating
-# the server/db install path -- see #503.
+# Major 9 is disabled (commented out below) until OpenVox 9.0 GA -- the 9.x pre-release
+# artifacts can't be built reproducibly yet. Re-enable by uncommenting the entry; see #503.
 include:
   - major: "8"
     latest: true

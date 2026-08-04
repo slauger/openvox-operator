@@ -23,16 +23,13 @@ spec:
       - "https://openvoxdb.example.com:8081"
 ```
 
-!!! note "Choosing an OpenVox major (8 or 9)"
-    The content images are published per OpenVox major - the image name encodes the
-    major (`openvox-server-8` / `openvox-server-9`), the tag stays the operator release
-    version. The default is `openvox-server-8`, also published under the unsuffixed
-    `openvox-server` / `openvox-db` alias (same digest) for backward compatibility.
-    OpenVox 9 builds are **paused until 9.0 GA**: the operator supports pointing
-    `spec.image.repository` at an `openvox-server-9` image, but the `-9` images are not
-    currently published (the 9.0 betas ship inconsistent build artifacts). The exact
-    OpenVox versions baked into each image are pinned in `images/openvox-versions.yaml`,
-    and every operator release lists the shipped component versions in its GitHub release notes.
+!!! note "Image naming"
+    The content images are published as `openvox-server` / `openvox-db` (the current default
+    major), with a major-suffixed variant (`openvox-server-8`) available to pin a specific
+    OpenVox major - the unsuffixed name and the default-major suffix share the same image
+    digest. The exact OpenVox versions baked into each image are pinned in
+    `images/openvox-versions.yaml`, and every operator release lists the shipped component
+    versions in its GitHub release notes.
 
 ## Spec
 

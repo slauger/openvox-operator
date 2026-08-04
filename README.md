@@ -202,32 +202,17 @@ helm install production \
   --set database.postgres.credentialsSecretRef=pg-cluster-app
 ```
 
-## OpenVox 8 and 9
+## Content images
 
-The content images are published per OpenVox major: the image **name** encodes the
-major, the **tag** stays the operator release version. For backward compatibility the
-default major is also published under the **unsuffixed** name.
-
-| Image | Unsuffixed alias | OpenVox 8 (default) | OpenVox 9 |
-|---|---|---|---|
-| Server | `ghcr.io/slauger/openvox-server` | `ghcr.io/slauger/openvox-server-8` | `ghcr.io/slauger/openvox-server-9` |
-| DB | `ghcr.io/slauger/openvox-db` | `ghcr.io/slauger/openvox-db-8` | `ghcr.io/slauger/openvox-db-9` |
-
-`openvox-server` / `openvox-db` (unsuffixed) are aliases of the current default major
-(`-8`) -- the same image digest under a compatibility name -- so existing pins keep
-working. Use the `-8` / `-9` suffix to pin a major explicitly.
+The OpenVox Server and DB content images are published under their plain names,
+`ghcr.io/slauger/openvox-server` and `ghcr.io/slauger/openvox-db`. A major-suffixed variant
+(`openvox-server-8` / `openvox-db-8`) is also published for pinning a specific OpenVox major;
+the unsuffixed name tracks the current default major and shares its image digest.
 
 The exact OpenVox versions baked into each image are pinned in
 [`images/openvox-versions.yaml`](images/openvox-versions.yaml) (kept current by Renovate),
 and every operator release lists the shipped component versions in its GitHub release notes.
-
-The operator defaults to OpenVox 8 everywhere (chart values, CRD defaults, samples) and
-only the default (`-8` / unsuffixed) images are tagged `:latest`.
-
-> **OpenVox 9 builds are paused until 9.0 GA.** The operator already supports OpenVox 9
-> (point `spec.image.repository` at an `openvox-server-9` image), but the `-9` images are
-> **not currently published**: the 9.0 betas ship inconsistent build artifacts (no release
-> tarball, per-artifact version-string quirks). Building resumes at 9.0 GA.
+The operator uses these images everywhere by default (chart values, CRD defaults, samples).
 
 ## Local Development
 

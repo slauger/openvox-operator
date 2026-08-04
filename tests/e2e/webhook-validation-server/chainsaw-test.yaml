@@ -32,7 +32,7 @@ spec:
                 name: wh-server-config
               spec:
                 image:
-                  repository: ghcr.io/slauger/openvox-server
+                  repository: ghcr.io/slauger/openvox-server-8
                   tag: latest
                 authorityRef: wh-server-ca
         - apply:

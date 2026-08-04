@@ -1,0 +1,71 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: server-fsgroup
+spec:
+  namespace: e2e-server-fsgroup
+  bindings:
+    - name: registry
+      value: (env('IMAGE_REGISTRY') || 'ghcr.io/slauger')
+    - name: imageTag
+      value: (env('IMAGE_TAG') || 'latest')
+  steps:
+    - name: Install openvox-stack
+      try:
+        - script:
+            timeout: 2m
+            content: |
+              REPO_ROOT=$(git rev-parse --show-toplevel)
+              IMAGE_TAG=${IMAGE_TAG:-$(git describe --always)}
+              IMAGE_REGISTRY=${IMAGE_REGISTRY:-ghcr.io/slauger}
+              helm upgrade --install e2e-server-fsgroup "${REPO_ROOT}/charts/openvox-stack" \
+                --namespace e2e-server-fsgroup --create-namespace \
+                --values "${REPO_ROOT}/charts/openvox-stack/ci/single-node-values.yaml" \
+                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server \
+                --set config.image.tag="${IMAGE_TAG}" \
+                --set config.image.pullPolicy=Always
+      catch:
+        - events: {}
+
+    - name: Assert Server is Running
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: e2e-server-fsgroup-ca
+              status:
+                phase: Running
+                ready: 1
+                desired: 1
+
+    - name: Verify fsGroup and fsGroupChangePolicy on the server pod
+      try:
+        - script:
+            timeout: 1m
+            content: |
+              set -eu
+              NS=e2e-server-fsgroup
+              POD=$(kubectl get pods -n "${NS}" \
+                -l openvox.voxpupuli.org/server=e2e-server-fsgroup-ca \
+                -o jsonpath='{.items[0].metadata.name}')
+              echo "pod=${POD}"
+
+              FSG=$(kubectl get pod "${POD}" -n "${NS}" \
+                -o jsonpath='{.spec.securityContext.fsGroup}')
+              echo "fsGroup=${FSG}"
+              [ "${FSG}" = "1001" ] || { echo "ERROR: expected fsGroup=1001"; exit 1; }
+
+              POL=$(kubectl get pod "${POD}" -n "${NS}" \
+                -o jsonpath='{.spec.securityContext.fsGroupChangePolicy}')
+              echo "fsGroupChangePolicy=${POL}"
+              [ "${POL}" = "OnRootMismatch" ] || { echo "ERROR: expected fsGroupChangePolicy=OnRootMismatch"; exit 1; }
+
+              echo "OK: fsGroup 1001 / OnRootMismatch set on managed server pod"
+      finally:
+        - script:
+            timeout: 2m
+            content: |
+              helm uninstall e2e-server-fsgroup --namespace e2e-server-fsgroup --wait 2>/dev/null || true
+              kubectl delete namespace e2e-server-fsgroup --ignore-not-found 2>/dev/null || true

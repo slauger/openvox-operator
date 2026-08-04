@@ -296,7 +296,9 @@ e2e-group-base: e2e-operator-base chainsaw ## Group: base tests (stack, agent, d
 		tests/e2e/readonly-rootfs \
 		tests/e2e/code-pvc \
 		tests/e2e/autosign-policy \
-		tests/e2e/cert-rotation; \
+		tests/e2e/cert-rotation \
+		tests/e2e/server-extra-env-volumes \
+		tests/e2e/server-fsgroup; \
 	EXIT=$$?; $(MAKE) e2e-cleanup; exit $$EXIT
 
 .PHONY: e2e-group-enc

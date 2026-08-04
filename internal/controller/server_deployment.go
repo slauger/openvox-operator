@@ -105,6 +105,17 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 		}
 	}
 
+	// Add autosign-policy secret hash annotation for CA pods to trigger rollout on
+	// SigningPolicy changes. The policy Secret is subPath-mounted, so kubelet does not
+	// live-sync it; hashing it into the pod template rolls the CA pod when the rendered
+	// policy changes, so a SigningPolicy edit applies without a manual restart.
+	if server.Spec.CA {
+		autosignSecretName := fmt.Sprintf("%s-autosign-policy", ca.Name)
+		if autosignHash, err := r.secretHash(ctx, autosignSecretName, server.Namespace); err == nil {
+			annotations["openvox.voxpupuli.org/autosign-policy-secret-hash"] = autosignHash
+		}
+	}
+
 	deploy := &appsv1.Deployment{}
 	err = r.Get(ctx, types.NamespacedName{Name: deployName, Namespace: server.Namespace}, deploy)
 	if errors.IsNotFound(err) {

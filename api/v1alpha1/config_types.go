@@ -286,6 +286,40 @@ const (
 
 // --- Shared types used by multiple CRDs ---
 
+// PodSecurityContextSpec overrides the pod-level security context defaults the
+// operator applies to managed pods. All fields are optional; an unset field
+// falls back to the operator default (runAsUser 1001, runAsGroup 0, fsGroup 1001,
+// runAsNonRoot true, fsGroupChangePolicy OnRootMismatch).
+//
+// This is primarily useful on OpenShift or PodSecurity-restricted namespaces
+// that assign their own UID/GID ranges, and for tuning fsGroup to match the
+// ownership expected by a particular CSI driver.
+type PodSecurityContextSpec struct {
+	// RunAsUser overrides the UID the pod runs as.
+	// +optional
+	RunAsUser *int64 `json:"runAsUser,omitempty"`
+
+	// RunAsGroup overrides the primary GID the pod runs as.
+	// +optional
+	RunAsGroup *int64 `json:"runAsGroup,omitempty"`
+
+	// RunAsNonRoot overrides whether the pod must run as a non-root user.
+	// +optional
+	RunAsNonRoot *bool `json:"runAsNonRoot,omitempty"`
+
+	// FSGroup overrides the supplemental group applied to mounted volumes.
+	// Set this (with a matching RunAsUser) when a CSI driver provisions volumes
+	// owned by root and the workload cannot otherwise write to them.
+	// +optional
+	FSGroup *int64 `json:"fsGroup,omitempty"`
+
+	// FSGroupChangePolicy controls when volume ownership is changed to match FSGroup.
+	// Defaults to "OnRootMismatch" to avoid a recursive chown on every pod start.
+	// +kubebuilder:validation:Enum=Always;OnRootMismatch
+	// +optional
+	FSGroupChangePolicy *corev1.PodFSGroupChangePolicy `json:"fsGroupChangePolicy,omitempty"`
+}
+
 // ImageSpec defines the container image reference.
 type ImageSpec struct {
 	// Repository is the container image repository.

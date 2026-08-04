@@ -170,19 +170,11 @@ func (r *CertificateAuthorityReconciler) buildCASetupJob(ctx context.Context, ca
 				Spec: corev1.PodSpec{
 					ServiceAccountName: saName,
 					RestartPolicy:      corev1.RestartPolicyNever,
-					SecurityContext: &corev1.PodSecurityContext{
-						RunAsUser:    int64Ptr(CASetupRunAsUser),
-						RunAsGroup:   int64Ptr(CASetupRunAsGroup),
-						RunAsNonRoot: boolPtr(true),
-						// fsGroup makes the kubelet chown the CA PVC to the group so uid 1001
-						// can write to CSI-provisioned volumes that are otherwise owned by root.
-						// OnRootMismatch avoids a recursive chown on every pod start.
-						FSGroup:             int64Ptr(CASetupFSGroup),
-						FSGroupChangePolicy: fsGroupChangePolicyPtr(corev1.FSGroupChangeOnRootMismatch),
-						SeccompProfile: &corev1.SeccompProfile{
-							Type: corev1.SeccompProfileTypeRuntimeDefault,
-						},
-					},
+					// fsGroup lets the kubelet chown the CA PVC to the group so the
+					// non-root user can write to CSI-provisioned volumes that are
+					// otherwise owned by root; overridable via ca.spec.securityContext.
+					SecurityContext: buildPodSecurityContext(
+						CASetupRunAsUser, CASetupRunAsGroup, CASetupFSGroup, ca.Spec.SecurityContext),
 					Containers: []corev1.Container{
 						{
 							Name:            "ca-setup",

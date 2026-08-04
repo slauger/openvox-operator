@@ -45,6 +45,7 @@ spec:
 | `pdb` | [PDBSpec](#pdbspec) | - | PodDisruptionBudget configuration |
 | `networkPolicy` | [NetworkPolicySpec](#networkpolicyspec) | - | NetworkPolicy configuration |
 | `service` | [DatabaseServiceSpec](#databaseservicespec) | - | Service configuration |
+| `securityContext` | [PodSecurityContextSpec](index.md#podsecuritycontextspec) | - | Override pod-level security context (runAsUser/runAsGroup/fsGroup) |
 
 ### PDBSpec
 

@@ -41,6 +41,7 @@ spec:
 | `pdb` | [PDBSpec](#pdbspec) | - | PodDisruptionBudget configuration |
 | `priorityClassName` | string | - | PriorityClass name for Server pods |
 | `networkPolicy` | [NetworkPolicySpec](#networkpolicyspec) | - | NetworkPolicy configuration |
+| `securityContext` | [PodSecurityContextSpec](index.md#podsecuritycontextspec) | - | Override pod-level security context (runAsUser/runAsGroup/fsGroup) |
 
 ### PDBSpec
 

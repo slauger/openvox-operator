@@ -112,6 +112,11 @@ type ServerSpec struct {
 	// NetworkPolicy defines NetworkPolicy settings.
 	// +optional
 	NetworkPolicy *NetworkPolicySpec `json:"networkPolicy,omitempty"`
+
+	// SecurityContext overrides the pod-level security context defaults
+	// (runAsUser/runAsGroup/fsGroup) applied to the Server pods.
+	// +optional
+	SecurityContext *PodSecurityContextSpec `json:"securityContext,omitempty"`
 }
 
 // PDBSpec defines PodDisruptionBudget settings.

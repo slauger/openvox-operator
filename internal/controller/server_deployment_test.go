@@ -318,6 +318,35 @@ func TestBuildPodSpec_SecurityContext(t *testing.T) {
 	}
 }
 
+func TestBuildPodSpec_SecurityContextOverride(t *testing.T) {
+	cfg := newConfig("production")
+	server := newServer("test-server")
+
+	user := int64(2000)
+	fsGroup := int64(2000)
+	server.Spec.SecurityContext = &openvoxv1alpha1.PodSecurityContextSpec{
+		RunAsUser: &user,
+		FSGroup:   &fsGroup,
+	}
+
+	podSpec := testBuildPodSpec(server, cfg)
+	psc := podSpec.SecurityContext
+	if psc == nil {
+		t.Fatal("pod security context is nil")
+		return
+	}
+	if psc.RunAsUser == nil || *psc.RunAsUser != 2000 {
+		t.Errorf("expected overridden RunAsUser=2000, got %v", psc.RunAsUser)
+	}
+	if psc.FSGroup == nil || *psc.FSGroup != 2000 {
+		t.Errorf("expected overridden FSGroup=2000, got %v", psc.FSGroup)
+	}
+	// Unset fields keep the defaults.
+	if psc.RunAsGroup == nil || *psc.RunAsGroup != ServerRunAsGroup {
+		t.Errorf("expected default RunAsGroup=%d, got %v", ServerRunAsGroup, psc.RunAsGroup)
+	}
+}
+
 func TestBuildPodSpec_ENCVolumes(t *testing.T) {
 	cfg := newConfig("production", withNodeClassifierRef("my-enc"))
 	server := newServer("test-server", withServerRole(true))

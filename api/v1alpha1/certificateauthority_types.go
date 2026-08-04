@@ -121,6 +121,11 @@ type CertificateAuthoritySpec struct {
 	// Mutually exclusive with custom storage settings.
 	// +optional
 	External *ExternalCASpec `json:"external,omitempty"`
+
+	// SecurityContext overrides the pod-level security context defaults
+	// (runAsUser/runAsGroup/fsGroup) applied to the CA setup Job pod.
+	// +optional
+	SecurityContext *PodSecurityContextSpec `json:"securityContext,omitempty"`
 }
 
 // CertificateAuthorityPhase represents the current lifecycle phase of a CertificateAuthority.

@@ -105,7 +105,7 @@ tests:
           value: my-puppetdb
       - equal:
           path: spec.image.repository
-          value: ghcr.io/slauger/openvox-db
+          value: ghcr.io/slauger/openvox-db-8
       - equal:
           path: spec.image.tag
           value: "0.0.0"

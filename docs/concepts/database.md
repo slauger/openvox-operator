@@ -70,7 +70,7 @@ spec:
   authorityRef: production-ca
   databaseRef: production-db   # operator reads Database.status.url
   image:
-    repository: ghcr.io/slauger/openvox-server
+    repository: ghcr.io/slauger/openvox-server-8
     tag: "8.12.1"
 ```
 

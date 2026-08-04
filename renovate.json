@@ -24,6 +24,16 @@
     {
       "customType": "regex",
       "managerFilePatterns": [
+        "/(^|/)openvox-versions\\.yaml$/"
+      ],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\n\\s*\\w+:\\s*(?<currentValue>\\S+)"
+      ],
+      "extractVersionTemplate": "^v?(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
         "/(^|/).github/workflows/_helm\\.yaml$/",
         "/(^|/).github/workflows/_conforma-validate\\.yaml$/"
       ],
@@ -80,7 +90,24 @@
       "matchPackageNames": [
         "OpenVoxProject/*"
       ],
-      "groupName": "OpenVox versions"
+      "matchCurrentValue": "/^8\\./",
+      "allowedVersions": "<9.0.0",
+      "groupName": "OpenVox 8 versions"
+    },
+    {
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "OpenVoxProject/*"
+      ],
+      "matchCurrentValue": "/^9\\./",
+      "allowedVersions": ">=9.0.0",
+      "ignoreUnstable": false,
+      "groupName": "OpenVox 9 versions"
     },
     {
       "matchManagers": [

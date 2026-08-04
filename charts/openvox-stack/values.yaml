@@ -13,7 +13,7 @@ config:
   image:
     # @schema description: OpenVox Server image repository.
     # -- OpenVox Server image repository.
-    repository: ghcr.io/slauger/openvox-server
+    repository: ghcr.io/slauger/openvox-server-8
     # @schema description: Image tag. Defaults to the chart appVersion.
     # -- Image tag. Defaults to the chart appVersion.
     tag: ""
@@ -219,7 +219,7 @@ database:
   image:
     # @schema description: OpenVox DB image repository.
     # -- OpenVox DB image repository.
-    repository: ghcr.io/slauger/openvox-db
+    repository: ghcr.io/slauger/openvox-db-8
     # @schema description: Image tag. Defaults to the chart appVersion.
     # -- Image tag. Defaults to the chart appVersion.
     tag: ""
@@ -310,7 +310,7 @@ servers:
     # javaArgs: "-Xms512m -Xmx1024m"
     # maxActiveInstances: 2
     # image:
-    #   repository: ghcr.io/slauger/openvox-server
+    #   repository: ghcr.io/slauger/openvox-server-8
     #   tag: custom
     # code:
     #   image: ghcr.io/slauger/openvox-e2e-code:latest

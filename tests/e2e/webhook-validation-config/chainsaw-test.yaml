@@ -27,7 +27,7 @@ spec:
                 name: wh-config-valid
               spec:
                 image:
-                  repository: ghcr.io/slauger/openvox-server
+                  repository: ghcr.io/slauger/openvox-server-8
                   tag: latest
                 authorityRef: wh-config-ca
 
@@ -44,7 +44,7 @@ spec:
                 namespace: e2e-webhook-val-config
               spec:
                 image:
-                  repository: ghcr.io/slauger/openvox-server
+                  repository: ghcr.io/slauger/openvox-server-8
                   tag: latest
                 authorityRef: does-not-exist
               EOF
@@ -67,7 +67,7 @@ spec:
                 namespace: e2e-webhook-val-config
               spec:
                 image:
-                  repository: ghcr.io/slauger/openvox-server
+                  repository: ghcr.io/slauger/openvox-server-8
                   tag: latest
                 databaseRef: some-db
                 puppetdb:

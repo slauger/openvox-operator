@@ -86,7 +86,7 @@ func TestResolveImage(t *testing.T) {
 	cfg := &openvoxv1alpha1.Config{
 		Spec: openvoxv1alpha1.ConfigSpec{
 			Image: openvoxv1alpha1.ImageSpec{
-				Repository: "ghcr.io/slauger/openvox-server",
+				Repository: "ghcr.io/slauger/openvox-server-8",
 				Tag:        "latest",
 			},
 		},
@@ -102,7 +102,7 @@ func TestResolveImage(t *testing.T) {
 			server: &openvoxv1alpha1.Server{
 				Spec: openvoxv1alpha1.ServerSpec{},
 			},
-			want: "ghcr.io/slauger/openvox-server:latest",
+			want: "ghcr.io/slauger/openvox-server-8:latest",
 		},
 		{
 			name: "server tag override",
@@ -113,7 +113,7 @@ func TestResolveImage(t *testing.T) {
 					},
 				},
 			},
-			want: "ghcr.io/slauger/openvox-server:v8.12.1",
+			want: "ghcr.io/slauger/openvox-server-8:v8.12.1",
 		},
 		{
 			name: "server repository override only",

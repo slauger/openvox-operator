@@ -81,7 +81,7 @@ func newConfig(name string, opts ...configOption) *openvoxv1alpha1.Config {
 		Spec: openvoxv1alpha1.ConfigSpec{
 			ReadOnlyRootFilesystem: true,
 			Image: openvoxv1alpha1.ImageSpec{
-				Repository: "ghcr.io/slauger/openvox-server",
+				Repository: "ghcr.io/slauger/openvox-server-8",
 				Tag:        "latest",
 				PullPolicy: corev1.PullIfNotPresent,
 			},
@@ -539,7 +539,7 @@ func newDatabase(name string, opts ...databaseOption) *openvoxv1alpha1.Database 
 		Spec: openvoxv1alpha1.DatabaseSpec{
 			CertificateRef: "production-db-cert",
 			Image: openvoxv1alpha1.ImageSpec{
-				Repository: "ghcr.io/slauger/openvox-db",
+				Repository: "ghcr.io/slauger/openvox-db-8",
 				Tag:        "latest",
 				PullPolicy: corev1.PullIfNotPresent,
 			},

@@ -12,7 +12,7 @@ metadata:
 spec:
   certificateRef: production-db-cert
   image:
-    repository: ghcr.io/slauger/openvox-db
+    repository: ghcr.io/slauger/openvox-db-8
     tag: latest
     pullPolicy: IfNotPresent
   postgres:

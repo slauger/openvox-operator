@@ -9,6 +9,8 @@ spec:
       value: (env('IMAGE_REGISTRY') || 'ghcr.io/slauger')
     - name: imageTag
       value: (env('IMAGE_TAG') || 'latest')
+    - name: major
+      value: (env('OPENVOX_MAJOR') || '8')
   steps:
     - name: Install Stack A (CA provider)
       try:
@@ -21,7 +23,7 @@ spec:
               helm upgrade --install e2e-ext-ca-a "${REPO_ROOT}/charts/openvox-stack" \
                 --namespace e2e-ext-ca-a --create-namespace \
                 --values "${REPO_ROOT}/charts/openvox-stack/ci/external-ca-stack-a-values.yaml" \
-                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server \
+                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server-${OPENVOX_MAJOR:-8} \
                 --set config.image.tag="${IMAGE_TAG}" \
                 --set config.image.pullPolicy=Always \
                 --set config.code.image=${IMAGE_REGISTRY}/openvox-e2e-code:${IMAGE_TAG}
@@ -77,7 +79,7 @@ spec:
               helm upgrade --install e2e-ext-ca-b "${REPO_ROOT}/charts/openvox-stack" \
                 --namespace e2e-ext-ca-b \
                 --values "${REPO_ROOT}/charts/openvox-stack/ci/external-ca-stack-b-values.yaml" \
-                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server \
+                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server-${OPENVOX_MAJOR:-8} \
                 --set config.image.tag="${IMAGE_TAG}" \
                 --set config.image.pullPolicy=Always \
                 --set config.code.image=${IMAGE_REGISTRY}/openvox-e2e-code:${IMAGE_TAG}
@@ -126,7 +128,7 @@ spec:
                     restartPolicy: Never
                     containers:
                       - name: puppet-agent
-                        image: (join('', [$registry, '/openvox-agent:', $imageTag]))
+                        image: (join('', [$registry, '/openvox-agent-', $major, ':', $imageTag]))
                         imagePullPolicy: Always
                         command: ["sh", "-c"]
                         args:

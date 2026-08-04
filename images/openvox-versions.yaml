@@ -1,0 +1,36 @@
+# Single source of truth for the OpenVox versions baked into the content images.
+#
+# The image name encodes the OpenVox major (openvox-server-8 / openvox-server-9),
+# the image tag stays the operator release version. CI/release/e2e workflows read
+# this file (yq -o=json '.include') to build the per-major matrix and pass the
+# versions as build-args to the Containerfiles.
+#
+# Renovate keeps the pins current: the "8" entry tracks the stable 8.x line, the
+# "9" entry tracks 9.x pre-releases. The two majors bump independently in separate
+# grouped PRs (see renovate.json). Major 8 is the default and the only one tagged
+# :latest; major 9 is built and pushed but never :latest and never the default.
+include:
+  - major: "8"
+    latest: true
+    # renovate: datasource=github-releases depName=OpenVoxProject/openvox-server
+    server: 8.15.2
+    # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
+    termini: 8.15.0
+    # renovate: datasource=github-releases depName=OpenVoxProject/openvox
+    openvox: 8.28.1
+    # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
+    db: 8.15.0
+    # renovate: datasource=github-releases depName=OpenVoxProject/openvox
+    agent: 8.28.1
+  - major: "9"
+    latest: false
+    # renovate: datasource=github-releases depName=OpenVoxProject/openvox-server
+    server: 9.0.0-beta2
+    # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
+    termini: 9.0.0-beta1
+    # renovate: datasource=github-releases depName=OpenVoxProject/openvox
+    openvox: 9.0.0-beta1
+    # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
+    db: 9.0.0-beta1
+    # renovate: datasource=github-releases depName=OpenVoxProject/openvox
+    agent: 9.0.0-beta1

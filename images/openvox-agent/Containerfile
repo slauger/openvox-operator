@@ -6,14 +6,19 @@
 # Run:
 #   podman run --rm openvox-agent:latest agent --test --server puppet
 
-# renovate: datasource=github-releases depName=OpenVoxProject/openvox
+# OpenVox versions are the single source of truth in images/openvox-versions.yaml
+# and injected as build-args by CI. The defaults below are a fallback for standalone
+# local builds and pin the stable 8.x line.
 ARG OPENVOX_AGENT_VERSION=8.28.1
+# OPENVOX_MAJOR selects the release repo (openvox${OPENVOX_MAJOR}-release-el-9).
+ARG OPENVOX_MAJOR=8
 
 FROM registry.access.redhat.com/ubi9/ubi:9.8-1785807559
 
 ARG OPENVOX_AGENT_VERSION
+ARG OPENVOX_MAJOR
 
-RUN rpm -Uvh https://yum.voxpupuli.org/openvox8-release-el-9.noarch.rpm \
+RUN rpm -Uvh https://yum.voxpupuli.org/openvox${OPENVOX_MAJOR}-release-el-9.noarch.rpm \
     && dnf install -y --setopt=install_weak_deps=False openvox-agent-${OPENVOX_AGENT_VERSION} \
     && dnf clean all
 

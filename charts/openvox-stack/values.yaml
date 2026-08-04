@@ -313,6 +313,22 @@ servers:
     #         podAffinityTerm:
     #           topologyKey: kubernetes.io/hostname
     # priorityClassName: ""
+    # Non-code material only. Puppet code, the global modules dir and hieradata
+    # belong under `code`, not here.
+    # extraEnv:
+    #   - name: INVENTORY_API_URL
+    #     value: https://inventory.internal
+    # envFrom:
+    #   - secretRef:
+    #       name: server-extra-env
+    # extraVolumes:
+    #   - name: autosign-client
+    #     secret:
+    #       secretName: autosign-client
+    # extraVolumeMounts:
+    #   - name: autosign-client
+    #     mountPath: /etc/puppetlabs/autosign-client
+    #     readOnly: true
 
 gateway:
   # @schema description: Shared Gateway resource name for TLSRoute integration.

@@ -254,3 +254,70 @@ tests:
       - equal:
           path: spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].weight
           value: 100
+
+  - it: should propagate extraEnv and envFrom
+    set:
+      servers:
+        - name: test
+          certificate:
+            certname: puppet
+          extraEnv:
+            - name: INVENTORY_API_URL
+              value: https://inventory.internal
+          envFrom:
+            - secretRef:
+                name: server-extra-env
+    asserts:
+      - equal:
+          path: spec.extraEnv[0].name
+          value: INVENTORY_API_URL
+      - equal:
+          path: spec.extraEnv[0].value
+          value: https://inventory.internal
+      - equal:
+          path: spec.envFrom[0].secretRef.name
+          value: server-extra-env
+
+  - it: should propagate extraVolumes and extraVolumeMounts
+    set:
+      servers:
+        - name: test
+          certificate:
+            certname: puppet
+          extraVolumes:
+            - name: autosign-client
+              secret:
+                secretName: autosign-client
+          extraVolumeMounts:
+            - name: autosign-client
+              mountPath: /etc/puppetlabs/autosign-client
+              readOnly: true
+    asserts:
+      - equal:
+          path: spec.extraVolumes[0].name
+          value: autosign-client
+      - equal:
+          path: spec.extraVolumes[0].secret.secretName
+          value: autosign-client
+      - equal:
+          path: spec.extraVolumeMounts[0].mountPath
+          value: /etc/puppetlabs/autosign-client
+      - equal:
+          path: spec.extraVolumeMounts[0].readOnly
+          value: true
+
+  - it: should omit extra fields when unset
+    set:
+      servers:
+        - name: test
+          certificate:
+            certname: puppet
+    asserts:
+      - notExists:
+          path: spec.extraEnv
+      - notExists:
+          path: spec.envFrom
+      - notExists:
+          path: spec.extraVolumes
+      - notExists:
+          path: spec.extraVolumeMounts

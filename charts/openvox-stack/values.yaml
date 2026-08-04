@@ -58,6 +58,12 @@ config:
     #   server:
     #     strict_variables: "true"
     #   agent: {}
+    # @schema description: Custom autosign executable path. Replaces the built-in binary and disables the SigningPolicy flow.
+    # -- Custom autosign executable path. When set, replaces the built-in autosign binary and disables the SigningPolicy-driven flow. The executable must be present in the server image or mounted via a Server's extraVolumes.
+    autosignCommand: ""
+    # @schema description: Custom ENC executable path. Replaces the built-in binary and disables the NodeClassifier flow.
+    # -- Custom ENC (external_nodes) executable path. When set, replaces the built-in ENC binary and disables the NodeClassifier-driven flow. The executable must be present in the server image or mounted via a Server's extraVolumes.
+    externalNodesCommand: ""
   code:
     # @schema description: Init container image for Puppet code deployment.
     # -- Init container image for Puppet code deployment.

@@ -122,6 +122,45 @@ func TestBuildPodSpec_CARole(t *testing.T) {
 	}
 }
 
+func TestBuildPodSpec_AutosignCommandSkipsPolicyMount(t *testing.T) {
+	cfg := newConfig("production", withAutosignCommand("/usr/local/bin/custom-autosign"))
+	server := newServer("test-ca", withCA(true), withServerRole(false))
+
+	podSpec := testBuildPodSpec(server, cfg)
+
+	for _, vm := range podSpec.Containers[0].VolumeMounts {
+		if vm.Name == "autosign-policy" {
+			t.Error("autosign-policy mount should be skipped when autosignCommand is set")
+		}
+	}
+	for _, v := range podSpec.Volumes {
+		if v.Name == "autosign-policy" {
+			t.Error("autosign-policy volume should be skipped when autosignCommand is set")
+		}
+	}
+}
+
+func TestBuildPodSpec_ExternalNodesCommandSkipsENCMount(t *testing.T) {
+	cfg := newConfig("production",
+		withNodeClassifierRef("my-enc"),
+		withExternalNodesCommand("/usr/local/bin/custom-enc"),
+	)
+	server := newServer("test-server", withServerRole(true))
+
+	podSpec := testBuildPodSpec(server, cfg)
+
+	for _, vm := range podSpec.Containers[0].VolumeMounts {
+		if vm.Name == "enc-config" {
+			t.Error("enc-config mount should be skipped when externalNodesCommand is set")
+		}
+	}
+	for _, v := range podSpec.Volumes {
+		if v.Name == "enc-config" {
+			t.Error("enc-config volume should be skipped when externalNodesCommand is set")
+		}
+	}
+}
+
 func TestBuildPodSpec_CodeVolumeImage(t *testing.T) {
 	cfg := newConfig("production", withCodeImage("ghcr.io/slauger/puppet-code:v1.0"))
 	server := newServer("test-server", withServerRole(true))

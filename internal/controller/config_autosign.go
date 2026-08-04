@@ -40,6 +40,11 @@ func (r *ConfigReconciler) reconcileAutosignSecrets(ctx context.Context, cfg *op
 	if cfg.Spec.AuthorityRef == "" {
 		return nil
 	}
+	// A custom autosignCommand replaces the built-in binary, so the policy Secret
+	// it would read is neither rendered nor mounted.
+	if cfg.Spec.Puppet.AutosignCommand != "" {
+		return nil
+	}
 	ca := &openvoxv1alpha1.CertificateAuthority{}
 	if err := r.Get(ctx, types.NamespacedName{Name: cfg.Spec.AuthorityRef, Namespace: cfg.Namespace}, ca); err != nil {
 		if errors.IsNotFound(err) {

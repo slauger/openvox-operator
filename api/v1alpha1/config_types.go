@@ -398,6 +398,25 @@ type PuppetSpec struct {
 	// ExtraConfig adds additional puppet.conf entries to specific INI sections.
 	// +optional
 	ExtraConfig *PuppetExtraConfig `json:"extraConfig,omitempty"`
+
+	// AutosignCommand overrides the built-in autosign binary with a custom
+	// executable. When set, puppet.conf points autosign at this path and the
+	// operator disables the SigningPolicy-driven flow (the policy Secret is no
+	// longer mounted). Puppet passes the certname as an argument and the CSR on
+	// stdin; the value must be an absolute path to an executable already present in
+	// the server image or mounted via the Server's extraVolumes. Leave unset to use
+	// the built-in binary driven by SigningPolicy resources.
+	// +optional
+	AutosignCommand string `json:"autosignCommand,omitempty"`
+
+	// ExternalNodesCommand overrides the built-in ENC binary with a custom
+	// executable. When set, puppet.conf sets node_terminus=exec with this path and
+	// the operator disables the NodeClassifier-driven flow (the ENC Secret is no
+	// longer mounted). The value must be an absolute path to an executable already
+	// present in the server image or mounted via the Server's extraVolumes. Leave
+	// unset to use the built-in binary driven by a NodeClassifier resource.
+	// +optional
+	ExternalNodesCommand string `json:"externalNodesCommand,omitempty"`
 }
 
 // PuppetExtraConfig holds additional puppet.conf entries per INI section.

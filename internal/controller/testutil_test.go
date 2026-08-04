@@ -119,6 +119,18 @@ func withReadOnlyRootFS(v bool) configOption {
 	}
 }
 
+func withAutosignCommand(cmd string) configOption {
+	return func(c *openvoxv1alpha1.Config) {
+		c.Spec.Puppet.AutosignCommand = cmd
+	}
+}
+
+func withExternalNodesCommand(cmd string) configOption {
+	return func(c *openvoxv1alpha1.Config) {
+		c.Spec.Puppet.ExternalNodesCommand = cmd
+	}
+}
+
 func withCodeImage(image string) configOption {
 	return func(c *openvoxv1alpha1.Config) {
 		c.Spec.Code = &openvoxv1alpha1.CodeSpec{Image: image}

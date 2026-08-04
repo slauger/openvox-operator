@@ -25,6 +25,11 @@ func (r *ConfigReconciler) reconcileENCSecret(ctx context.Context, cfg *openvoxv
 	if cfg.Spec.NodeClassifierRef == "" {
 		return nil
 	}
+	// A custom externalNodesCommand replaces the built-in binary, so the ENC Secret
+	// it would read is neither rendered nor mounted.
+	if cfg.Spec.Puppet.ExternalNodesCommand != "" {
+		return nil
+	}
 
 	nc := &openvoxv1alpha1.NodeClassifier{}
 	if err := r.Get(ctx, types.NamespacedName{Name: cfg.Spec.NodeClassifierRef, Namespace: cfg.Namespace}, nc); err != nil {

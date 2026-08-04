@@ -201,6 +201,16 @@ spec:
               puppet:
                 description: Puppet defines shared puppet.conf settings.
                 properties:
+                  autosignCommand:
+                    description: |-
+                      AutosignCommand overrides the built-in autosign binary with a custom
+                      executable. When set, puppet.conf points autosign at this path and the
+                      operator disables the SigningPolicy-driven flow (the policy Secret is no
+                      longer mounted). Puppet passes the certname as an argument and the CSR on
+                      stdin; the value must be an absolute path to an executable already present in
+                      the server image or mounted via the Server's extraVolumes. Leave unset to use
+                      the built-in binary driven by SigningPolicy resources.
+                    type: string
                   environmentPath:
                     default: /etc/puppetlabs/code/environments
                     description: EnvironmentPath is the path to puppet environments.
@@ -209,6 +219,15 @@ spec:
                     description: |-
                       EnvironmentTimeout controls how long puppet caches environments.
                       When unset, Puppet's default (0 = no caching) is used.
+                    type: string
+                  externalNodesCommand:
+                    description: |-
+                      ExternalNodesCommand overrides the built-in ENC binary with a custom
+                      executable. When set, puppet.conf sets node_terminus=exec with this path and
+                      the operator disables the NodeClassifier-driven flow (the ENC Secret is no
+                      longer mounted). The value must be an absolute path to an executable already
+                      present in the server image or mounted via the Server's extraVolumes. Leave
+                      unset to use the built-in binary driven by a NodeClassifier resource.
                     type: string
                   extraConfig:
                     description: ExtraConfig adds additional puppet.conf entries to

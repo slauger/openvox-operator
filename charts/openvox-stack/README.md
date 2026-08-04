@@ -51,8 +51,10 @@ helm install openvox oci://ghcr.io/slauger/charts/openvox-stack
 | config.image.repository | string | `"ghcr.io/slauger/openvox-server"` | OpenVox Server image repository. |
 | config.image.tag | string | `""` | Image tag. Defaults to the chart appVersion. |
 | config.name | string | `""` | Config resource name. Defaults to release name. |
+| config.puppet.autosignCommand | string | `""` | Custom autosign executable path. When set, replaces the built-in autosign binary and disables the SigningPolicy-driven flow. The executable must be present in the server image or mounted via a Server's extraVolumes. |
 | config.puppet.environmentPath | string | `""` | Path to Puppet environments. |
 | config.puppet.environmentTimeout | string | `""` | Environment timeout setting. |
+| config.puppet.externalNodesCommand | string | `""` | Custom ENC (external_nodes) executable path. When set, replaces the built-in ENC binary and disables the NodeClassifier-driven flow. The executable must be present in the server image or mounted via a Server's extraVolumes. |
 | config.puppet.extraConfig | object | `{}` | Extra puppet.conf sections and settings. |
 | config.puppet.hieraConfig | string | `""` | Path to Hiera configuration file. |
 | config.puppet.reports | string | `"store"` | Enabled report processors. |

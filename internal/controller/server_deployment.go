@@ -89,8 +89,9 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 		}
 	}
 
-	// Add ENC secret hash annotation for server pods to trigger rollout on ENC config changes
-	if server.Spec.Server && cfg.Spec.NodeClassifierRef != "" {
+	// Add ENC secret hash annotation for server pods to trigger rollout on ENC config changes.
+	// Skipped when a custom externalNodesCommand disables the NodeClassifier-driven flow.
+	if server.Spec.Server && cfg.Spec.NodeClassifierRef != "" && cfg.Spec.Puppet.ExternalNodesCommand == "" {
 		encSecretName := fmt.Sprintf("%s-enc", server.Spec.ConfigRef)
 		if encHash, err := r.secretHash(ctx, encSecretName, server.Namespace); err == nil {
 			annotations["openvox.voxpupuli.org/enc-secret-hash"] = encHash
@@ -109,7 +110,8 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 	// SigningPolicy changes. The policy Secret is subPath-mounted, so kubelet does not
 	// live-sync it; hashing it into the pod template rolls the CA pod when the rendered
 	// policy changes, so a SigningPolicy edit applies without a manual restart.
-	if server.Spec.CA {
+	// Skipped when a custom autosignCommand disables the SigningPolicy-driven flow.
+	if server.Spec.CA && cfg.Spec.Puppet.AutosignCommand == "" {
 		autosignSecretName := fmt.Sprintf("%s-autosign-policy", ca.Name)
 		if autosignHash, err := r.secretHash(ctx, autosignSecretName, server.Namespace); err == nil {
 			annotations["openvox.voxpupuli.org/autosign-policy-secret-hash"] = autosignHash
@@ -280,22 +282,26 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 			configMapVolumeWithKey("ca-cfg", configMapName, "ca-enabled.cfg", "ca.cfg"),
 		)
 
-		// Mount autosign policy Secret (always present, managed by Config controller)
-		autosignSecretName := fmt.Sprintf("%s-autosign-policy", ca.Name)
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      "autosign-policy",
-			MountPath: "/etc/puppetlabs/puppet/autosign-policy.yaml",
-			SubPath:   "autosign-policy.yaml",
-			ReadOnly:  true,
-		})
-		volumes = append(volumes, corev1.Volume{
-			Name: "autosign-policy",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: autosignSecretName,
+		// Mount autosign policy Secret (managed by the Config controller).
+		// Skipped when a custom autosignCommand disables the SigningPolicy-driven
+		// flow: the command is then responsible for its own signing decision.
+		if cfg.Spec.Puppet.AutosignCommand == "" {
+			autosignSecretName := fmt.Sprintf("%s-autosign-policy", ca.Name)
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      "autosign-policy",
+				MountPath: "/etc/puppetlabs/puppet/autosign-policy.yaml",
+				SubPath:   "autosign-policy.yaml",
+				ReadOnly:  true,
+			})
+			volumes = append(volumes, corev1.Volume{
+				Name: "autosign-policy",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: autosignSecretName,
+					},
 				},
-			},
-		})
+			})
+		}
 	} else {
 		volumes = append(volumes,
 			configMapVolumeWithKey("ca-cfg", configMapName, "ca-disabled.cfg", "ca.cfg"),
@@ -352,8 +358,9 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 		}
 	}
 
-	// ENC: mount config Secret and cache emptyDir for server:true pods with nodeClassifierRef
-	if server.Spec.Server && cfg.Spec.NodeClassifierRef != "" {
+	// ENC: mount config Secret and cache emptyDir for server:true pods with nodeClassifierRef.
+	// Skipped when a custom externalNodesCommand disables the NodeClassifier-driven flow.
+	if server.Spec.Server && cfg.Spec.NodeClassifierRef != "" && cfg.Spec.Puppet.ExternalNodesCommand == "" {
 		encSecretName := fmt.Sprintf("%s-enc", server.Spec.ConfigRef)
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{

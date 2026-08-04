@@ -71,16 +71,27 @@ func (r *ConfigReconciler) renderPuppetConf(ctx context.Context, cfg *openvoxv1a
 			}
 		}
 
-		// Always point to the autosign binary. The binary reads the policy config
-		// Secret (mounted by the server controller) and decides sign/deny.
-		// puppet.conf stays static: a policy change only rewrites the Secret, and the
-		// server controller rolls the CA pod via the autosign-policy-secret-hash
-		// annotation so the change applies without a manual restart.
-		fmt.Fprintf(&sb, "autosign = %s\n", autosignBinaryPath)
+		// Autosign: by default point to the built-in binary, which reads the policy
+		// Secret (mounted by the server controller) and decides sign/deny. A policy
+		// change rewrites the Secret and the server controller rolls the CA pod via
+		// the autosign-policy-secret-hash annotation, so it applies without a manual
+		// restart. A custom autosignCommand replaces the built-in binary and disables
+		// the SigningPolicy-driven flow (the policy Secret is not mounted).
+		autosignCmd := autosignBinaryPath
+		if cfg.Spec.Puppet.AutosignCommand != "" {
+			autosignCmd = cfg.Spec.Puppet.AutosignCommand
+		}
+		fmt.Fprintf(&sb, "autosign = %s\n", autosignCmd)
 	}
 
-	// ENC settings
-	if cfg.Spec.NodeClassifierRef != "" {
+	// ENC settings: a custom externalNodesCommand replaces the built-in binary and
+	// disables the NodeClassifier-driven flow (the ENC Secret is not mounted).
+	// Otherwise the built-in binary is used when a NodeClassifier is referenced.
+	switch {
+	case cfg.Spec.Puppet.ExternalNodesCommand != "":
+		sb.WriteString("node_terminus = exec\n")
+		fmt.Fprintf(&sb, "external_nodes = %s\n", cfg.Spec.Puppet.ExternalNodesCommand)
+	case cfg.Spec.NodeClassifierRef != "":
 		sb.WriteString("node_terminus = exec\n")
 		fmt.Fprintf(&sb, "external_nodes = %s\n", encBinaryPath)
 	}

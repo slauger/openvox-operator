@@ -42,6 +42,12 @@ spec:
     extraConfig:
       {{- toYaml . | nindent 6 }}
     {{- end }}
+    {{- with .Values.config.puppet.autosignCommand }}
+    autosignCommand: {{ . | quote }}
+    {{- end }}
+    {{- with .Values.config.puppet.externalNodesCommand }}
+    externalNodesCommand: {{ . | quote }}
+    {{- end }}
   {{- with .Values.config.code }}
   {{- if or .image .claimName }}
   code:

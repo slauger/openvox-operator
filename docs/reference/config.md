@@ -50,6 +50,40 @@ spec:
 | `storeBackend` | string | `puppetdb` | Storeconfigs backend |
 | `reports` | string | `puppetdb` | Report processors |
 | `extraConfig` | [PuppetExtraConfig](#puppetextraconfig) | - | Additional puppet.conf entries per INI section |
+| `autosignCommand` | string | - | Custom autosign executable path. When set, replaces the built-in binary and disables the SigningPolicy flow (see [Custom autosign / ENC commands](#custom-autosign--enc-commands)) |
+| `externalNodesCommand` | string | - | Custom ENC (`external_nodes`) executable path. When set, replaces the built-in binary and disables the NodeClassifier flow (see [Custom autosign / ENC commands](#custom-autosign--enc-commands)) |
+
+### Custom autosign / ENC commands
+
+By default the operator ships two Go binaries in the server image and drives them
+declaratively: `openvox-autosign` (configured by [SigningPolicy](signingpolicy.md)
+resources) and `openvox-enc` (configured by a [NodeClassifier](nodeclassifier.md)).
+
+`autosignCommand` and `externalNodesCommand` are escape hatches for teams that need
+to run their own script instead — for example an autosign hook that registers the
+node in an external inventory, or an ENC that queries a CMDB. When set:
+
+- puppet.conf points `autosign` / `external_nodes` at the given executable.
+- The corresponding built-in flow is disabled: the policy / ENC Secret is no longer
+  rendered or mounted, and SigningPolicy / NodeClassifier resources are ignored.
+
+The value must be an absolute path to an executable that already exists in the
+server image or is mounted into the pod via the Server's
+[`extraVolumes` / `extraVolumeMounts`](server.md). Any credentials the script needs
+(client certificates, API tokens) are supplied the same way, via `extraVolumes` and
+`extraEnv` / `envFrom`.
+
+!!! warning
+    Autosign is the certificate admission boundary — a command that signs
+    unconditionally will sign every CSR. Review a custom `autosignCommand` as
+    carefully as you would a firewall rule.
+
+```yaml
+spec:
+  puppet:
+    autosignCommand: /etc/puppetlabs/autosign/inventory-autosign
+    externalNodesCommand: /etc/puppetlabs/enc/cmdb-enc
+```
 
 ### PuppetExtraConfig
 

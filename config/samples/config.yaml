@@ -7,7 +7,7 @@ metadata:
 spec:
   authorityRef: production-ca
   image:
-    repository: ghcr.io/slauger/openvox-server
+    repository: ghcr.io/slauger/openvox-server-8
     tag: "8.12.1"
   # Use databaseRef to auto-resolve the PuppetDB URL from a Database CR.
   # Mutually exclusive with puppetdb.serverUrls.

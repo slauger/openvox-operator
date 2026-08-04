@@ -1,7 +1,7 @@
 IMG ?= ghcr.io/slauger/openvox-operator:latest
-OPENVOX_SERVER_IMG ?= ghcr.io/slauger/openvox-server:latest
+OPENVOX_SERVER_IMG ?= ghcr.io/slauger/openvox-server-8:latest
 OPENVOX_E2E_CODE_IMG ?= ghcr.io/slauger/openvox-e2e-code:latest
-OPENVOX_AGENT_IMG ?= ghcr.io/slauger/openvox-agent:latest
+OPENVOX_AGENT_IMG ?= ghcr.io/slauger/openvox-agent-8:latest
 OPENVOX_MOCK_IMG ?= ghcr.io/slauger/openvox-mock:latest
 NAMESPACE ?= openvox-system
 IMAGE_REGISTRY ?= ghcr.io/slauger
@@ -64,14 +64,14 @@ IMAGE_TAG ?= $(shell git describe --always)
 .PHONY: local-build
 local-build: ## Build all images for local development (Docker Desktop K8s).
 	$(CONTAINER_TOOL) build -t ghcr.io/slauger/openvox-operator:$(IMAGE_TAG) -f images/openvox-operator/Containerfile .
-	$(CONTAINER_TOOL) build -t ghcr.io/slauger/openvox-server:$(IMAGE_TAG) -f images/openvox-server/Containerfile .
+	$(CONTAINER_TOOL) build -t ghcr.io/slauger/openvox-server-8:$(IMAGE_TAG) -f images/openvox-server/Containerfile .
 	$(CONTAINER_TOOL) build -t ghcr.io/slauger/openvox-e2e-code:latest -f images/openvox-e2e-code/Containerfile .
-	$(CONTAINER_TOOL) build -t ghcr.io/slauger/openvox-agent:latest -f images/openvox-agent/Containerfile images/openvox-agent/
+	$(CONTAINER_TOOL) build -t ghcr.io/slauger/openvox-agent-8:latest -f images/openvox-agent/Containerfile images/openvox-agent/
 	$(CONTAINER_TOOL) build -t ghcr.io/slauger/openvox-mock:latest -f images/openvox-mock/Containerfile .
 	@echo "Built ghcr.io/slauger/openvox-operator:$(IMAGE_TAG)"
-	@echo "Built ghcr.io/slauger/openvox-server:$(IMAGE_TAG)"
+	@echo "Built ghcr.io/slauger/openvox-server-8:$(IMAGE_TAG)"
 	@echo "Built ghcr.io/slauger/openvox-e2e-code:latest"
-	@echo "Built ghcr.io/slauger/openvox-agent:latest"
+	@echo "Built ghcr.io/slauger/openvox-agent-8:latest"
 	@echo "Built ghcr.io/slauger/openvox-mock:latest"
 
 .PHONY: local-deploy
@@ -88,7 +88,7 @@ STACK_VALUES ?= charts/openvox-stack/values.yaml
 # configure helm to pull that specific image from the registry.
 ifeq ($(origin IMAGE_TAG),command line)
 HELM_SET ?= --set image.repository=$(IMAGE_REGISTRY)/openvox-operator --set image.tag=$(IMAGE_TAG) --set image.pullPolicy=Always
-STACK_HELM_SET ?= --set config.image.repository=$(IMAGE_REGISTRY)/openvox-server --set config.image.tag=$(IMAGE_TAG) --set config.image.pullPolicy=Always
+STACK_HELM_SET ?= --set config.image.repository=$(IMAGE_REGISTRY)/openvox-server-8 --set config.image.tag=$(IMAGE_TAG) --set config.image.pullPolicy=Always
 endif
 
 .PHONY: install

@@ -36,7 +36,7 @@ spec:
 | `puppetserver` | [PuppetServerSpec](#puppetserverspec) | - | puppetserver.conf, webserver.conf, and auth.conf settings |
 | `logging` | [LoggingSpec](#loggingspec) | - | Logback.xml log level configuration |
 | `metrics` | [MetricsSpec](#metricsspec) | - | Puppet Server metrics (JMX, Graphite) |
-| `code` | [CodeSpec](index.md#codespec) | - | Puppet code source (OCI image or PVC) for all Servers |
+| `code` | [[]CodeSpec](index.md#codespec) | - | Puppet code sources (OCI images / PVCs) for all Servers. A list; see [CodeSpec](index.md#codespec) for the mount target rules |
 | `readOnlyRootFilesystem` | bool | `true` | Enable read-only root filesystem on all Server pods for security hardening |
 
 ### PuppetSpec

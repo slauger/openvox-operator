@@ -7,10 +7,29 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
+
+// validateCodeList checks cross-entry constraints on a code volume list that the
+// per-entry CEL rules cannot express: environment values must be unique.
+func validateCodeList(code []openvoxv1alpha1.CodeSpec, path *field.Path) field.ErrorList {
+	var errs field.ErrorList
+	seen := make(map[string]bool, len(code))
+	for i, e := range code {
+		if e.Environment == "" {
+			continue
+		}
+		if seen[e.Environment] {
+			errs = append(errs, field.Duplicate(path.Index(i).Child("environment"), e.Environment))
+			continue
+		}
+		seen[e.Environment] = true
+	}
+	return errs
+}
 
 // refExists checks whether a same-namespace resource of type T exists.
 func refExists[T client.Object](ctx context.Context, c client.Reader, ns, name string, obj T) error {

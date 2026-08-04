@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -82,10 +83,17 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 		"openvox.voxpupuli.org/ca-secret-hash":  caHash,
 	}
 
-	// Add code image annotation for server:true pods to trigger rollout on image change
+	// Add code image annotation for server:true pods to trigger rollout on image change.
+	// All code image references are joined so a change to any of them rolls the pod.
 	if server.Spec.Server {
-		if code := resolveCode(server, cfg); code != nil && code.Image != "" {
-			annotations["openvox.voxpupuli.org/code-image"] = code.Image
+		var codeImages []string
+		for _, e := range resolveCode(server, cfg) {
+			if e.Image != "" {
+				codeImages = append(codeImages, e.Image)
+			}
+		}
+		if len(codeImages) > 0 {
+			annotations["openvox.voxpupuli.org/code-image"] = strings.Join(codeImages, ",")
 		}
 	}
 
@@ -308,39 +316,41 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 		)
 	}
 
-	// Code volume: only mounted for server:true pods (CA-only pods don't compile catalogs)
+	// Code volumes: only mounted for server:true pods (CA-only pods don't compile catalogs)
 	if server.Spec.Server {
-		if code := resolveCode(server, cfg); code != nil {
-			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name:      "code",
-				MountPath: resolveEnvironmentPath(cfg),
-				ReadOnly:  true,
-			})
-			switch {
-			case code.Image != "":
-				pullPolicy := code.ImagePullPolicy
-				if pullPolicy == "" {
-					pullPolicy = corev1.PullIfNotPresent
+		if codeMounts := resolveCodeMounts(server, cfg); len(codeMounts) > 0 {
+			for _, cm := range codeMounts {
+				volumeMounts = append(volumeMounts, corev1.VolumeMount{
+					Name:      cm.VolumeName,
+					MountPath: cm.MountPath,
+					ReadOnly:  true,
+				})
+				switch {
+				case cm.Spec.Image != "":
+					pullPolicy := cm.Spec.ImagePullPolicy
+					if pullPolicy == "" {
+						pullPolicy = corev1.PullIfNotPresent
+					}
+					volumes = append(volumes, corev1.Volume{
+						Name: cm.VolumeName,
+						VolumeSource: corev1.VolumeSource{
+							Image: &corev1.ImageVolumeSource{
+								Reference:  cm.Spec.Image,
+								PullPolicy: pullPolicy,
+							},
+						},
+					})
+				case cm.Spec.ClaimName != "":
+					volumes = append(volumes, corev1.Volume{
+						Name: cm.VolumeName,
+						VolumeSource: corev1.VolumeSource{
+							PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+								ClaimName: cm.Spec.ClaimName,
+								ReadOnly:  true,
+							},
+						},
+					})
 				}
-				volumes = append(volumes, corev1.Volume{
-					Name: "code",
-					VolumeSource: corev1.VolumeSource{
-						Image: &corev1.ImageVolumeSource{
-							Reference:  code.Image,
-							PullPolicy: pullPolicy,
-						},
-					},
-				})
-			case code.ClaimName != "":
-				volumes = append(volumes, corev1.Volume{
-					Name: "code",
-					VolumeSource: corev1.VolumeSource{
-						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-							ClaimName: code.ClaimName,
-							ReadOnly:  true,
-						},
-					},
-				})
 			}
 		} else {
 			// No external code source configured: mount a writable emptyDir at the
@@ -517,12 +527,16 @@ chmod 640 /ssl/private_keys/puppet.pem`
 		Volumes:                   volumes,
 	}
 
-	// Add imagePullSecrets for code image if configured
+	// Add imagePullSecrets for code images if configured (deduplicated across entries)
 	if server.Spec.Server {
-		if code := resolveCode(server, cfg); code != nil && code.ImagePullSecret != "" {
-			podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, corev1.LocalObjectReference{
-				Name: code.ImagePullSecret,
-			})
+		seen := make(map[string]bool)
+		for _, e := range resolveCode(server, cfg) {
+			if e.ImagePullSecret != "" && !seen[e.ImagePullSecret] {
+				seen[e.ImagePullSecret] = true
+				podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, corev1.LocalObjectReference{
+					Name: e.ImagePullSecret,
+				})
+			}
 		}
 	}
 

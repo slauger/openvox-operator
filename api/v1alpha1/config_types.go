@@ -72,10 +72,14 @@ type ConfigSpec struct {
 	// +optional
 	NodeClassifierRef string `json:"nodeClassifierRef,omitempty"`
 
-	// Code defines the Puppet code source for all Servers in this Config.
-	// Only applied to Servers with server=true.
+	// Code defines the Puppet code sources for all Servers in this Config.
+	// Only applied to Servers with server=true. A single entry without environment
+	// or mountPath is mounted as the whole environments tree at environmentpath;
+	// with more than one entry each must set a unique environment or a mountPath.
+	// +kubebuilder:validation:MaxItems=64
+	// +kubebuilder:validation:XValidation:rule="size(self) <= 1 || self.all(e, (has(e.environment) && e.environment != '') || (has(e.mountPath) && e.mountPath != ''))",message="with more than one code entry, each entry must set either environment or mountPath"
 	// +optional
-	Code *CodeSpec `json:"code,omitempty"`
+	Code []CodeSpec `json:"code,omitempty"`
 
 	// ReadOnlyRootFilesystem enables read-only root filesystem on all Server pods.
 	// When true, all writable paths are backed by emptyDir volumes and
@@ -232,19 +236,31 @@ type GraphiteSpec struct {
 	UpdateIntervalSeconds int32 `json:"updateIntervalSeconds,omitempty"`
 }
 
-// CodeSpec defines the source of Puppet code to mount into Server pods.
-// Either ClaimName (PVC) or Image (OCI image volume) may be set, not both.
+// CodeSpec defines one source of Puppet code to mount into Server pods.
+// Either ClaimName (PVC) or Image (OCI image volume) must be set, not both.
+//
+// The mount target is chosen by Environment or MountPath (mutually exclusive):
+//   - Environment mounts at <environmentpath>/<environment> (a Puppet environment).
+//   - MountPath mounts at an absolute path, which must be under the Puppet codedir
+//     (/etc/puppetlabs/code) -- use this for the global modules dir or hieradata.
+//   - Neither: the source is mounted as the whole environments tree at
+//     environmentpath. This is only valid for a single-entry code list.
+//
 // +kubebuilder:validation:XValidation:rule="!(has(self.image) && size(self.image) > 0 && has(self.claimName) && size(self.claimName) > 0)",message="image and claimName are mutually exclusive"
 // +kubebuilder:validation:XValidation:rule="(has(self.image) && size(self.image) > 0) || (has(self.claimName) && size(self.claimName) > 0)",message="either image or claimName must be set"
+// +kubebuilder:validation:XValidation:rule="!(has(self.environment) && size(self.environment) > 0 && has(self.mountPath) && size(self.mountPath) > 0)",message="environment and mountPath are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!has(self.mountPath) || size(self.mountPath) == 0 || self.mountPath.startsWith('/etc/puppetlabs/code')",message="mountPath must be under the Puppet codedir (/etc/puppetlabs/code)"
 type CodeSpec struct {
 	// ClaimName references an existing PVC containing Puppet code.
 	// Mutually exclusive with Image.
+	// +kubebuilder:validation:MaxLength=253
 	// +optional
 	ClaimName string `json:"claimName,omitempty"`
 
 	// Image is an OCI image reference containing Puppet code.
 	// Mounted as a read-only image volume (Kubernetes 1.35+, or 1.31+ with ImageVolume feature gate).
 	// Mutually exclusive with ClaimName.
+	// +kubebuilder:validation:MaxLength=512
 	// +optional
 	Image string `json:"image,omitempty"`
 
@@ -256,6 +272,21 @@ type CodeSpec struct {
 	// ImagePullSecret references a Secret for pulling from private registries.
 	// +optional
 	ImagePullSecret string `json:"imagePullSecret,omitempty"`
+
+	// Environment mounts this source as a single Puppet environment at
+	// <environmentpath>/<environment>. Mutually exclusive with MountPath.
+	// Environment values must be unique across the code list.
+	// +kubebuilder:validation:MaxLength=253
+	// +optional
+	Environment string `json:"environment,omitempty"`
+
+	// MountPath mounts this source at an absolute path, which must be under the
+	// Puppet codedir (/etc/puppetlabs/code). Use it for targets that are not a
+	// single environment, such as the global modules directory or hieradata.
+	// Mutually exclusive with Environment.
+	// +kubebuilder:validation:MaxLength=512
+	// +optional
+	MountPath string `json:"mountPath,omitempty"`
 }
 
 // ConfigPhase represents the current lifecycle phase.

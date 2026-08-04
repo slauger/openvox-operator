@@ -43,9 +43,11 @@ helm install openvox oci://ghcr.io/slauger/charts/openvox-stack
 | ca.storage.storageClass | string | `""` | Storage class for CA PVC. Empty uses cluster default. |
 | ca.ttl | string | `"5y"` | CA certificate time-to-live. |
 | config.code.claimName | string | `""` | Existing PVC claim name for code volume. |
+| config.code.environment | string | `""` | Mount this source as a single Puppet environment at `<environmentpath>/<environment>`. Mutually exclusive with `mountPath`. |
 | config.code.image | string | `""` | Init container image for Puppet code deployment. |
 | config.code.imagePullPolicy | string | `"IfNotPresent"` | Pull policy for the code init container. |
 | config.code.imagePullSecret | string | `""` | Pull secret for the code init container. |
+| config.code.mountPath | string | `""` | Mount this source at an absolute path under the Puppet codedir (`/etc/puppetlabs/code`), e.g. the global modules dir. Mutually exclusive with `environment`. |
 | config.image.pullPolicy | string | `"Always"` | Image pull policy. |
 | config.image.pullSecrets | list | `[]` | Image pull secrets. |
 | config.image.repository | string | `"ghcr.io/slauger/openvox-server"` | OpenVox Server image repository. |

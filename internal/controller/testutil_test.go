@@ -133,13 +133,19 @@ func withExternalNodesCommand(cmd string) configOption {
 
 func withCodeImage(image string) configOption {
 	return func(c *openvoxv1alpha1.Config) {
-		c.Spec.Code = &openvoxv1alpha1.CodeSpec{Image: image}
+		c.Spec.Code = []openvoxv1alpha1.CodeSpec{{Image: image}}
 	}
 }
 
 func withCodePVC(claimName string) configOption {
 	return func(c *openvoxv1alpha1.Config) {
-		c.Spec.Code = &openvoxv1alpha1.CodeSpec{ClaimName: claimName}
+		c.Spec.Code = []openvoxv1alpha1.CodeSpec{{ClaimName: claimName}}
+	}
+}
+
+func withCodeList(code ...openvoxv1alpha1.CodeSpec) configOption {
+	return func(c *openvoxv1alpha1.Config) {
+		c.Spec.Code = code
 	}
 }
 

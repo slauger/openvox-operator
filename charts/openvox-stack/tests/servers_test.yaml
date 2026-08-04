@@ -161,7 +161,7 @@ tests:
             image: ghcr.io/example/code:latest
     asserts:
       - equal:
-          path: spec.code.image
+          path: spec.code[0].image
           value: ghcr.io/example/code:latest
 
   - it: should propagate autoscaling

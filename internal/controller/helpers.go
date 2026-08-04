@@ -187,12 +187,55 @@ func resolveEnvironmentPath(cfg *openvoxv1alpha1.Config) string {
 }
 
 // resolveCode determines the code source for a Server.
-// Priority: Server override > Config default.
-func resolveCode(server *openvoxv1alpha1.Server, cfg *openvoxv1alpha1.Config) *openvoxv1alpha1.CodeSpec {
-	if server.Spec.Code != nil {
+// Priority: Server override (replace, not merge) > Config default.
+func resolveCode(server *openvoxv1alpha1.Server, cfg *openvoxv1alpha1.Config) []openvoxv1alpha1.CodeSpec {
+	if len(server.Spec.Code) > 0 {
 		return server.Spec.Code
 	}
 	return cfg.Spec.Code
+}
+
+// codeMount is a resolved code source: a unique volume name, the container mount
+// path, and the originating CodeSpec.
+type codeMount struct {
+	VolumeName string
+	MountPath  string
+	Spec       openvoxv1alpha1.CodeSpec
+}
+
+// resolveCodeMounts maps the resolved code sources to concrete volume mounts.
+// A single entry without environment/mountPath is mounted as the whole
+// environments tree at environmentpath (backwards compatible). Otherwise each
+// entry is mounted at its environment subdirectory or its absolute mountPath.
+func resolveCodeMounts(server *openvoxv1alpha1.Server, cfg *openvoxv1alpha1.Config) []codeMount {
+	entries := resolveCode(server, cfg)
+	envPath := resolveEnvironmentPath(cfg)
+	mounts := make([]codeMount, 0, len(entries))
+	for i, e := range entries {
+		switch {
+		case e.Environment != "":
+			mounts = append(mounts, codeMount{
+				VolumeName: fmt.Sprintf("code-%d", i),
+				MountPath:  fmt.Sprintf("%s/%s", envPath, e.Environment),
+				Spec:       e,
+			})
+		case e.MountPath != "":
+			mounts = append(mounts, codeMount{
+				VolumeName: fmt.Sprintf("code-%d", i),
+				MountPath:  e.MountPath,
+				Spec:       e,
+			})
+		default:
+			// Single whole-tree entry: keep the stable "code" volume name and mount
+			// at environmentpath, matching the pre-list behaviour.
+			mounts = append(mounts, codeMount{
+				VolumeName: "code",
+				MountPath:  envPath,
+				Spec:       e,
+			})
+		}
+	}
+	return mounts
 }
 
 // resolveImage determines the container image for a Server.

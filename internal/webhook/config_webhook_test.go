@@ -9,6 +9,29 @@ import (
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
 
+func TestConfigValidator_DuplicateCodeEnvironment(t *testing.T) {
+	c := setupTestClient()
+	v := &ConfigValidator{Client: c}
+
+	cfg := &openvoxv1alpha1.Config{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Spec: openvoxv1alpha1.ConfigSpec{
+			Code: []openvoxv1alpha1.CodeSpec{
+				{Image: "a:latest", Environment: "production"},
+				{Image: "b:latest", Environment: "production"},
+			},
+		},
+	}
+	if _, err := v.ValidateCreate(context.Background(), cfg); err == nil {
+		t.Error("expected error for duplicate code environment")
+	}
+
+	cfg.Spec.Code[1].Environment = "staging"
+	if _, err := v.ValidateCreate(context.Background(), cfg); err != nil {
+		t.Errorf("expected no error for unique code environments, got %v", err)
+	}
+}
+
 func TestConfigValidator_Update(t *testing.T) {
 	ca := &openvoxv1alpha1.CertificateAuthority{
 		ObjectMeta: metav1.ObjectMeta{Name: "my-ca", Namespace: "default"},

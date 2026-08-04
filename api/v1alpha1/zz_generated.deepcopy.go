@@ -472,8 +472,8 @@ func (in *ConfigSpec) DeepCopyInto(out *ConfigSpec) {
 	}
 	if in.Code != nil {
 		in, out := &in.Code, &out.Code
-		*out = new(CodeSpec)
-		**out = **in
+		*out = make([]CodeSpec, len(*in))
+		copy(*out, *in)
 	}
 }
 
@@ -1662,8 +1662,8 @@ func (in *ServerSpec) DeepCopyInto(out *ServerSpec) {
 	in.Resources.DeepCopyInto(&out.Resources)
 	if in.Code != nil {
 		in, out := &in.Code, &out.Code
-		*out = new(CodeSpec)
-		**out = **in
+		*out = make([]CodeSpec, len(*in))
+		copy(*out, *in)
 	}
 	if in.TopologySpreadConstraints != nil {
 		in, out := &in.TopologySpreadConstraints, &out.TopologySpreadConstraints

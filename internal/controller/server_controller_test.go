@@ -180,6 +180,50 @@ func TestServerReconcile_AnnotationHashes(t *testing.T) {
 	}
 }
 
+func TestServerReconcile_AutosignPolicyHashAnnotation(t *testing.T) {
+	objs := append(serverPrereqs(),
+		newSecret("production-ca-autosign-policy", map[string][]byte{
+			"autosign-policy.yaml": []byte("policies:\n"),
+		}),
+		newServer("test-ca", withCA(true), withServerRole(false)),
+	)
+	c := setupTestClient(objs...)
+	r := newServerReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-ca")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	deploy := &appsv1.Deployment{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca", Namespace: testNamespace}, deploy); err != nil {
+		t.Fatalf("Deployment not found: %v", err)
+	}
+
+	// The CA pod must carry the autosign-policy hash so a SigningPolicy change rolls it.
+	if v, ok := deploy.Spec.Template.Annotations["openvox.voxpupuli.org/autosign-policy-secret-hash"]; !ok || v == "" {
+		t.Error("CA pod should carry the autosign-policy-secret-hash annotation")
+	}
+}
+
+func TestServerReconcile_NoAutosignPolicyHashOnNonCA(t *testing.T) {
+	objs := append(serverPrereqs(), newServer("test-server"))
+	c := setupTestClient(objs...)
+	r := newServerReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("test-server")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	deploy := &appsv1.Deployment{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-server", Namespace: testNamespace}, deploy); err != nil {
+		t.Fatalf("Deployment not found: %v", err)
+	}
+
+	if _, ok := deploy.Spec.Template.Annotations["openvox.voxpupuli.org/autosign-policy-secret-hash"]; ok {
+		t.Error("non-CA server should not carry the autosign-policy-secret-hash annotation")
+	}
+}
+
 func TestServerReconcile_PDBCreation(t *testing.T) {
 	objs := append(serverPrereqs(), newServer("test-server", withPDBEnabled(true)))
 	c := setupTestClient(objs...)

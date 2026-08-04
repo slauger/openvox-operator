@@ -42,21 +42,31 @@ spec:
     extraConfig:
       {{- toYaml . | nindent 6 }}
     {{- end }}
+    {{- with .Values.config.puppet.autosignCommand }}
+    autosignCommand: {{ . | quote }}
+    {{- end }}
+    {{- with .Values.config.puppet.externalNodesCommand }}
+    externalNodesCommand: {{ . | quote }}
+    {{- end }}
   {{- with .Values.config.code }}
-  {{- if or .image .claimName }}
+  {{- if kindIs "slice" . }}
   code:
-    {{- with .image }}
-    image: {{ . }}
-    {{- end }}
-    {{- with .imagePullPolicy }}
-    imagePullPolicy: {{ . }}
-    {{- end }}
-    {{- with .imagePullSecret }}
-    imagePullSecret: {{ . }}
-    {{- end }}
-    {{- with .claimName }}
-    claimName: {{ . }}
-    {{- end }}
+    {{- toYaml . | nindent 4 }}
+  {{- else if or .image .claimName }}
+  code:
+    - {{ if .image }}image: {{ .image }}{{ else }}claimName: {{ .claimName }}{{ end }}
+      {{- with .imagePullPolicy }}
+      imagePullPolicy: {{ . }}
+      {{- end }}
+      {{- with .imagePullSecret }}
+      imagePullSecret: {{ . }}
+      {{- end }}
+      {{- with .environment }}
+      environment: {{ . }}
+      {{- end }}
+      {{- with .mountPath }}
+      mountPath: {{ . }}
+      {{- end }}
   {{- end }}
   {{- end }}
   {{- with .Values.config.puppetserver }}

@@ -89,9 +89,14 @@ type ServerSpec struct {
 	// +optional
 	MaxActiveInstances int32 `json:"maxActiveInstances,omitempty"`
 
-	// Code overrides the Config's code volume for this Server.
+	// Code overrides the Config's code volumes for this Server (replace, not merge).
+	// A single entry without environment or mountPath is mounted as the whole
+	// environments tree; with more than one entry each must set a unique environment
+	// or a mountPath.
+	// +kubebuilder:validation:MaxItems=64
+	// +kubebuilder:validation:XValidation:rule="size(self) <= 1 || self.all(e, (has(e.environment) && e.environment != '') || (has(e.mountPath) && e.mountPath != ''))",message="with more than one code entry, each entry must set either environment or mountPath"
 	// +optional
-	Code *CodeSpec `json:"code,omitempty"`
+	Code []CodeSpec `json:"code,omitempty"`
 
 	// TopologySpreadConstraints controls how pods are spread across topology domains.
 	// +optional

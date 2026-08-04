@@ -126,8 +126,24 @@ tests:
           image: ghcr.io/slauger/openvox-e2e-code:latest
     asserts:
       - equal:
-          path: spec.code.image
+          path: spec.code[0].image
           value: ghcr.io/slauger/openvox-e2e-code:latest
+
+  - it: should render code as a list when configured with multiple sources
+    set:
+      config:
+        code:
+          - image: ghcr.io/slauger/prod:latest
+            environment: production
+          - claimName: modules
+            mountPath: /etc/puppetlabs/code/modules
+    asserts:
+      - equal:
+          path: spec.code[0].environment
+          value: production
+      - equal:
+          path: spec.code[1].mountPath
+          value: /etc/puppetlabs/code/modules
 
   - it: should not render code section when image and claimName are empty
     asserts:

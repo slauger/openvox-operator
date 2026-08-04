@@ -40,6 +40,11 @@ func (r *ConfigReconciler) reconcileAutosignSecrets(ctx context.Context, cfg *op
 	if cfg.Spec.AuthorityRef == "" {
 		return nil
 	}
+	// A custom autosignCommand replaces the built-in binary, so the policy Secret
+	// it would read is neither rendered nor mounted.
+	if cfg.Spec.Puppet.AutosignCommand != "" {
+		return nil
+	}
 	ca := &openvoxv1alpha1.CertificateAuthority{}
 	if err := r.Get(ctx, types.NamespacedName{Name: cfg.Spec.AuthorityRef, Namespace: cfg.Namespace}, ca); err != nil {
 		if errors.IsNotFound(err) {
@@ -55,7 +60,9 @@ func (r *ConfigReconciler) reconcileAutosignSecrets(ctx context.Context, cfg *op
 
 // reconcileAutosignSecret renders the autosign policy config YAML into a Secret.
 // The Secret is always created -- the binary handles all cases (no policies = deny all,
-// any:true = approve all). This keeps puppet.conf static and avoids pod restarts.
+// any:true = approve all). puppet.conf stays static; a policy change rewrites this
+// Secret and the server controller rolls the CA pod via the autosign-policy-secret-hash
+// annotation to apply it.
 func (r *ConfigReconciler) reconcileAutosignSecret(ctx context.Context, cfg *openvoxv1alpha1.Config, ca *openvoxv1alpha1.CertificateAuthority) error {
 	secretName := fmt.Sprintf("%s-autosign-policy", ca.Name)
 

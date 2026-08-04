@@ -238,6 +238,75 @@ func TestConfigReconcile_PuppetConfWithENC(t *testing.T) {
 	}
 }
 
+func TestConfigReconcile_AutosignCommandOverride(t *testing.T) {
+	cfg := newConfig("production",
+		withAuthorityRef("production-ca"),
+		withAutosignCommand("/usr/local/bin/custom-autosign"),
+	)
+	ca := newCertificateAuthority("production-ca")
+	c := setupTestClient(cfg, ca)
+	r := newConfigReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("production")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	cm := &corev1.ConfigMap{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "production-config", Namespace: testNamespace}, cm); err != nil {
+		t.Fatalf("ConfigMap not found: %v", err)
+	}
+	puppetConf := cm.Data["puppet.conf"]
+	if !strings.Contains(puppetConf, "autosign = /usr/local/bin/custom-autosign") {
+		t.Errorf("puppet.conf should point autosign at the custom command\n---\n%s", puppetConf)
+	}
+	if strings.Contains(puppetConf, "autosign = /usr/local/bin/openvox-autosign") {
+		t.Errorf("puppet.conf should not use the built-in autosign binary\n---\n%s", puppetConf)
+	}
+
+	// The SigningPolicy-driven flow is disabled: no policy Secret is rendered.
+	secret := &corev1.Secret{}
+	err := c.Get(testCtx(), types.NamespacedName{Name: "production-ca-autosign-policy", Namespace: testNamespace}, secret)
+	if err == nil {
+		t.Error("autosign policy Secret should not be created when autosignCommand is set")
+	}
+}
+
+func TestConfigReconcile_ExternalNodesCommandOverride(t *testing.T) {
+	cfg := newConfig("production",
+		withNodeClassifierRef("my-enc"),
+		withExternalNodesCommand("/usr/local/bin/custom-enc"),
+	)
+	nc := newNodeClassifier("my-enc", "https://enc.example.com")
+	c := setupTestClient(cfg, nc)
+	r := newConfigReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("production")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	cm := &corev1.ConfigMap{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "production-config", Namespace: testNamespace}, cm); err != nil {
+		t.Fatalf("ConfigMap not found: %v", err)
+	}
+	puppetConf := cm.Data["puppet.conf"]
+	if !strings.Contains(puppetConf, "node_terminus = exec") {
+		t.Errorf("puppet.conf missing node_terminus\n---\n%s", puppetConf)
+	}
+	if !strings.Contains(puppetConf, "external_nodes = /usr/local/bin/custom-enc") {
+		t.Errorf("puppet.conf should point external_nodes at the custom command\n---\n%s", puppetConf)
+	}
+	if strings.Contains(puppetConf, "external_nodes = /usr/local/bin/openvox-enc") {
+		t.Errorf("puppet.conf should not use the built-in ENC binary\n---\n%s", puppetConf)
+	}
+
+	// The NodeClassifier-driven flow is disabled: no ENC Secret is rendered.
+	secret := &corev1.Secret{}
+	err := c.Get(testCtx(), types.NamespacedName{Name: "production-enc", Namespace: testNamespace}, secret)
+	if err == nil {
+		t.Error("ENC Secret should not be created when externalNodesCommand is set")
+	}
+}
+
 func TestConfigReconcile_PuppetConfWithReports(t *testing.T) {
 	cfg := newConfig("production")
 	rp := newReportProcessor("webhook-rp", "production", "https://reports.example.com")

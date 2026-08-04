@@ -43,16 +43,20 @@ helm install openvox oci://ghcr.io/slauger/charts/openvox-stack
 | ca.storage.storageClass | string | `""` | Storage class for CA PVC. Empty uses cluster default. |
 | ca.ttl | string | `"5y"` | CA certificate time-to-live. |
 | config.code.claimName | string | `""` | Existing PVC claim name for code volume. |
+| config.code.environment | string | `""` | Mount this source as a single Puppet environment at `<environmentpath>/<environment>`. Mutually exclusive with `mountPath`. |
 | config.code.image | string | `""` | Init container image for Puppet code deployment. |
 | config.code.imagePullPolicy | string | `"IfNotPresent"` | Pull policy for the code init container. |
 | config.code.imagePullSecret | string | `""` | Pull secret for the code init container. |
+| config.code.mountPath | string | `""` | Mount this source at an absolute path under the Puppet codedir (`/etc/puppetlabs/code`), e.g. the global modules dir. Mutually exclusive with `environment`. |
 | config.image.pullPolicy | string | `"Always"` | Image pull policy. |
 | config.image.pullSecrets | list | `[]` | Image pull secrets. |
 | config.image.repository | string | `"ghcr.io/slauger/openvox-server"` | OpenVox Server image repository. |
 | config.image.tag | string | `""` | Image tag. Defaults to the chart appVersion. |
 | config.name | string | `""` | Config resource name. Defaults to release name. |
+| config.puppet.autosignCommand | string | `""` | Custom autosign executable path. When set, replaces the built-in autosign binary and disables the SigningPolicy-driven flow. The executable must be present in the server image or mounted via a Server's extraVolumes. |
 | config.puppet.environmentPath | string | `""` | Path to Puppet environments. |
 | config.puppet.environmentTimeout | string | `""` | Environment timeout setting. |
+| config.puppet.externalNodesCommand | string | `""` | Custom ENC (external_nodes) executable path. When set, replaces the built-in ENC binary and disables the NodeClassifier-driven flow. The executable must be present in the server image or mounted via a Server's extraVolumes. |
 | config.puppet.extraConfig | object | `{}` | Extra puppet.conf sections and settings. |
 | config.puppet.hieraConfig | string | `""` | Path to Hiera configuration file. |
 | config.puppet.reports | string | `"store"` | Enabled report processors. |

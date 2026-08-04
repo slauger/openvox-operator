@@ -141,8 +141,8 @@ Either `value` or `valueFrom` must be set.
 
 1. The operator collects all SigningPolicies for a CertificateAuthority
 2. It renders a policy config YAML into a Secret, mounted into the CA pod
-3. puppet.conf always points to the `openvox-autosign` binary (static config, no pod restarts)
-4. When a SigningPolicy changes, the operator updates the Secret. Kubelet syncs the mounted file (~60s). **No pod restart needed.**
+3. puppet.conf always points to the `openvox-autosign` binary, so puppet.conf itself never changes when policies change
+4. When a SigningPolicy changes, the operator rewrites the Secret and hashes it into the CA pod's `autosign-policy-secret-hash` annotation, which rolls the CA pod so the new policy applies automatically. **No manual restart needed.**
 
 The `openvox-autosign` binary shipped in the openvox-server container image evaluates policies at CSR signing time:
 

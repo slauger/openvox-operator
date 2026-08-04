@@ -398,13 +398,22 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 		)
 	}
 
+	// User-supplied volumes and mounts, appended last so the operator-managed
+	// ones always win a name or path collision at the API server.
+	volumes = append(volumes, server.Spec.ExtraVolumes...)
+	volumeMounts = append(volumeMounts, server.Spec.ExtraVolumeMounts...)
+
+	env := []corev1.EnvVar{
+		{Name: "JAVA_ARGS", Value: javaArgs},
+	}
+	env = append(env, server.Spec.ExtraEnv...)
+
 	container := corev1.Container{
 		Name:            "openvox-server",
 		Image:           image,
 		ImagePullPolicy: cfg.Spec.Image.PullPolicy,
-		Env: []corev1.EnvVar{
-			{Name: "JAVA_ARGS", Value: javaArgs},
-		},
+		Env:             env,
+		EnvFrom:         server.Spec.EnvFrom,
 		Ports: []corev1.ContainerPort{
 			{Name: "https", ContainerPort: 8140, Protocol: corev1.ProtocolTCP},
 		},

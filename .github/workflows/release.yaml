@@ -44,6 +44,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  prepare:
+    needs: semantic-release
+    if: needs.semantic-release.outputs.new-release-published == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Build OpenVox version matrix
+        id: matrix
+        run: |
+          echo "matrix=$(yq -o=json -I=0 '{"include": .include}' images/openvox-versions.yaml)" >> "$GITHUB_OUTPUT"
+
   openvox-operator:
     needs: semantic-release
     if: needs.semantic-release.outputs.new-release-published == 'true'
@@ -62,8 +76,11 @@ jobs:
       image_tag: ${{ needs.semantic-release.outputs.new-release-version }}
 
   openvox-server:
-    needs: semantic-release
+    needs: [semantic-release, prepare]
     if: needs.semantic-release.outputs.new-release-published == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     uses: ./.github/workflows/_container-build.yaml
     permissions:
       contents: read
@@ -71,16 +88,23 @@ jobs:
       id-token: write
       attestations: write
     with:
-      image_name: openvox-server
+      image_name: openvox-server-${{ matrix.major }}
       dockerfile: images/openvox-server/Containerfile
       context: '.'
       push: true
-      latest: true
+      latest: ${{ matrix.latest }}
       image_tag: ${{ needs.semantic-release.outputs.new-release-version }}
+      build_args: |
+        OPENVOXSERVER_VERSION=${{ matrix.server }}
+        OPENVOXDB_TERMINI_VERSION=${{ matrix.termini }}
+        OPENVOX_VERSION=${{ matrix.openvox }}
 
   openvox-db:
-    needs: semantic-release
+    needs: [semantic-release, prepare]
     if: needs.semantic-release.outputs.new-release-published == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     uses: ./.github/workflows/_container-build.yaml
     permissions:
       contents: read
@@ -88,12 +112,14 @@ jobs:
       id-token: write
       attestations: write
     with:
-      image_name: openvox-db
+      image_name: openvox-db-${{ matrix.major }}
       dockerfile: images/openvox-db/Containerfile
       context: '.'
       push: true
-      latest: true
+      latest: ${{ matrix.latest }}
       image_tag: ${{ needs.semantic-release.outputs.new-release-version }}
+      build_args: |
+        OPENVOXDB_VERSION=${{ matrix.db }}
 
   validate-openvox-operator:
     needs: [semantic-release, openvox-operator]
@@ -108,28 +134,34 @@ jobs:
       digest: ${{ needs.openvox-operator.outputs.digest }}
 
   validate-openvox-server:
-    needs: [semantic-release, openvox-server]
+    needs: [semantic-release, prepare, openvox-server]
     if: needs.semantic-release.outputs.new-release-published == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     uses: ./.github/workflows/_conforma-validate.yaml
     permissions:
       contents: read
       id-token: write
       packages: read
     with:
-      image: ${{ needs.openvox-server.outputs.image }}
-      digest: ${{ needs.openvox-server.outputs.digest }}
+      # Matrixed build job outputs collapse to a single value, so reconstruct the
+      # per-major image reference; ec resolves the tag to a digest itself.
+      image: ghcr.io/${{ github.repository_owner }}/openvox-server-${{ matrix.major }}:${{ needs.semantic-release.outputs.new-release-version }}
 
   validate-openvox-db:
-    needs: [semantic-release, openvox-db]
+    needs: [semantic-release, prepare, openvox-db]
     if: needs.semantic-release.outputs.new-release-published == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     uses: ./.github/workflows/_conforma-validate.yaml
     permissions:
       contents: read
       id-token: write
       packages: read
     with:
-      image: ${{ needs.openvox-db.outputs.image }}
-      digest: ${{ needs.openvox-db.outputs.digest }}
+      image: ghcr.io/${{ github.repository_owner }}/openvox-db-${{ matrix.major }}:${{ needs.semantic-release.outputs.new-release-version }}
 
   helm-charts:
     needs: [semantic-release, openvox-operator, openvox-server, openvox-db]

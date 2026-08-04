@@ -19,6 +19,18 @@ env:
   IMAGE_TAG: ${{ inputs.image_tag || github.ref_name }}
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Build OpenVox version matrix
+        id: matrix
+        run: |
+          echo "matrix=$(yq -o=json -I=0 '{"include": .include}' images/openvox-versions.yaml)" >> "$GITHUB_OUTPUT"
+
   openvox-operator:
     uses: ./.github/workflows/_container-build.yaml
     permissions:
@@ -34,6 +46,10 @@ jobs:
       image_tag: ${{ inputs.image_tag || github.ref_name }}
 
   openvox-server:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     uses: ./.github/workflows/_container-build.yaml
     permissions:
       contents: read
@@ -41,11 +57,15 @@ jobs:
       id-token: write
       attestations: write
     with:
-      image_name: openvox-server
+      image_name: openvox-server-${{ matrix.major }}
       dockerfile: images/openvox-server/Containerfile
       context: '.'
       push: true
       image_tag: ${{ inputs.image_tag || github.ref_name }}
+      build_args: |
+        OPENVOXSERVER_VERSION=${{ matrix.server }}
+        OPENVOXDB_TERMINI_VERSION=${{ matrix.termini }}
+        OPENVOX_VERSION=${{ matrix.openvox }}
 
   openvox-e2e-code:
     uses: ./.github/workflows/_container-build.yaml
@@ -63,6 +83,10 @@ jobs:
       sign: false
 
   openvox-agent:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     uses: ./.github/workflows/_container-build.yaml
     permissions:
       contents: read
@@ -70,14 +94,21 @@ jobs:
       id-token: write
       attestations: write
     with:
-      image_name: openvox-agent
+      image_name: openvox-agent-${{ matrix.major }}
       dockerfile: images/openvox-agent/Containerfile
       context: 'images/openvox-agent'
       push: true
       image_tag: ${{ inputs.image_tag || github.ref_name }}
+      build_args: |
+        OPENVOX_AGENT_VERSION=${{ matrix.agent }}
+        OPENVOX_MAJOR=${{ matrix.major }}
       sign: false
 
   openvox-db:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     uses: ./.github/workflows/_container-build.yaml
     permissions:
       contents: read
@@ -85,11 +116,13 @@ jobs:
       id-token: write
       attestations: write
     with:
-      image_name: openvox-db
+      image_name: openvox-db-${{ matrix.major }}
       dockerfile: images/openvox-db/Containerfile
       context: '.'
       push: true
       image_tag: ${{ inputs.image_tag || github.ref_name }}
+      build_args: |
+        OPENVOXDB_VERSION=${{ matrix.db }}
 
   openvox-mock:
     uses: ./.github/workflows/_container-build.yaml

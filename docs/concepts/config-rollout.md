@@ -15,6 +15,7 @@ Tracked annotations:
 | `openvox.voxpupuli.org/ca-secret-hash` | CA Secret (`{ca}-ca`) | Yes |
 | `openvox.voxpupuli.org/enc-secret-hash` | ENC Secret (`{config}-enc`) | Yes |
 | `openvox.voxpupuli.org/report-webhook-secret-hash` | Report webhook Secret (`{config}-report-webhook`) | Yes |
+| `openvox.voxpupuli.org/autosign-policy-secret-hash` | Autosign policy Secret (`{ca}-autosign-policy`, CA pods only) | Yes |
 | `openvox.voxpupuli.org/code-image` | Code OCI image reference | Yes |
 
 ## What Triggers a Restart
@@ -35,12 +36,12 @@ Changes to CRDs that generate Secrets with tracked hashes also trigger restarts:
 |--------------|-----------------|:---:|
 | NodeClassifier | `{config}-enc` | Yes |
 | ReportProcessor | `{config}-report-webhook` | Yes |
+| SigningPolicy | `{ca}-autosign-policy` | Yes (CA pods) |
 
 ## What Does NOT Trigger a Restart
 
 | Changed CRD | Generated Secret | Restart | How It Propagates |
 |--------------|-----------------|:---:|-------------------|
-| SigningPolicy | `{ca}-autosign-policy` | No | `openvox-autosign` reads the policy file on every CSR signing request. The Secret is not tracked in pod annotations. |
 | CRL updates (non-CA) | `{ca}-ca-crl` | No | Mounted as a directory volume (without SubPath), which kubelet auto-syncs every ~60 seconds. |
 
 ## Controller Watch Mechanics
@@ -86,9 +87,9 @@ Changing `spec.puppet.environmentTimeout` on a Config:
 Creating or updating a SigningPolicy:
 
 1. Config controller is triggered via SigningPolicy watcher
-2. Autosign policy Secret is updated
-3. Server controller is triggered but autosign hash is **not tracked** - no restart
-4. `openvox-autosign` reads the updated policy at the next CSR signing attempt
+2. Autosign policy Secret (`{ca}-autosign-policy`) is updated
+3. Server controller detects the updated `autosign-policy-secret-hash` annotation
+4. CA pod is recreated so `openvox-autosign` reads the new policy on the next CSR (no manual restart)
 
 ### Changing ENC Configuration
 

@@ -73,7 +73,10 @@ spec:
     - name: Wait for Certificate renewal to complete
       try:
         - script:
-            timeout: 3m
+            # The two retry loops below can each take up to 120s (60 x 2s),
+            # so the step must allow more than their combined 4m worst case to
+            # avoid being killed mid-retry on a slow runner.
+            timeout: 6m
             content: |
               echo "Waiting for Certificate to enter Renewing phase..."
               for i in $(seq 1 60); do

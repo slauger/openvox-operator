@@ -24,7 +24,7 @@ spec:
 ```
 
 !!! note "Choosing an OpenVox major (8 or 9)"
-    The content images are published per OpenVox major — the image name encodes the
+    The content images are published per OpenVox major - the image name encodes the
     major (`openvox-server-8` / `openvox-server-9`), the tag stays the operator release
     version. The default is `openvox-server-8`. To opt a Config into OpenVox 9, set
     `spec.image.repository: ghcr.io/slauger/openvox-server-9`. OpenVox 9 is a pre-release

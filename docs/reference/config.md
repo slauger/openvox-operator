@@ -26,13 +26,13 @@ spec:
 !!! note "Choosing an OpenVox major (8 or 9)"
     The content images are published per OpenVox major - the image name encodes the
     major (`openvox-server-8` / `openvox-server-9`), the tag stays the operator release
-    version. The default is `openvox-server-8`. To opt a Config into OpenVox 9, set
-    `spec.image.repository: ghcr.io/slauger/openvox-server-9`. OpenVox 9 is a pre-release
-    (Jetty 12, JRuby 10, Java 17 dropped), never tagged `:latest`, and not recommended
-    for production yet. The previously published unsuffixed images (`openvox-server`,
-    `openvox-db`) are no longer built. The exact OpenVox versions baked into each image
-    are pinned in `images/openvox-versions.yaml`, and every operator release lists the
-    shipped component versions in its GitHub release notes.
+    version. The default is `openvox-server-8`, also published under the unsuffixed
+    `openvox-server` / `openvox-db` alias (same digest) for backward compatibility.
+    OpenVox 9 builds are **paused until 9.0 GA**: the operator supports pointing
+    `spec.image.repository` at an `openvox-server-9` image, but the `-9` images are not
+    currently published (the 9.0 betas ship inconsistent build artifacts). The exact
+    OpenVox versions baked into each image are pinned in `images/openvox-versions.yaml`,
+    and every operator release lists the shipped component versions in its GitHub release notes.
 
 ## Spec
 

@@ -12,7 +12,7 @@ metadata:
 spec:
   authorityRef: production-ca
   image:
-    repository: ghcr.io/slauger/openvox-server
+    repository: ghcr.io/slauger/openvox-server-8
     tag: "8.12.1"
   puppet:
     environmentTimeout: "0"
@@ -22,6 +22,15 @@ spec:
     serverUrls:
       - "https://openvoxdb.example.com:8081"
 ```
+
+!!! note "Choosing an OpenVox major (8 or 9)"
+    The content images are published per OpenVox major — the image name encodes the
+    major (`openvox-server-8` / `openvox-server-9`), the tag stays the operator release
+    version. The default is `openvox-server-8`. To opt a Config into OpenVox 9, set
+    `spec.image.repository: ghcr.io/slauger/openvox-server-9`. OpenVox 9 is a pre-release
+    (Jetty 12, JRuby 10, Java 17 dropped), never tagged `:latest`, and not recommended
+    for production yet. The previously published unsuffixed images (`openvox-server`,
+    `openvox-db`) are no longer built.
 
 ## Spec
 

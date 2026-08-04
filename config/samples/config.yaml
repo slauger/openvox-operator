@@ -7,6 +7,7 @@ metadata:
 spec:
   authorityRef: production-ca
   image:
+    # Image name encodes the OpenVox major: -8 (default) or -9 (beta, never :latest).
     repository: ghcr.io/slauger/openvox-server-8
     tag: "8.12.1"
   # Use databaseRef to auto-resolve the PuppetDB URL from a Database CR.

@@ -52,7 +52,7 @@ These types are reused across multiple CRDs.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `repository` | string | `ghcr.io/slauger/openvox-server` | Container image repository |
+| `repository` | string | `ghcr.io/slauger/openvox-server-8` | Container image repository |
 | `tag` | string | `latest` | Container image tag |
 | `pullPolicy` | string | `IfNotPresent` | Image pull policy |
 | `pullSecrets` | []LocalObjectReference | - | Image pull secrets |

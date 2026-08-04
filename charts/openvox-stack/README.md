@@ -48,7 +48,7 @@ helm install openvox oci://ghcr.io/slauger/charts/openvox-stack
 | config.code.imagePullSecret | string | `""` | Pull secret for the code init container. |
 | config.image.pullPolicy | string | `"Always"` | Image pull policy. |
 | config.image.pullSecrets | list | `[]` | Image pull secrets. |
-| config.image.repository | string | `"ghcr.io/slauger/openvox-server"` | OpenVox Server image repository. |
+| config.image.repository | string | `"ghcr.io/slauger/openvox-server-8"` | OpenVox Server image repository. |
 | config.image.tag | string | `""` | Image tag. Defaults to the chart appVersion. |
 | config.name | string | `""` | Config resource name. Defaults to release name. |
 | config.puppet.environmentPath | string | `""` | Path to Puppet environments. |
@@ -64,7 +64,7 @@ helm install openvox oci://ghcr.io/slauger/charts/openvox-stack
 | database.certificate.dnsAltNames | list | `[]` | Additional DNS subject alternative names. |
 | database.enabled | bool | `false` | Enable PuppetDB database deployment. |
 | database.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy. |
-| database.image.repository | string | `"ghcr.io/slauger/openvox-db"` | OpenVox DB image repository. |
+| database.image.repository | string | `"ghcr.io/slauger/openvox-db-8"` | OpenVox DB image repository. |
 | database.image.tag | string | `""` | Image tag. Defaults to the chart appVersion. |
 | database.javaArgs | string | `""` | JVM arguments for PuppetDB. |
 | database.name | string | `""` | Database resource name. Required when enabled. |

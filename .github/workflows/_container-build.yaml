@@ -36,6 +36,11 @@ on:
         required: false
         type: boolean
         default: false
+      alias_image_name:
+        description: 'Optional unsuffixed alias image name (e.g. openvox-server) published from the same manifest as a backward-compat alias for the default major. Empty = no alias.'
+        required: false
+        type: string
+        default: ''
       build_args:
         description: 'Build-time arguments passed to docker build (one KEY=VALUE per line)'
         required: false
@@ -206,6 +211,17 @@ jobs:
             docker buildx imagetools create -t "${IMAGE}:latest" ${SOURCES}
           fi
 
+          # Publish the unsuffixed backward-compat alias for the default major, from the
+          # same per-arch sources, so it shares the primary manifest digest.
+          ALIAS="${{ inputs.alias_image_name }}"
+          if [[ -n "${ALIAS}" ]]; then
+            ALIAS_IMAGE="ghcr.io/${{ github.repository_owner }}/${ALIAS}"
+            docker buildx imagetools create -t "${ALIAS_IMAGE}:${VERSION}" ${SOURCES}
+            if [[ "${{ inputs.latest }}" == "true" ]]; then
+              docker buildx imagetools create -t "${ALIAS_IMAGE}:latest" ${SOURCES}
+            fi
+          fi
+
       - name: Get manifest digest
         id: digest
         run: |
@@ -219,11 +235,23 @@ jobs:
         run: |
           IMAGE="ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}"
           cosign sign --yes "${IMAGE}@${{ steps.digest.outputs.digest }}"
+          ALIAS="${{ inputs.alias_image_name }}"
+          if [[ -n "${ALIAS}" ]]; then
+            cosign sign --yes "ghcr.io/${{ github.repository_owner }}/${ALIAS}@${{ steps.digest.outputs.digest }}"
+          fi
 
       - name: Attest manifest index
         uses: actions/attest-build-provenance@v4
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest manifest index (unsuffixed alias)
+        if: inputs.alias_image_name != ''
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/${{ inputs.alias_image_name }}
           subject-digest: ${{ steps.digest.outputs.digest }}
           push-to-registry: true
 

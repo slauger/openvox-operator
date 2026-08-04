@@ -5,10 +5,11 @@
 # this file (yq -o=json '.include') to build the per-major matrix and pass the
 # versions as build-args to the Containerfiles.
 #
-# Renovate keeps the pins current: the "8" entry tracks the stable 8.x line, the
-# "9" entry tracks 9.x pre-releases. The two majors bump independently in separate
-# grouped PRs (see renovate.json). Major 8 is the default and the only one tagged
-# :latest; major 9 is built and pushed but never :latest and never the default.
+# Renovate keeps the pins current: the "8" entry tracks the stable 8.x line. Major 8
+# is the default and the only one tagged :latest.
+#
+# Major 9 is disabled (commented out below) until OpenVox 9.0 GA -- the 9.x pre-release
+# artifacts can't be built reproducibly yet. Re-enable by uncommenting the entry; see #503.
 include:
   - major: "8"
     latest: true
@@ -22,15 +23,16 @@ include:
     db: 8.15.0
     # renovate: datasource=github-releases depName=OpenVoxProject/openvox
     agent: 8.28.1
-  - major: "9"
-    latest: false
-    # renovate: datasource=github-releases depName=OpenVoxProject/openvox-server
-    server: 9.0.0-beta2
-    # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
-    termini: 9.0.0-beta1
-    # renovate: datasource=github-releases depName=OpenVoxProject/openvox
-    openvox: 9.0.0-beta1
-    # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
-    db: 9.0.0-beta1
-    # renovate: datasource=github-releases depName=OpenVoxProject/openvox
-    agent: 9.0.0-beta1
+  # Re-enable at OpenVox 9.0 GA (also fix server/db to install from RPM, not tarball):
+  # - major: "9"
+  #   latest: false
+  #   # renovate: datasource=github-releases depName=OpenVoxProject/openvox-server
+  #   server: 9.0.0-beta2
+  #   # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
+  #   termini: 9.0.0-beta1
+  #   # renovate: datasource=github-releases depName=OpenVoxProject/openvox
+  #   openvox: 9.0.0-beta1
+  #   # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
+  #   db: 9.0.0-beta1
+  #   # renovate: datasource=github-releases depName=OpenVoxProject/openvox
+  #   agent: 9.0.0-beta1

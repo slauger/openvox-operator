@@ -75,6 +75,7 @@ jobs:
       attestations: write
     with:
       image_name: openvox-server-${{ matrix.major }}
+      allow_failure: ${{ matrix.major != '8' }}
       dockerfile: images/openvox-server/Containerfile
       context: '.'
       push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
@@ -97,6 +98,7 @@ jobs:
       attestations: write
     with:
       image_name: openvox-db-${{ matrix.major }}
+      allow_failure: ${{ matrix.major != '8' }}
       dockerfile: images/openvox-db/Containerfile
       context: '.'
       push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
@@ -133,6 +135,7 @@ jobs:
       attestations: write
     with:
       image_name: openvox-agent-${{ matrix.major }}
+      allow_failure: ${{ matrix.major != '8' }}
       dockerfile: images/openvox-agent/Containerfile
       context: 'images/openvox-agent'
       push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}

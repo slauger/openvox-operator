@@ -41,6 +41,11 @@ on:
         required: false
         type: string
         default: ''
+      allow_failure:
+        description: 'Do not fail the workflow if the build/manifest fails (best-effort, e.g. pre-release majors)'
+        required: false
+        type: boolean
+        default: false
       sign:
         description: 'Sign images with cosign keyless signing'
         required: false
@@ -142,6 +147,7 @@ jobs:
           password: ${{ github.token }}
 
       - name: Build and push
+        continue-on-error: ${{ inputs.allow_failure }}
         uses: docker/build-push-action@v7
         with:
           context: ${{ inputs.context }}
@@ -158,6 +164,7 @@ jobs:
   manifest:
     if: inputs.push
     needs: [prepare, build]
+    continue-on-error: ${{ inputs.allow_failure }}
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.result.outputs.image }}

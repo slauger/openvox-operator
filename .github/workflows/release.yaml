@@ -89,6 +89,7 @@ jobs:
       attestations: write
     with:
       image_name: openvox-server-${{ matrix.major }}
+      allow_failure: ${{ matrix.major != '8' }}
       dockerfile: images/openvox-server/Containerfile
       context: '.'
       push: true
@@ -113,6 +114,7 @@ jobs:
       attestations: write
     with:
       image_name: openvox-db-${{ matrix.major }}
+      allow_failure: ${{ matrix.major != '8' }}
       dockerfile: images/openvox-db/Containerfile
       context: '.'
       push: true
@@ -133,35 +135,30 @@ jobs:
       image: ${{ needs.openvox-operator.outputs.image }}
       digest: ${{ needs.openvox-operator.outputs.digest }}
 
+  # Only the default major (8) is conforma-validated: it is the released,
+  # :latest-tagged image. Major 9 is a best-effort pre-release build.
   validate-openvox-server:
-    needs: [semantic-release, prepare, openvox-server]
+    needs: [semantic-release, openvox-server]
     if: needs.semantic-release.outputs.new-release-published == 'true'
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     uses: ./.github/workflows/_conforma-validate.yaml
     permissions:
       contents: read
       id-token: write
       packages: read
     with:
-      # Matrixed build job outputs collapse to a single value, so reconstruct the
-      # per-major image reference; ec resolves the tag to a digest itself.
-      image: ghcr.io/${{ github.repository_owner }}/openvox-server-${{ matrix.major }}:${{ needs.semantic-release.outputs.new-release-version }}
+      # ec resolves the tag to a digest itself.
+      image: ghcr.io/${{ github.repository_owner }}/openvox-server-8:${{ needs.semantic-release.outputs.new-release-version }}
 
   validate-openvox-db:
-    needs: [semantic-release, prepare, openvox-db]
+    needs: [semantic-release, openvox-db]
     if: needs.semantic-release.outputs.new-release-published == 'true'
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     uses: ./.github/workflows/_conforma-validate.yaml
     permissions:
       contents: read
       id-token: write
       packages: read
     with:
-      image: ghcr.io/${{ github.repository_owner }}/openvox-db-${{ matrix.major }}:${{ needs.semantic-release.outputs.new-release-version }}
+      image: ghcr.io/${{ github.repository_owner }}/openvox-db-8:${{ needs.semantic-release.outputs.new-release-version }}
 
   helm-charts:
     needs: [semantic-release, openvox-operator, openvox-server, openvox-db]

@@ -5,6 +5,8 @@ OPENVOX_AGENT_IMG ?= ghcr.io/slauger/openvox-agent-8:latest
 OPENVOX_MOCK_IMG ?= ghcr.io/slauger/openvox-mock:latest
 NAMESPACE ?= openvox-system
 IMAGE_REGISTRY ?= ghcr.io/slauger
+# OpenVox major selects the content image variant (-8 / -9) for e2e tests.
+OPENVOX_MAJOR ?= 8
 CONTAINER_TOOL ?= $(shell which podman 2>/dev/null || which docker 2>/dev/null)
 CONTROLLER_GEN = go tool controller-gen
 GOVULNCHECK = go tool govulncheck
@@ -183,7 +185,7 @@ $(CHAINSAW):
 	curl -sSfL "https://github.com/kyverno/chainsaw/releases/download/$(CHAINSAW_VERSION)/chainsaw_$${OS}_$${ARCH}.tar.gz" | tar xz -C $(LOCALBIN) chainsaw
 	@chmod +x $(CHAINSAW)
 
-E2E_CHAINSAW = IMAGE_TAG=$(IMAGE_TAG) IMAGE_REGISTRY=$(IMAGE_REGISTRY) $(CHAINSAW) test --config tests/e2e/chainsaw-config.yaml
+E2E_CHAINSAW = IMAGE_TAG=$(IMAGE_TAG) IMAGE_REGISTRY=$(IMAGE_REGISTRY) OPENVOX_MAJOR=$(OPENVOX_MAJOR) $(CHAINSAW) test --config tests/e2e/chainsaw-config.yaml
 
 
 .PHONY: e2e-setup

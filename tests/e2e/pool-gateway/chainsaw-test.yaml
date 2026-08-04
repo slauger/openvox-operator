@@ -43,7 +43,7 @@ spec:
               helm upgrade --install openvox-stack-gw "${REPO_ROOT}/charts/openvox-stack" \
                 --namespace e2e-pool-gateway --create-namespace \
                 --values "${REPO_ROOT}/charts/openvox-stack/ci/pool-gateway-values.yaml" \
-                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server \
+                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server-${OPENVOX_MAJOR:-8} \
                 --set config.image.tag="${IMAGE_TAG}" \
                 --set config.image.pullPolicy=Always
       catch:

@@ -13,7 +13,7 @@
 # release tarball, but 9.0.0 betas publish only RPMs/DEBs (no tarball), and the version
 # strings differ per artifact (RPM/repo use ~beta, the openvox gem uses .pre.beta, the
 # GitHub tag uses -beta). Re-enable at GA by uncommenting the entry below and updating
-# the server/db install path -- see the tracking issue.
+# the server/db install path -- see #503.
 include:
   - major: "8"
     latest: true

@@ -60,7 +60,7 @@ declaratively: `openvox-autosign` (configured by [SigningPolicy](signingpolicy.m
 resources) and `openvox-enc` (configured by a [NodeClassifier](nodeclassifier.md)).
 
 `autosignCommand` and `externalNodesCommand` are escape hatches for teams that need
-to run their own script instead — for example an autosign hook that registers the
+to run their own script instead - for example an autosign hook that registers the
 node in an external inventory, or an ENC that queries a CMDB. When set:
 
 - puppet.conf points `autosign` / `external_nodes` at the given executable.
@@ -74,7 +74,7 @@ server image or is mounted into the pod via the Server's
 `extraEnv` / `envFrom`.
 
 !!! warning
-    Autosign is the certificate admission boundary — a command that signs
+    Autosign is the certificate admission boundary - a command that signs
     unconditionally will sign every CSR. Review a custom `autosignCommand` as
     carefully as you would a firewall rule.
 

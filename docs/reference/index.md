@@ -81,11 +81,11 @@ optional mount target (`environment` **or** `mountPath`, not both).
 
 **Mount target rules:**
 
-- **0 entries** — an `emptyDir` is mounted at `environmentpath` so Puppet Server can
+- **0 entries** - an `emptyDir` is mounted at `environmentpath` so Puppet Server can
   bootstrap its default `production` environment.
-- **1 entry without `environment`/`mountPath`** — the source is mounted as the whole
+- **1 entry without `environment`/`mountPath`** - the source is mounted as the whole
   `environments` tree at `environmentpath` (the pre-list behaviour).
-- **More than 1 entry** — each entry must set `environment` or `mountPath`;
+- **More than 1 entry** - each entry must set `environment` or `mountPath`;
   `environment` values must be unique. `mountPath` must be under `/etc/puppetlabs/code`.
 
 Entries are mounted read-only. A Server's `code` replaces (does not merge with) the

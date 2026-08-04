@@ -292,6 +292,12 @@ func TestBuildPodSpec_SecurityContext(t *testing.T) {
 	if psc.RunAsNonRoot == nil || !*psc.RunAsNonRoot {
 		t.Error("expected RunAsNonRoot=true")
 	}
+	if psc.FSGroup == nil || *psc.FSGroup != 1001 {
+		t.Errorf("expected FSGroup=1001, got %v", psc.FSGroup)
+	}
+	if psc.FSGroupChangePolicy == nil || *psc.FSGroupChangePolicy != corev1.FSGroupChangeOnRootMismatch {
+		t.Errorf("expected FSGroupChangePolicy=OnRootMismatch, got %v", psc.FSGroupChangePolicy)
+	}
 	if psc.SeccompProfile == nil || psc.SeccompProfile.Type != corev1.SeccompProfileTypeRuntimeDefault {
 		t.Error("expected Seccomp RuntimeDefault")
 	}

@@ -28,8 +28,10 @@ const (
 	DefaultCAStorageGi = "1Gi"
 	CASetupRunAsUser   = int64(1001)
 	CASetupRunAsGroup  = int64(0)
+	CASetupFSGroup     = int64(1001)
 	ServerRunAsUser    = int64(1001)
 	ServerRunAsGroup   = int64(0)
+	ServerFSGroup      = int64(1001)
 )
 
 // CA setup Job resource defaults (JRuby/JVM workload).
@@ -44,6 +46,7 @@ const (
 const (
 	DatabaseRunAsUser  = int64(1001)
 	DatabaseRunAsGroup = int64(0)
+	DatabaseFSGroup    = int64(1001)
 	DatabaseHTTPSPort  = int32(8081)
 	DatabaseHTTPPort   = int32(8080)
 )

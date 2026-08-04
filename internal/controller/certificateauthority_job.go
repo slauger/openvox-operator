@@ -174,6 +174,11 @@ func (r *CertificateAuthorityReconciler) buildCASetupJob(ctx context.Context, ca
 						RunAsUser:    int64Ptr(CASetupRunAsUser),
 						RunAsGroup:   int64Ptr(CASetupRunAsGroup),
 						RunAsNonRoot: boolPtr(true),
+						// fsGroup makes the kubelet chown the CA PVC to the group so uid 1001
+						// can write to CSI-provisioned volumes that are otherwise owned by root.
+						// OnRootMismatch avoids a recursive chown on every pod start.
+						FSGroup:             int64Ptr(CASetupFSGroup),
+						FSGroupChangePolicy: fsGroupChangePolicyPtr(corev1.FSGroupChangeOnRootMismatch),
 						SeccompProfile: &corev1.SeccompProfile{
 							Type: corev1.SeccompProfileTypeRuntimeDefault,
 						},

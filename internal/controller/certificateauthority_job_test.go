@@ -182,6 +182,13 @@ func TestBuildCASetupJob(t *testing.T) {
 		if *spec.SecurityContext.RunAsUser != CASetupRunAsUser {
 			t.Errorf("expected RunAsUser %d, got %d", CASetupRunAsUser, *spec.SecurityContext.RunAsUser)
 		}
+		if spec.SecurityContext.FSGroup == nil || *spec.SecurityContext.FSGroup != CASetupFSGroup {
+			t.Errorf("expected FSGroup %d, got %v", CASetupFSGroup, spec.SecurityContext.FSGroup)
+		}
+		if spec.SecurityContext.FSGroupChangePolicy == nil ||
+			*spec.SecurityContext.FSGroupChangePolicy != corev1.FSGroupChangeOnRootMismatch {
+			t.Errorf("expected FSGroupChangePolicy OnRootMismatch, got %v", spec.SecurityContext.FSGroupChangePolicy)
+		}
 	})
 }
 

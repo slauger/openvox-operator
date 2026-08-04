@@ -481,6 +481,11 @@ chmod 640 /ssl/private_keys/puppet.pem`
 			RunAsUser:    int64Ptr(ServerRunAsUser),
 			RunAsGroup:   int64Ptr(ServerRunAsGroup),
 			RunAsNonRoot: boolPtr(true),
+			// fsGroup makes the kubelet chown mounted volumes (SSL, CA data) to the group
+			// so uid 1001 can write to CSI-provisioned volumes that are otherwise owned by
+			// root. OnRootMismatch avoids a recursive chown on every pod start.
+			FSGroup:             int64Ptr(ServerFSGroup),
+			FSGroupChangePolicy: fsGroupChangePolicyPtr(corev1.FSGroupChangeOnRootMismatch),
 			SeccompProfile: &corev1.SeccompProfile{
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			},

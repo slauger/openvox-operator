@@ -252,6 +252,7 @@ jobs:
             --title "${{ steps.pr-content.outputs.title }}" \
             --body-file /tmp/pr_body.txt \
             --base main \
-            --head develop
+            --head develop \
+            --assignee "${{ github.repository_owner }}"
         env:
           GH_TOKEN: ${{ github.token }}

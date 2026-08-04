@@ -477,14 +477,11 @@ chmod 640 /ssl/private_keys/puppet.pem`
 	podSpec := corev1.PodSpec{
 		ServiceAccountName:           fmt.Sprintf("%s-server", server.Spec.ConfigRef),
 		AutomountServiceAccountToken: &automountServiceAccountToken,
-		SecurityContext: &corev1.PodSecurityContext{
-			RunAsUser:    int64Ptr(ServerRunAsUser),
-			RunAsGroup:   int64Ptr(ServerRunAsGroup),
-			RunAsNonRoot: boolPtr(true),
-			SeccompProfile: &corev1.SeccompProfile{
-				Type: corev1.SeccompProfileTypeRuntimeDefault,
-			},
-		},
+		// fsGroup lets the kubelet chown mounted volumes (SSL, CA data) to the group
+		// so the non-root user can write to CSI-provisioned volumes that are otherwise
+		// owned by root; overridable via server.spec.securityContext.
+		SecurityContext: buildPodSecurityContext(
+			ServerRunAsUser, ServerRunAsGroup, ServerFSGroup, server.Spec.SecurityContext),
 		TopologySpreadConstraints: server.Spec.TopologySpreadConstraints,
 		Affinity:                  server.Spec.Affinity,
 		PriorityClassName:         server.Spec.PriorityClassName,

@@ -247,14 +247,11 @@ chmod 640 /ssl/private_keys/%s.pem`, certname, certname, certname)
 	automountServiceAccountToken := false
 	podSpec := corev1.PodSpec{
 		AutomountServiceAccountToken: &automountServiceAccountToken,
-		SecurityContext: &corev1.PodSecurityContext{
-			RunAsUser:    int64Ptr(DatabaseRunAsUser),
-			RunAsGroup:   int64Ptr(DatabaseRunAsGroup),
-			RunAsNonRoot: boolPtr(true),
-			SeccompProfile: &corev1.SeccompProfile{
-				Type: corev1.SeccompProfileTypeRuntimeDefault,
-			},
-		},
+		// fsGroup lets the kubelet chown mounted volumes to the group so the non-root
+		// user can write to CSI-provisioned volumes that are otherwise owned by root;
+		// overridable via database.spec.securityContext.
+		SecurityContext: buildPodSecurityContext(
+			DatabaseRunAsUser, DatabaseRunAsGroup, DatabaseFSGroup, db.Spec.SecurityContext),
 		PriorityClassName: db.Spec.PriorityClassName,
 		InitContainers:    []corev1.Container{initContainer},
 		Containers:        []corev1.Container{container},

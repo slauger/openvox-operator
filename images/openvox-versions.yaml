@@ -5,10 +5,15 @@
 # this file (yq -o=json '.include') to build the per-major matrix and pass the
 # versions as build-args to the Containerfiles.
 #
-# Renovate keeps the pins current: the "8" entry tracks the stable 8.x line, the
-# "9" entry tracks 9.x pre-releases. The two majors bump independently in separate
-# grouped PRs (see renovate.json). Major 8 is the default and the only one tagged
-# :latest; major 9 is built and pushed but never :latest and never the default.
+# Renovate keeps the pins current: the "8" entry tracks the stable 8.x line. Major 8
+# is the default and the only one tagged :latest.
+#
+# Major 9 is TEMPORARILY DISABLED (commented out below) until OpenVox 9.0 GA. The 9.x
+# pre-releases cannot be built reproducibly today: the server/db images install from a
+# release tarball, but 9.0.0 betas publish only RPMs/DEBs (no tarball), and the version
+# strings differ per artifact (RPM/repo use ~beta, the openvox gem uses .pre.beta, the
+# GitHub tag uses -beta). Re-enable at GA by uncommenting the entry below and updating
+# the server/db install path -- see the tracking issue.
 include:
   - major: "8"
     latest: true
@@ -22,15 +27,16 @@ include:
     db: 8.15.0
     # renovate: datasource=github-releases depName=OpenVoxProject/openvox
     agent: 8.28.1
-  - major: "9"
-    latest: false
-    # renovate: datasource=github-releases depName=OpenVoxProject/openvox-server
-    server: 9.0.0-beta2
-    # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
-    termini: 9.0.0-beta1
-    # renovate: datasource=github-releases depName=OpenVoxProject/openvox
-    openvox: 9.0.0-beta1
-    # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
-    db: 9.0.0-beta1
-    # renovate: datasource=github-releases depName=OpenVoxProject/openvox
-    agent: 9.0.0-beta1
+  # Re-enable at OpenVox 9.0 GA (also fix server/db to install from RPM, not tarball):
+  # - major: "9"
+  #   latest: false
+  #   # renovate: datasource=github-releases depName=OpenVoxProject/openvox-server
+  #   server: 9.0.0-beta2
+  #   # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
+  #   termini: 9.0.0-beta1
+  #   # renovate: datasource=github-releases depName=OpenVoxProject/openvox
+  #   openvox: 9.0.0-beta1
+  #   # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
+  #   db: 9.0.0-beta1
+  #   # renovate: datasource=github-releases depName=OpenVoxProject/openvox
+  #   agent: 9.0.0-beta1

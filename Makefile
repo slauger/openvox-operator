@@ -234,8 +234,15 @@ e2e-cleanup-full: e2e-cleanup ## Full cleanup including CRDs (use between test g
 	@echo "Removing CRDs..."
 	@kubectl get crds -o name | grep 'openvox\.voxpupuli\.org' | xargs -r kubectl delete --ignore-not-found 2>/dev/null || true
 
+# Helm only installs CRDs from crds/ on the first install and never upgrades them
+# on `helm upgrade`. On the persistent E2E cluster that means new CRD fields never
+# reach the API server, so apply them explicitly (server-side handles the large CRDs).
+.PHONY: e2e-crds
+e2e-crds: ## Apply/update operator CRDs (Helm does not upgrade CRDs on upgrade).
+	kubectl apply --server-side --force-conflicts -f charts/openvox-operator/crds/
+
 .PHONY: e2e-operator-base
-e2e-operator-base: e2e-cleanup ## Install operator: webhooks=false, gatewayAPI=false.
+e2e-operator-base: e2e-cleanup e2e-crds ## Install operator: webhooks=false, gatewayAPI=false.
 	helm upgrade --install openvox-operator charts/openvox-operator \
 		--namespace $(NAMESPACE) --create-namespace \
 		--set image.repository=$(IMAGE_REGISTRY)/openvox-operator \
@@ -249,7 +256,7 @@ e2e-operator-base: e2e-cleanup ## Install operator: webhooks=false, gatewayAPI=f
 		-n $(NAMESPACE) --timeout=2m
 
 .PHONY: e2e-operator-gateway
-e2e-operator-gateway: e2e-cleanup ## Install operator: webhooks=false, gatewayAPI=true.
+e2e-operator-gateway: e2e-cleanup e2e-crds ## Install operator: webhooks=false, gatewayAPI=true.
 	helm upgrade --install openvox-operator charts/openvox-operator \
 		--namespace $(NAMESPACE) --create-namespace \
 		--set image.repository=$(IMAGE_REGISTRY)/openvox-operator \
@@ -263,7 +270,7 @@ e2e-operator-gateway: e2e-cleanup ## Install operator: webhooks=false, gatewayAP
 		-n $(NAMESPACE) --timeout=2m
 
 .PHONY: e2e-operator-webhooks-cm
-e2e-operator-webhooks-cm: e2e-cleanup ## Install operator: webhooks=true, cert-manager.
+e2e-operator-webhooks-cm: e2e-cleanup e2e-crds ## Install operator: webhooks=true, cert-manager.
 	helm upgrade --install openvox-operator charts/openvox-operator \
 		--namespace $(NAMESPACE) --create-namespace \
 		--set image.repository=$(IMAGE_REGISTRY)/openvox-operator \

@@ -1,5 +1,7 @@
 package controller
 
+import corev1 "k8s.io/api/core/v1"
+
 const (
 	// Label keys used across all resources.
 	LabelConfig               = "openvox.voxpupuli.org/config"
@@ -61,3 +63,7 @@ func databaseLabels(dbName string) map[string]string {
 
 func int64Ptr(i int64) *int64 { return &i }
 func boolPtr(b bool) *bool    { return &b }
+
+func fsGroupChangePolicyPtr(p corev1.PodFSGroupChangePolicy) *corev1.PodFSGroupChangePolicy {
+	return &p
+}

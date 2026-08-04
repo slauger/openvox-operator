@@ -112,6 +112,31 @@ type ServerSpec struct {
 	// NetworkPolicy defines NetworkPolicy settings.
 	// +optional
 	NetworkPolicy *NetworkPolicySpec `json:"networkPolicy,omitempty"`
+
+	// ExtraEnv defines additional environment variables for the openvox-server container.
+	// Entries are appended after the operator-managed variables.
+	// +optional
+	ExtraEnv []corev1.EnvVar `json:"extraEnv,omitempty"`
+
+	// EnvFrom defines sources to populate environment variables in the
+	// openvox-server container from, such as ConfigMaps or Secrets.
+	// +optional
+	EnvFrom []corev1.EnvFromSource `json:"envFrom,omitempty"`
+
+	// ExtraVolumes defines additional volumes added to the Server pods.
+	// Volume names must not collide with the operator-managed volumes.
+	// +optional
+	ExtraVolumes []corev1.Volume `json:"extraVolumes,omitempty"`
+
+	// ExtraVolumeMounts defines additional volume mounts for the openvox-server container.
+	// Mount paths must not collide with the operator-managed mounts.
+	// +optional
+	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+
+	// SecurityContext overrides the pod-level security context defaults
+	// (runAsUser/runAsGroup/fsGroup) applied to the Server pods.
+	// +optional
+	SecurityContext *PodSecurityContextSpec `json:"securityContext,omitempty"`
 }
 
 // PDBSpec defines PodDisruptionBudget settings.

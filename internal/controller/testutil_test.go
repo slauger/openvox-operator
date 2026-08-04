@@ -238,6 +238,30 @@ func withPriorityClassName(name string) serverOption {
 	}
 }
 
+func withExtraEnv(env ...corev1.EnvVar) serverOption {
+	return func(s *openvoxv1alpha1.Server) {
+		s.Spec.ExtraEnv = env
+	}
+}
+
+func withEnvFrom(sources ...corev1.EnvFromSource) serverOption {
+	return func(s *openvoxv1alpha1.Server) {
+		s.Spec.EnvFrom = sources
+	}
+}
+
+func withExtraVolumes(volumes ...corev1.Volume) serverOption {
+	return func(s *openvoxv1alpha1.Server) {
+		s.Spec.ExtraVolumes = volumes
+	}
+}
+
+func withExtraVolumeMounts(mounts ...corev1.VolumeMount) serverOption {
+	return func(s *openvoxv1alpha1.Server) {
+		s.Spec.ExtraVolumeMounts = mounts
+	}
+}
+
 type poolOption func(*openvoxv1alpha1.Pool)
 
 func newPool(name string, opts ...poolOption) *openvoxv1alpha1.Pool {

@@ -32,6 +32,7 @@ Autosigning is configured via [SigningPolicy](signingpolicy.md) resources that r
 | `storage` | [StorageSpec](index.md#storagespec) | - | PVC settings for CA data |
 | `external` | [ExternalCASpec](#externalcaspec) | - | External CA configuration (mutually exclusive with custom storage) |
 | `intermediateCA` | [IntermediateCASpec](#intermediatecaspec) | - | Intermediate CA configuration |
+| `securityContext` | [PodSecurityContextSpec](index.md#podsecuritycontextspec) | - | Override pod-level security context (runAsUser/runAsGroup/fsGroup) of the CA setup Job pod |
 
 ### ExternalCASpec
 

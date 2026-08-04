@@ -1,0 +1,114 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: server-extra-env-volumes
+spec:
+  namespace: e2e-server-extra
+  bindings:
+    - name: registry
+      value: (env('IMAGE_REGISTRY') || 'ghcr.io/slauger')
+    - name: imageTag
+      value: (env('IMAGE_TAG') || 'latest')
+  steps:
+    - name: Create namespace and referenced secrets
+      try:
+        - apply:
+            resource:
+              apiVersion: v1
+              kind: Namespace
+              metadata:
+                name: e2e-server-extra
+        - apply:
+            resource:
+              apiVersion: v1
+              kind: Secret
+              metadata:
+                name: server-extra-env
+                namespace: e2e-server-extra
+              stringData:
+                EXTRA_FROM_SECRET: from-envfrom
+        - apply:
+            resource:
+              apiVersion: v1
+              kind: Secret
+              metadata:
+                name: server-extra-files
+                namespace: e2e-server-extra
+              stringData:
+                extra.txt: hello-file
+
+    - name: Install openvox-stack with extra env/volumes
+      try:
+        - script:
+            timeout: 2m
+            content: |
+              REPO_ROOT=$(git rev-parse --show-toplevel)
+              IMAGE_TAG=${IMAGE_TAG:-$(git describe --always)}
+              IMAGE_REGISTRY=${IMAGE_REGISTRY:-ghcr.io/slauger}
+              helm upgrade --install e2e-server-extra "${REPO_ROOT}/charts/openvox-stack" \
+                --namespace e2e-server-extra --create-namespace \
+                --values "${REPO_ROOT}/charts/openvox-stack/ci/server-extra-env-volumes-values.yaml" \
+                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server \
+                --set config.image.tag="${IMAGE_TAG}" \
+                --set config.image.pullPolicy=Always
+      catch:
+        - events: {}
+
+    - name: Assert Server is Running
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: e2e-server-extra-ca
+              status:
+                phase: Running
+                ready: 1
+                desired: 1
+
+    - name: Verify extraEnv, envFrom and extraVolume on the server pod
+      try:
+        - script:
+            timeout: 1m
+            content: |
+              set -eu
+              NS=e2e-server-extra
+              POD=$(kubectl get pods -n "${NS}" \
+                -l openvox.voxpupuli.org/server=e2e-server-extra-ca \
+                -o jsonpath='{.items[0].metadata.name}')
+              echo "pod=${POD}"
+
+              fail() { echo "ERROR: $1"; kubectl get pod "${POD}" -n "${NS}" -o yaml; exit 1; }
+
+              # extraEnv (plain value)
+              VAL=$(kubectl get pod "${POD}" -n "${NS}" \
+                -o jsonpath='{.spec.containers[?(@.name=="openvox-server")].env[?(@.name=="EXTRA_PLAIN")].value}')
+              [ "${VAL}" = "hello-from-extraenv" ] || fail "extraEnv EXTRA_PLAIN not propagated (got '${VAL}')"
+
+              # envFrom (secretRef)
+              EF=$(kubectl get pod "${POD}" -n "${NS}" \
+                -o jsonpath='{.spec.containers[?(@.name=="openvox-server")].envFrom[*].secretRef.name}')
+              echo "${EF}" | grep -qw server-extra-env || fail "envFrom secretRef not propagated (got '${EF}')"
+
+              # extraVolume
+              VOL=$(kubectl get pod "${POD}" -n "${NS}" \
+                -o jsonpath='{.spec.volumes[?(@.name=="extra-secret-vol")].secret.secretName}')
+              [ "${VOL}" = "server-extra-files" ] || fail "extraVolume not propagated (got '${VOL}')"
+
+              # extraVolumeMount
+              MNT=$(kubectl get pod "${POD}" -n "${NS}" \
+                -o jsonpath='{.spec.containers[?(@.name=="openvox-server")].volumeMounts[?(@.name=="extra-secret-vol")].mountPath}')
+              [ "${MNT}" = "/etc/puppetlabs/extra-files" ] || fail "extraVolumeMount not propagated (got '${MNT}')"
+
+              # the mounted secret is actually readable in the container
+              CONTENT=$(kubectl exec "${POD}" -n "${NS}" -c openvox-server -- cat /etc/puppetlabs/extra-files/extra.txt)
+              [ "${CONTENT}" = "hello-file" ] || fail "mounted secret content wrong (got '${CONTENT}')"
+
+              echo "OK: extraEnv, envFrom, extraVolumes and extraVolumeMounts propagated"
+      finally:
+        - script:
+            timeout: 2m
+            content: |
+              helm uninstall e2e-server-extra --namespace e2e-server-extra --wait 2>/dev/null || true
+              kubectl delete namespace e2e-server-extra --ignore-not-found 2>/dev/null || true

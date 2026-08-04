@@ -9,6 +9,7 @@
   "postUpdateOptions": [
     "gomodTidy"
   ],
+  "platformAutomerge": false,
   "customManagers": [
     {
       "customType": "regex",
@@ -92,6 +93,61 @@
         "!OpenVoxProject/*"
       ],
       "groupName": "CI tooling"
+    },
+    {
+      "description": "Automerge CI tooling (conforma, hadolint, shellcheck, ...) minor/patch once CI is green",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "!OpenVoxProject/*"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "automerge": true
+    },
+    {
+      "description": "Automerge container base image updates (excludes the Go toolchain image)",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchPackageNames": [
+        "!docker.io/library/golang"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest",
+        "pin"
+      ],
+      "automerge": true
+    },
+    {
+      "description": "Automerge GitHub Actions minor/patch (majors stay manual)",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "automerge": true
+    },
+    {
+      "description": "Automerge Go module patch/digest updates (minor/major stay manual)",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchUpdateTypes": [
+        "patch",
+        "digest"
+      ],
+      "automerge": true
     }
   ]
 }

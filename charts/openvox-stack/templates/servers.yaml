@@ -61,4 +61,20 @@ spec:
   {{- with $entry.priorityClassName }}
   priorityClassName: {{ . }}
   {{- end }}
+  {{- with $entry.extraEnv }}
+  extraEnv:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $entry.envFrom }}
+  envFrom:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $entry.extraVolumes }}
+  extraVolumes:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $entry.extraVolumeMounts }}
+  extraVolumeMounts:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 {{- end }}

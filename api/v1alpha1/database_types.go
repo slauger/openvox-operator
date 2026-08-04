@@ -73,6 +73,11 @@ type DatabaseSpec struct {
 	// Service defines the Service configuration for the Database.
 	// +optional
 	Service DatabaseServiceSpec `json:"service,omitempty"`
+
+	// SecurityContext overrides the pod-level security context defaults
+	// (runAsUser/runAsGroup/fsGroup) applied to the Database pods.
+	// +optional
+	SecurityContext *PodSecurityContextSpec `json:"securityContext,omitempty"`
 }
 
 // PostgresSpec defines the external PostgreSQL connection settings.

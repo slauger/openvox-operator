@@ -292,6 +292,12 @@ func TestBuildPodSpec_SecurityContext(t *testing.T) {
 	if psc.RunAsNonRoot == nil || !*psc.RunAsNonRoot {
 		t.Error("expected RunAsNonRoot=true")
 	}
+	if psc.FSGroup == nil || *psc.FSGroup != 1001 {
+		t.Errorf("expected FSGroup=1001, got %v", psc.FSGroup)
+	}
+	if psc.FSGroupChangePolicy == nil || *psc.FSGroupChangePolicy != corev1.FSGroupChangeOnRootMismatch {
+		t.Errorf("expected FSGroupChangePolicy=OnRootMismatch, got %v", psc.FSGroupChangePolicy)
+	}
 	if psc.SeccompProfile == nil || psc.SeccompProfile.Type != corev1.SeccompProfileTypeRuntimeDefault {
 		t.Error("expected Seccomp RuntimeDefault")
 	}
@@ -309,6 +315,35 @@ func TestBuildPodSpec_SecurityContext(t *testing.T) {
 	}
 	if csc.AllowPrivilegeEscalation == nil || *csc.AllowPrivilegeEscalation {
 		t.Error("expected AllowPrivilegeEscalation=false")
+	}
+}
+
+func TestBuildPodSpec_SecurityContextOverride(t *testing.T) {
+	cfg := newConfig("production")
+	server := newServer("test-server")
+
+	user := int64(2000)
+	fsGroup := int64(2000)
+	server.Spec.SecurityContext = &openvoxv1alpha1.PodSecurityContextSpec{
+		RunAsUser: &user,
+		FSGroup:   &fsGroup,
+	}
+
+	podSpec := testBuildPodSpec(server, cfg)
+	psc := podSpec.SecurityContext
+	if psc == nil {
+		t.Fatal("pod security context is nil")
+		return
+	}
+	if psc.RunAsUser == nil || *psc.RunAsUser != 2000 {
+		t.Errorf("expected overridden RunAsUser=2000, got %v", psc.RunAsUser)
+	}
+	if psc.FSGroup == nil || *psc.FSGroup != 2000 {
+		t.Errorf("expected overridden FSGroup=2000, got %v", psc.FSGroup)
+	}
+	// Unset fields keep the defaults.
+	if psc.RunAsGroup == nil || *psc.RunAsGroup != ServerRunAsGroup {
+		t.Errorf("expected default RunAsGroup=%d, got %v", ServerRunAsGroup, psc.RunAsGroup)
 	}
 }
 
@@ -502,5 +537,130 @@ func TestResolveJavaArgs_FromMemoryLimit(t *testing.T) {
 	expected := fmt.Sprintf("-Xms%dm -Xmx%dm", 3686, 3686)
 	if got != expected {
 		t.Errorf("resolveJavaArgs() = %q, want %q", got, expected)
+	}
+}
+
+func TestBuildPodSpec_ExtraEnvAndEnvFrom(t *testing.T) {
+	cfg := newConfig("production")
+	server := newServer("test-server",
+		withExtraEnv(corev1.EnvVar{Name: "INVENTORY_API_URL", Value: "https://inventory.internal"}),
+		withEnvFrom(corev1.EnvFromSource{
+			SecretRef: &corev1.SecretEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "server-extra-env"},
+			},
+		}),
+	)
+
+	podSpec := testBuildPodSpec(server, cfg)
+	container := podSpec.Containers[0]
+
+	// JAVA_ARGS stays first; extra variables are appended after it.
+	if len(container.Env) != 2 {
+		t.Fatalf("container should have 2 env vars, got %d", len(container.Env))
+	}
+	if container.Env[0].Name != "JAVA_ARGS" {
+		t.Errorf("first env var = %q, want JAVA_ARGS", container.Env[0].Name)
+	}
+	if container.Env[1].Name != "INVENTORY_API_URL" || container.Env[1].Value != "https://inventory.internal" {
+		t.Errorf("extra env var not appended, got %+v", container.Env[1])
+	}
+
+	if len(container.EnvFrom) != 1 {
+		t.Fatalf("container should have 1 envFrom source, got %d", len(container.EnvFrom))
+	}
+	if container.EnvFrom[0].SecretRef == nil || container.EnvFrom[0].SecretRef.Name != "server-extra-env" {
+		t.Errorf("envFrom source not passed through, got %+v", container.EnvFrom[0])
+	}
+}
+
+func TestBuildPodSpec_NoExtraEnv(t *testing.T) {
+	cfg := newConfig("production")
+	server := newServer("test-server")
+
+	podSpec := testBuildPodSpec(server, cfg)
+	container := podSpec.Containers[0]
+
+	if len(container.Env) != 1 || container.Env[0].Name != "JAVA_ARGS" {
+		t.Errorf("container env = %+v, want only JAVA_ARGS", container.Env)
+	}
+	if container.EnvFrom != nil {
+		t.Errorf("container envFrom = %+v, want nil", container.EnvFrom)
+	}
+}
+
+func TestBuildPodSpec_ExtraVolumesAndMounts(t *testing.T) {
+	cfg := newConfig("production")
+	server := newServer("test-server",
+		withExtraVolumes(corev1.Volume{
+			Name: "autosign-client",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{SecretName: "autosign-client"},
+			},
+		}),
+		withExtraVolumeMounts(corev1.VolumeMount{
+			Name:      "autosign-client",
+			MountPath: "/etc/puppetlabs/autosign-client",
+			ReadOnly:  true,
+		}),
+	)
+
+	podSpec := testBuildPodSpec(server, cfg)
+
+	// The extra volume is appended last, so operator-managed volumes keep their position.
+	lastVolume := podSpec.Volumes[len(podSpec.Volumes)-1]
+	if lastVolume.Name != "autosign-client" {
+		t.Errorf("last volume = %q, want autosign-client", lastVolume.Name)
+	}
+	if lastVolume.Secret == nil || lastVolume.Secret.SecretName != "autosign-client" {
+		t.Errorf("extra volume source not passed through, got %+v", lastVolume.VolumeSource)
+	}
+
+	mounts := podSpec.Containers[0].VolumeMounts
+	lastMount := mounts[len(mounts)-1]
+	if lastMount.Name != "autosign-client" || lastMount.MountPath != "/etc/puppetlabs/autosign-client" {
+		t.Errorf("last volume mount = %+v, want the autosign-client mount", lastMount)
+	}
+	if !lastMount.ReadOnly {
+		t.Error("extra volume mount should keep readOnly: true")
+	}
+
+	// Extra mounts go to the main container only, not the tls-init container.
+	for _, m := range podSpec.InitContainers[0].VolumeMounts {
+		if m.Name == "autosign-client" {
+			t.Error("extra volume mount leaked into the tls-init container")
+		}
+	}
+}
+
+func TestBuildPodSpec_ExtraVolumesOnCARole(t *testing.T) {
+	cfg := newConfig("production")
+	server := newServer("test-ca", withCA(true), withServerRole(false),
+		withExtraVolumes(corev1.Volume{
+			Name:         "scratch",
+			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+		}),
+		withExtraVolumeMounts(corev1.VolumeMount{Name: "scratch", MountPath: "/scratch"}),
+	)
+
+	podSpec := testBuildPodSpec(server, cfg)
+
+	// The CA pod runs the autosign binary, so it needs the same passthrough.
+	found := false
+	for _, v := range podSpec.Volumes {
+		if v.Name == "scratch" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("CA pod should have the extra volume")
+	}
+	found = false
+	for _, m := range podSpec.Containers[0].VolumeMounts {
+		if m.MountPath == "/scratch" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("CA pod should have the extra volume mount")
 	}
 }

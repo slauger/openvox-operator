@@ -74,3 +74,17 @@ Used by [Config](config.md) and [Server](server.md) to define the Puppet code so
 | `image` | string | - | OCI image reference containing Puppet code (Kubernetes 1.35+, or 1.31+ with feature gate) |
 | `imagePullPolicy` | string | `IfNotPresent` | When to pull the code image |
 | `imagePullSecret` | string | - | Secret name for pulling from private registries |
+
+### PodSecurityContextSpec
+
+Used by [CertificateAuthority](certificateauthority.md), [Server](server.md) and [Database](database.md) to override the pod-level security context of managed pods. All fields are optional; an unset field keeps the operator default.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `runAsUser` | int64 | `1001` | UID the pod runs as |
+| `runAsGroup` | int64 | `0` | Primary GID the pod runs as |
+| `runAsNonRoot` | bool | `true` | Require the pod to run as a non-root user |
+| `fsGroup` | int64 | `1001` | Supplemental group applied to mounted volumes. The kubelet chowns the volume to this group, letting the non-root user write to CSI-provisioned volumes that would otherwise be owned by `root`. |
+| `fsGroupChangePolicy` | string | `OnRootMismatch` | When volume ownership is changed to match `fsGroup` (`OnRootMismatch` or `Always`) |
+
+By default the operator sets a matching `fsGroup` so managed pods can write to freshly provisioned CSI volumes (e.g. Ceph RBD/CephFS), which are typically owned by `root:root`. Override these fields on OpenShift or PodSecurity-restricted namespaces that assign their own UID/GID ranges.

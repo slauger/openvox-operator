@@ -1,0 +1,43 @@
+signingPolicies:
+  - name: autosign-any
+    any: true
+
+servers:
+  - name: ca
+    ca: true
+    server: true
+    poolRefs: [ca, server]
+    certificate:
+      certname: puppet
+    replicas: 1
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+    # Passthrough fields under test (secrets are created by the chainsaw test).
+    extraEnv:
+      - name: EXTRA_PLAIN
+        value: hello-from-extraenv
+    envFrom:
+      - secretRef:
+          name: server-extra-env
+    extraVolumes:
+      - name: extra-secret-vol
+        secret:
+          secretName: server-extra-files
+    extraVolumeMounts:
+      - name: extra-secret-vol
+        mountPath: /etc/puppetlabs/extra-files
+        readOnly: true
+
+pools:
+  - name: ca
+    service:
+      type: ClusterIP
+      port: 8140
+  - name: server
+    service:
+      type: ClusterIP
+      port: 8140

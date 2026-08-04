@@ -430,6 +430,40 @@ spec:
                       More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                     type: object
                 type: object
+              securityContext:
+                description: |-
+                  SecurityContext overrides the pod-level security context defaults
+                  (runAsUser/runAsGroup/fsGroup) applied to the Database pods.
+                properties:
+                  fsGroup:
+                    description: |-
+                      FSGroup overrides the supplemental group applied to mounted volumes.
+                      Set this (with a matching RunAsUser) when a CSI driver provisions volumes
+                      owned by root and the workload cannot otherwise write to them.
+                    format: int64
+                    type: integer
+                  fsGroupChangePolicy:
+                    description: |-
+                      FSGroupChangePolicy controls when volume ownership is changed to match FSGroup.
+                      Defaults to "OnRootMismatch" to avoid a recursive chown on every pod start.
+                    enum:
+                    - Always
+                    - OnRootMismatch
+                    type: string
+                  runAsGroup:
+                    description: RunAsGroup overrides the primary GID the pod runs
+                      as.
+                    format: int64
+                    type: integer
+                  runAsNonRoot:
+                    description: RunAsNonRoot overrides whether the pod must run as
+                      a non-root user.
+                    type: boolean
+                  runAsUser:
+                    description: RunAsUser overrides the UID the pod runs as.
+                    format: int64
+                    type: integer
+                type: object
               service:
                 description: Service defines the Service configuration for the Database.
                 properties:

@@ -398,13 +398,22 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 		)
 	}
 
+	// User-supplied volumes and mounts, appended last so the operator-managed
+	// ones always win a name or path collision at the API server.
+	volumes = append(volumes, server.Spec.ExtraVolumes...)
+	volumeMounts = append(volumeMounts, server.Spec.ExtraVolumeMounts...)
+
+	env := []corev1.EnvVar{
+		{Name: "JAVA_ARGS", Value: javaArgs},
+	}
+	env = append(env, server.Spec.ExtraEnv...)
+
 	container := corev1.Container{
 		Name:            "openvox-server",
 		Image:           image,
 		ImagePullPolicy: cfg.Spec.Image.PullPolicy,
-		Env: []corev1.EnvVar{
-			{Name: "JAVA_ARGS", Value: javaArgs},
-		},
+		Env:             env,
+		EnvFrom:         server.Spec.EnvFrom,
 		Ports: []corev1.ContainerPort{
 			{Name: "https", ContainerPort: 8140, Protocol: corev1.ProtocolTCP},
 		},
@@ -477,14 +486,11 @@ chmod 640 /ssl/private_keys/puppet.pem`
 	podSpec := corev1.PodSpec{
 		ServiceAccountName:           fmt.Sprintf("%s-server", server.Spec.ConfigRef),
 		AutomountServiceAccountToken: &automountServiceAccountToken,
-		SecurityContext: &corev1.PodSecurityContext{
-			RunAsUser:    int64Ptr(ServerRunAsUser),
-			RunAsGroup:   int64Ptr(ServerRunAsGroup),
-			RunAsNonRoot: boolPtr(true),
-			SeccompProfile: &corev1.SeccompProfile{
-				Type: corev1.SeccompProfileTypeRuntimeDefault,
-			},
-		},
+		// fsGroup lets the kubelet chown mounted volumes (SSL, CA data) to the group
+		// so the non-root user can write to CSI-provisioned volumes that are otherwise
+		// owned by root; overridable via server.spec.securityContext.
+		SecurityContext: buildPodSecurityContext(
+			ServerRunAsUser, ServerRunAsGroup, ServerFSGroup, server.Spec.SecurityContext),
 		TopologySpreadConstraints: server.Spec.TopologySpreadConstraints,
 		Affinity:                  server.Spec.Affinity,
 		PriorityClassName:         server.Spec.PriorityClassName,

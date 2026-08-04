@@ -41,6 +41,42 @@ spec:
 | `pdb` | [PDBSpec](#pdbspec) | - | PodDisruptionBudget configuration |
 | `priorityClassName` | string | - | PriorityClass name for Server pods |
 | `networkPolicy` | [NetworkPolicySpec](#networkpolicyspec) | - | NetworkPolicy configuration |
+| `extraEnv` | []EnvVar | - | Extra environment variables, appended after the operator-managed ones |
+| `envFrom` | []EnvFromSource | - | ConfigMap/Secret sources to populate environment variables from |
+| `extraVolumes` | []Volume | - | Extra volumes added to the Server pods |
+| `extraVolumeMounts` | []VolumeMount | - | Extra volume mounts for the `openvox-server` container |
+| `securityContext` | [PodSecurityContextSpec](index.md#podsecuritycontextspec) | - | Override pod-level security context (runAsUser/runAsGroup/fsGroup) |
+
+### Extra Environment and Volumes
+
+`extraEnv`, `envFrom`, `extraVolumes` and `extraVolumeMounts` pass straight through to
+the pod spec, for material the operator does not manage itself: credentials for a
+report processor, an ENC that talks to a CMDB, a client certificate for an external
+API. They are appended after the operator-managed entries, so a name or path
+collision with an operator volume is rejected by the API server rather than silently
+overriding it.
+
+Puppet code is not one of these cases. The code volume, the global modules directory
+and hieradata belong under [`code`](index.md#codespec), which handles image volumes,
+pull secrets and the read-only bootstrap.
+
+```yaml
+spec:
+  extraEnv:
+    - name: INVENTORY_API_URL
+      value: https://inventory.internal
+  envFrom:
+    - secretRef:
+        name: server-extra-env
+  extraVolumes:
+    - name: autosign-client
+      secret:
+        secretName: autosign-client
+  extraVolumeMounts:
+    - name: autosign-client
+      mountPath: /etc/puppetlabs/autosign-client
+      readOnly: true
+```
 
 ### PDBSpec
 

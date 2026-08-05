@@ -123,6 +123,36 @@ spec:
             content: |
               kubectl wait --for=jsonpath='{.status.failed}'=1 job/puppet-agent-nomatch \
                 -n e2e-autosign-policy --timeout=120s
+
+    - name: Change the SigningPolicy and assert the CA pod rolls
+      try:
+        - script:
+            timeout: 8m
+            content: |
+              set -eu
+              NS=e2e-autosign-policy
+              DEPLOY=e2e-autosign-policy-ca
+              HASH='{.spec.template.metadata.annotations.openvox\.voxpupuli\.org/autosign-policy-secret-hash}'
+              BEFORE=$(kubectl get deploy "${DEPLOY}" -n "${NS}" -o jsonpath="${HASH}")
+              echo "before=${BEFORE}"
+              [ -n "${BEFORE}" ] || { echo "ERROR: CA deployment has no autosign-policy-secret-hash annotation"; exit 1; }
+
+              # A SigningPolicy change must re-render the policy Secret and roll the CA pod,
+              # so the new policy applies without a manual restart.
+              kubectl patch signingpolicies.openvox.voxpupuli.org preshared-key -n "${NS}" --type=merge \
+                -p '{"spec":{"csrAttributes":[{"name":"pp_preshared_key","value":"e2e-rotated-key"}]}}'
+
+              AFTER="${BEFORE}"
+              for _ in $(seq 1 30); do
+                AFTER=$(kubectl get deploy "${DEPLOY}" -n "${NS}" -o jsonpath="${HASH}")
+                [ -n "${AFTER}" ] && [ "${AFTER}" != "${BEFORE}" ] && break
+                sleep 5
+              done
+              echo "after=${AFTER}"
+              [ "${AFTER}" != "${BEFORE}" ] || { echo "ERROR: autosign-policy-secret-hash did not change after the SigningPolicy update"; exit 1; }
+
+              kubectl rollout status deploy/"${DEPLOY}" -n "${NS}" --timeout=300s
+              echo "OK: SigningPolicy change rolled the CA pod without a manual restart"
       finally:
         - script:
             timeout: 2m

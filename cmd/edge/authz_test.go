@@ -1,6 +1,34 @@
 package main
 
-import "testing"
+import (
+	"bytes"
+	"testing"
+)
+
+func TestHandshakeNoiseFilter(t *testing.T) {
+	cases := []struct {
+		line string
+		kept bool
+	}{
+		{"2026/08/05 21:45:32 http: TLS handshake error from 1.2.3.4:5: EOF\n", false},
+		{"2026/08/05 21:45:32 http: TLS handshake error from 1.2.3.4:5: read: connection reset by peer\n", false},
+		{"2026/08/05 21:45:32 http: TLS handshake error from 1.2.3.4:5: write: broken pipe\n", false},
+		{"2026/08/05 21:45:32 http: TLS handshake error from 1.2.3.4:5: remote error: tls: bad certificate\n", true},
+		{"2026/08/05 21:45:32 http: TLS handshake error from 1.2.3.4:5: tls: client didn't provide a certificate\n", true},
+		{"2026/08/05 21:45:32 some other server error\n", true},
+	}
+	for _, tc := range cases {
+		var buf bytes.Buffer
+		f := &handshakeNoiseFilter{out: &buf}
+		n, err := f.Write([]byte(tc.line))
+		if err != nil || n != len(tc.line) {
+			t.Fatalf("Write returned n=%d err=%v, want n=%d nil", n, err, len(tc.line))
+		}
+		if got := buf.Len() > 0; got != tc.kept {
+			t.Errorf("line %q kept=%v, want %v", tc.line, got, tc.kept)
+		}
+	}
+}
 
 // rulesetJSON mirrors the operator's builtinAuthRules intent for the compile
 // endpoints the native server serves, plus the CA CLI rule for cross-checking

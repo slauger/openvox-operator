@@ -11,8 +11,10 @@
 package main
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -91,10 +93,31 @@ func main() {
 			ClientCAs:  pool,
 			MinVersion: tls.VersionTLS12,
 		},
+		// Drop the connection-noise handshake errors (probes, port scans, LB
+		// health checks that open and close a socket) while keeping real mTLS
+		// failures -- bad/unknown client certificates -- visible.
+		ErrorLog: log.New(&handshakeNoiseFilter{out: os.Stderr}, "", log.LstdFlags),
 	}
 	log.Printf("openvox-edge listening on %s (mTLS) -> %s, %d auth rules (default %s)",
 		listen, backendURL, len(rules.Rules), rules.Default)
 	log.Fatal(srv.ListenAndServeTLS(certFile, keyFile))
+}
+
+// handshakeNoiseFilter forwards http.Server error lines to out, except benign
+// "TLS handshake error ... EOF / connection reset / broken pipe" lines caused by
+// clients that close the socket before completing the handshake. Real handshake
+// failures (e.g. "remote error: tls: bad certificate", "unknown authority",
+// "client didn't provide a certificate") are kept.
+type handshakeNoiseFilter struct{ out io.Writer }
+
+func (f *handshakeNoiseFilter) Write(p []byte) (int, error) {
+	if bytes.Contains(p, []byte("TLS handshake error")) &&
+		(bytes.HasSuffix(bytes.TrimRight(p, "\n"), []byte("EOF")) ||
+			bytes.Contains(p, []byte("connection reset by peer")) ||
+			bytes.Contains(p, []byte("broken pipe"))) {
+		return len(p), nil
+	}
+	return f.out.Write(p)
 }
 
 func getenv(k, def string) string {

@@ -151,6 +151,37 @@ func (r *ConfigReconciler) renderPuppetDBConf(ctx context.Context, cfg *openvoxv
 	return "[main]\nsoft_write_failure = true\n", nil
 }
 
+// puppetDBActiveForFacts reports whether PuppetDB is wired up (via DatabaseRef or
+// explicit ServerURLs) and configured as the active backend for storeconfigs or
+// reports. Only then must the facts indirector be routed to PuppetDB via
+// routes.yaml: storeconfigs_backend and reports=puppetdb trigger the `replace
+// catalog` and `store report` commands, but neither switches the facts terminus,
+// so without routes.yaml the `replace facts` command is never issued.
+func puppetDBActiveForFacts(cfg *openvoxv1alpha1.Config) bool {
+	wired := cfg.Spec.DatabaseRef != "" || len(cfg.Spec.PuppetDB.ServerURLs) > 0
+	if !wired {
+		return false
+	}
+	return (cfg.Spec.Puppet.Storeconfigs && cfg.Spec.Puppet.StoreBackend == "puppetdb") ||
+		strings.Contains(cfg.Spec.Puppet.Reports, "puppetdb")
+}
+
+// renderRoutesYAML returns the routes.yaml that points the facts indirector
+// terminus at PuppetDB, so the `replace facts` command is issued on every agent
+// run. Mounted at $confdir/routes.yaml, which Puppet's route_file setting already
+// points at by default. Returns "" when PuppetDB is not the active backend, in
+// which case no routes.yaml is rendered or mounted.
+func renderRoutesYAML(cfg *openvoxv1alpha1.Config) string {
+	if !puppetDBActiveForFacts(cfg) {
+		return ""
+	}
+	return "---\n" +
+		"master:\n" +
+		"  facts:\n" +
+		"    terminus: puppetdb\n" +
+		"    cache: json\n"
+}
+
 // renderWebserverConf returns the webserver.conf for non-CA servers.
 // CRL is read from the kubelet-synced secret mount at /etc/puppetlabs/puppet/crl/.
 func (r *ConfigReconciler) renderWebserverConf(cfg *openvoxv1alpha1.Config) string {

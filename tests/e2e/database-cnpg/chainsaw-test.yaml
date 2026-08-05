@@ -42,7 +42,7 @@ spec:
                 --set config.image.tag="${IMAGE_TAG}" \
                 --set config.image.pullPolicy=Always \
                 --set database.image.repository=${IMAGE_REGISTRY}/openvox-db-${OPENVOX_MAJOR:-8} \
-                --set database.image.tag=latest \
+                --set database.image.tag="${IMAGE_TAG}" \
                 --set database.image.pullPolicy=Always
       catch:
         - events: {}

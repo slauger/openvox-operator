@@ -1,0 +1,50 @@
+# A SigningPolicy and a NodeClassifier are configured on purpose: the puppet.*Command
+# overrides must disable both built-in flows (no policy/ENC Secret rendered or mounted)
+# and point puppet.conf at the custom executables instead.
+signingPolicies:
+  - name: any
+    any: true
+
+nodeClassifier:
+  enabled: true
+  url: https://enc.example.invalid
+
+config:
+  puppet:
+    autosignCommand: /etc/puppetlabs/overrides/sign.sh
+    externalNodesCommand: /etc/puppetlabs/overrides/classify.sh
+
+servers:
+  - name: ca
+    ca: true
+    server: true
+    poolRefs: [ca, server]
+    certificate:
+      certname: puppet
+    replicas: 1
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+    # Mount the custom executables the override commands point at.
+    extraVolumes:
+      - name: puppet-overrides
+        configMap:
+          name: puppet-overrides
+          defaultMode: 0755
+    extraVolumeMounts:
+      - name: puppet-overrides
+        mountPath: /etc/puppetlabs/overrides
+        readOnly: true
+
+pools:
+  - name: ca
+    service:
+      type: ClusterIP
+      port: 8140
+  - name: server
+    service:
+      type: ClusterIP
+      port: 8140

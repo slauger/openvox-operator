@@ -1,0 +1,112 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: puppet-command-overrides
+spec:
+  namespace: e2e-puppet-overrides
+  bindings:
+    - name: registry
+      value: (env('IMAGE_REGISTRY') || 'ghcr.io/slauger')
+    - name: imageTag
+      value: (env('IMAGE_TAG') || 'latest')
+  steps:
+    - name: Create namespace and the custom autosign/ENC executables
+      try:
+        - apply:
+            resource:
+              apiVersion: v1
+              kind: Namespace
+              metadata:
+                name: e2e-puppet-overrides
+        - apply:
+            resource:
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: puppet-overrides
+                namespace: e2e-puppet-overrides
+              data:
+                sign.sh: |
+                  #!/bin/sh
+                  exit 0
+                classify.sh: |
+                  #!/bin/sh
+                  exit 0
+
+    - name: Install openvox-stack with autosign/externalNodes command overrides
+      try:
+        - script:
+            timeout: 2m
+            content: |
+              REPO_ROOT=$(git rev-parse --show-toplevel)
+              IMAGE_TAG=${IMAGE_TAG:-$(git describe --always)}
+              IMAGE_REGISTRY=${IMAGE_REGISTRY:-ghcr.io/slauger}
+              helm upgrade --install e2e-puppet-overrides "${REPO_ROOT}/charts/openvox-stack" \
+                --namespace e2e-puppet-overrides --create-namespace \
+                --values "${REPO_ROOT}/charts/openvox-stack/ci/puppet-command-overrides-values.yaml" \
+                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server-${OPENVOX_MAJOR:-8} \
+                --set config.image.tag="${IMAGE_TAG}" \
+                --set config.image.pullPolicy=Always
+      catch:
+        - events: {}
+
+    - name: Assert Server is Running
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: e2e-puppet-overrides-ca
+              status:
+                phase: Running
+                ready: 1
+                desired: 1
+
+    - name: Verify overrides win and the built-in flows are disabled
+      try:
+        - script:
+            timeout: 1m
+            content: |
+              set -eu
+              NS=e2e-puppet-overrides
+              fail() { echo "ERROR: $1"; exit 1; }
+
+              # puppet.conf points at the custom commands, not the built-in binaries.
+              CONF=$(kubectl get configmap e2e-puppet-overrides-config -n "${NS}" \
+                -o jsonpath='{.data.puppet\.conf}')
+              echo "${CONF}" | grep -qF 'autosign = /etc/puppetlabs/overrides/sign.sh' \
+                || fail "puppet.conf missing custom autosign command"
+              echo "${CONF}" | grep -qF 'external_nodes = /etc/puppetlabs/overrides/classify.sh' \
+                || fail "puppet.conf missing custom external_nodes command"
+              echo "${CONF}" | grep -qF 'node_terminus = exec' \
+                || fail "puppet.conf missing node_terminus = exec"
+              echo "${CONF}" | grep -qF '/usr/local/bin/openvox-autosign' \
+                && fail "puppet.conf still uses the built-in autosign binary"
+              echo "${CONF}" | grep -qF '/usr/local/bin/openvox-enc' \
+                && fail "puppet.conf still uses the built-in ENC binary"
+
+              # The built-in policy/ENC Secrets are not rendered.
+              kubectl get secret e2e-puppet-overrides-ca-autosign-policy -n "${NS}" >/dev/null 2>&1 \
+                && fail "autosign policy Secret should not exist when autosignCommand is set"
+              kubectl get secret e2e-puppet-overrides-enc -n "${NS}" >/dev/null 2>&1 \
+                && fail "ENC Secret should not exist when externalNodesCommand is set"
+
+              # And they are not mounted into the pod.
+              POD=$(kubectl get pods -n "${NS}" \
+                -l openvox.voxpupuli.org/server=e2e-puppet-overrides-ca \
+                -o jsonpath='{.items[0].metadata.name}')
+              VOLS=$(kubectl get pod "${POD}" -n "${NS}" -o jsonpath='{.spec.volumes[*].name}')
+              echo "volumes=${VOLS}"
+              echo "${VOLS}" | tr ' ' '\n' | grep -qx 'autosign-policy' \
+                && fail "autosign-policy volume should not be mounted"
+              echo "${VOLS}" | tr ' ' '\n' | grep -qx 'enc-config' \
+                && fail "enc-config volume should not be mounted"
+
+              echo "OK: command overrides applied and built-in autosign/ENC flows disabled"
+      finally:
+        - script:
+            timeout: 2m
+            content: |
+              helm uninstall e2e-puppet-overrides --namespace e2e-puppet-overrides --wait 2>/dev/null || true
+              kubectl delete namespace e2e-puppet-overrides --ignore-not-found 2>/dev/null || true

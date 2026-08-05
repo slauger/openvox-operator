@@ -21,7 +21,7 @@ jobs:
       image_tag: ${{ inputs.image_tag }}
       operator: base
       openvox_major: ${{ inputs.openvox_major }}
-      tests: '["single-node","multi-server","agent-basic","agent-broken","agent-idempotent","agent-concurrent","agent-report","database-cnpg","readonly-rootfs","code-pvc","autosign-policy","cert-rotation"]'
+      tests: '["single-node","multi-server","agent-basic","agent-broken","agent-idempotent","agent-concurrent","agent-report","database-cnpg","readonly-rootfs","code-pvc","autosign-policy","cert-rotation","server-extra-env-volumes","server-fsgroup","puppet-command-overrides"]'
     secrets: inherit
 
   e2e-enc:

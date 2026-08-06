@@ -63,6 +63,8 @@ type PatternSpec struct {
 }
 
 // CSRAttributeMatch defines a single CSR extension attribute to match.
+// Either value or valueFrom may be set, not both.
+// +kubebuilder:validation:XValidation:rule="!(has(self.value) && size(self.value) > 0 && has(self.valueFrom))",message="value and valueFrom are mutually exclusive"
 type CSRAttributeMatch struct {
 	// Name is the CSR extension attribute name (e.g. pp_preshared_key, pp_environment).
 	Name string `json:"name"`

@@ -97,7 +97,7 @@ func (r *ConfigReconciler) renderAutosignPolicyConfig(ctx context.Context, names
 	})
 
 	for _, p := range policies {
-		fmt.Fprintf(&sb, "  - name: %s\n", p.Name)
+		fmt.Fprintf(&sb, "  - name: %q\n", p.Name)
 
 		if p.Spec.Any {
 			sb.WriteString("    any: true\n")
@@ -133,7 +133,7 @@ func (r *ConfigReconciler) renderAutosignPolicyConfig(ctx context.Context, names
 						return "", fmt.Errorf("resolving csrAttribute %q for policy %s: %w", attr.Name, p.Name, err)
 					}
 				}
-				fmt.Fprintf(&sb, "      - name: %s\n", attr.Name)
+				fmt.Fprintf(&sb, "      - name: %q\n", attr.Name)
 				fmt.Fprintf(&sb, "        value: %q\n", value)
 			}
 		}

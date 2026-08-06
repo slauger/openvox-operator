@@ -107,6 +107,57 @@ func TestSigningPolicyValidator(t *testing.T) {
 		}
 	})
 
+	t.Run("valid csrAttribute with known OID", func(t *testing.T) {
+		c := setupTestClient(ca)
+		v := &SigningPolicyValidator{Client: c}
+		sp := &openvoxv1alpha1.SigningPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			Spec: openvoxv1alpha1.SigningPolicySpec{
+				CertificateAuthorityRef: "my-ca",
+				CSRAttributes: []openvoxv1alpha1.CSRAttributeMatch{
+					{Name: "pp_preshared_key", Value: "secret"},
+				},
+			},
+		}
+		if _, err := v.ValidateCreate(context.Background(), sp); err != nil {
+			t.Errorf("expected no error, got %v", err)
+		}
+	})
+
+	t.Run("csrAttribute name with YAML injection is rejected", func(t *testing.T) {
+		c := setupTestClient(ca)
+		v := &SigningPolicyValidator{Client: c}
+		sp := &openvoxv1alpha1.SigningPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			Spec: openvoxv1alpha1.SigningPolicySpec{
+				CertificateAuthorityRef: "my-ca",
+				CSRAttributes: []openvoxv1alpha1.CSRAttributeMatch{
+					{Name: "x\n    any: true", Value: "foo"},
+				},
+			},
+		}
+		if _, err := v.ValidateCreate(context.Background(), sp); err == nil {
+			t.Error("expected error for injection attribute name")
+		}
+	})
+
+	t.Run("csrAttribute with empty name is rejected", func(t *testing.T) {
+		c := setupTestClient(ca)
+		v := &SigningPolicyValidator{Client: c}
+		sp := &openvoxv1alpha1.SigningPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			Spec: openvoxv1alpha1.SigningPolicySpec{
+				CertificateAuthorityRef: "my-ca",
+				CSRAttributes: []openvoxv1alpha1.CSRAttributeMatch{
+					{Name: "", Value: "foo"},
+				},
+			},
+		}
+		if _, err := v.ValidateCreate(context.Background(), sp); err == nil {
+			t.Error("expected error for empty attribute name")
+		}
+	})
+
 	t.Run("delete always succeeds", func(t *testing.T) {
 		v := &SigningPolicyValidator{Client: setupTestClient()}
 		_, err := v.ValidateDelete(context.Background(), &openvoxv1alpha1.SigningPolicy{})

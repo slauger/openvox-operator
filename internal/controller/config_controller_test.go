@@ -680,6 +680,53 @@ func TestConfigReconcile_PuppetDBConfNoConfig(t *testing.T) {
 	}
 }
 
+func TestConfigReconcile_RoutesYAMLWithDatabaseRef(t *testing.T) {
+	db := newDatabase("production-db",
+		withDatabaseStatusURL("https://production-db.default.svc.cluster.local:8081"),
+	)
+	cfg := newConfig("production", withDatabaseRef("production-db"))
+	c := setupTestClient(cfg, db)
+	r := newConfigReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("production")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	cm := &corev1.ConfigMap{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "production-config", Namespace: testNamespace}, cm); err != nil {
+		t.Fatalf("ConfigMap not found: %v", err)
+	}
+
+	routes, ok := cm.Data["routes.yaml"]
+	if !ok {
+		t.Fatalf("ConfigMap missing routes.yaml when PuppetDB is the active backend")
+	}
+	if !strings.Contains(routes, "terminus: puppetdb") {
+		t.Errorf("routes.yaml does not route facts to puppetdb\n---\n%s", routes)
+	}
+}
+
+func TestConfigReconcile_NoRoutesYAMLWithoutPuppetDB(t *testing.T) {
+	// Default config has storeconfigs/reports=puppetdb but no DatabaseRef/ServerURLs,
+	// so PuppetDB is not actually wired up and no routes.yaml should be rendered.
+	cfg := newConfig("production")
+	c := setupTestClient(cfg)
+	r := newConfigReconciler(c)
+
+	if _, err := r.Reconcile(testCtx(), testRequest("production")); err != nil {
+		t.Fatalf("reconcile error: %v", err)
+	}
+
+	cm := &corev1.ConfigMap{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "production-config", Namespace: testNamespace}, cm); err != nil {
+		t.Fatalf("ConfigMap not found: %v", err)
+	}
+
+	if _, ok := cm.Data["routes.yaml"]; ok {
+		t.Errorf("ConfigMap should not contain routes.yaml when PuppetDB is not wired up\n---\n%s", cm.Data["routes.yaml"])
+	}
+}
+
 func TestConfigReconcile_UpdateExistingConfigMap(t *testing.T) {
 	cfg := newConfig("production")
 	existingCM := newConfigMap("production-config", map[string]string{

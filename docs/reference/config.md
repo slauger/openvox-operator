@@ -214,6 +214,6 @@ Controls Puppet Server metrics.conf settings.
 
 | Resource | Name | Description |
 |---|---|---|
-| ConfigMap | `{name}` | puppet.conf, puppetserver.conf, auth.conf, webserver.conf, etc. |
+| ConfigMap | `{name}` | puppet.conf, puppetserver.conf, auth.conf, webserver.conf, `routes.yaml` (facts terminus, when PuppetDB is the active backend), etc. |
 | Secret | `{name}-enc` | ENC config for openvox-enc binary (only when `nodeClassifierRef` is set) |
 | ServiceAccount | `{name}-server` | Shared ServiceAccount for all Server pods (`automountServiceAccountToken: false`) |

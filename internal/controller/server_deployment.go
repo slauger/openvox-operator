@@ -244,6 +244,16 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 		configMapVolume("metrics-conf", configMapName, "metrics.conf"),
 	}
 
+	// routes.yaml routes the facts terminus to PuppetDB. Mounted only when PuppetDB
+	// is the active backend, matching the ConfigMap key rendered by the Config
+	// controller (SubPath mounts require the key to exist).
+	if puppetDBActiveForFacts(cfg) {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name: "routes-yaml", MountPath: "/etc/puppetlabs/puppet/routes.yaml", SubPath: "routes.yaml", ReadOnly: true,
+		})
+		volumes = append(volumes, configMapVolume("routes-yaml", configMapName, "routes.yaml"))
+	}
+
 	// Non-CA pods: mount CRL secret as directory (NOT SubPath) for kubelet auto-sync,
 	// and use the standard webserver.conf pointing to the CRL secret mount.
 	// CA pods: no CRL volume (Puppetserver manages CRL from PVC), use webserver-ca.conf.

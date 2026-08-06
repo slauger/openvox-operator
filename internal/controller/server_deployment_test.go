@@ -123,6 +123,45 @@ func TestBuildPodSpec_CARole(t *testing.T) {
 	}
 }
 
+func TestBuildPodSpec_RoutesYAMLMount(t *testing.T) {
+	routesMount := func(podSpec corev1.PodSpec) *corev1.VolumeMount {
+		for i, vm := range podSpec.Containers[0].VolumeMounts {
+			if vm.Name == "routes-yaml" {
+				return &podSpec.Containers[0].VolumeMounts[i]
+			}
+		}
+		return nil
+	}
+
+	// PuppetDB wired up -> routes.yaml mounted at $confdir/routes.yaml.
+	cfgWithDB := newConfig("production", withDatabaseRef("production-db"))
+	server := newServer("test-server", withServerRole(true))
+	podSpec := testBuildPodSpec(server, cfgWithDB)
+
+	vm := routesMount(podSpec)
+	if vm == nil {
+		t.Fatal("server pod should mount routes-yaml when PuppetDB is the active backend")
+	}
+	if vm.MountPath != "/etc/puppetlabs/puppet/routes.yaml" || vm.SubPath != "routes.yaml" {
+		t.Errorf("unexpected routes.yaml mount: path=%q subPath=%q", vm.MountPath, vm.SubPath)
+	}
+	hasVol := false
+	for _, v := range podSpec.Volumes {
+		if v.Name == "routes-yaml" {
+			hasVol = true
+		}
+	}
+	if !hasVol {
+		t.Error("server pod should have a routes-yaml volume")
+	}
+
+	// No PuppetDB wired up -> no routes.yaml mount (SubPath would fail on a missing key).
+	cfgNoDB := newConfig("production")
+	if routesMount(testBuildPodSpec(server, cfgNoDB)) != nil {
+		t.Error("server pod should not mount routes-yaml when PuppetDB is not wired up")
+	}
+}
+
 func TestBuildPodSpec_MultipleCodeVolumes(t *testing.T) {
 	cfg := newConfig("production", withCodeList(
 		openvoxv1alpha1.CodeSpec{Image: "ghcr.io/slauger/prod:latest", Environment: "production"},

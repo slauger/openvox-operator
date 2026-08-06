@@ -120,14 +120,14 @@ func TestRenderAutosignPolicyConfig(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Name: "pattern-policy", Namespace: testNamespace},
 					Spec: openvoxv1alpha1.SigningPolicySpec{
 						CertificateAuthorityRef: "ca",
-						Pattern: &openvoxv1alpha1.PatternSpec{
+						Certnames: &openvoxv1alpha1.PatternSpec{
 							Allow: []string{"*.example.com", "web-*"},
 						},
 					},
 				},
 			},
 			contains: []string{
-				"pattern:",
+				"certnames:",
 				"allow:",
 				`"*.example.com"`,
 				`"web-*"`,
@@ -182,7 +182,7 @@ func TestRenderAutosignPolicyConfig(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: testNamespace},
 					Spec: openvoxv1alpha1.SigningPolicySpec{
 						CertificateAuthorityRef: "ca",
-						Pattern:                 &openvoxv1alpha1.PatternSpec{Allow: []string{"svc-*"}},
+						Certnames:               &openvoxv1alpha1.PatternSpec{Allow: []string{"svc-*"}},
 						IPAltNames:              &openvoxv1alpha1.PatternSpec{Allow: []string{"10.0.0.0/16"}},
 						URIAltNames:             &openvoxv1alpha1.PatternSpec{Allow: []string{"spiffe://example.com/*"}},
 						EmailAltNames:           &openvoxv1alpha1.PatternSpec{Allow: []string{"*@example.com"}},

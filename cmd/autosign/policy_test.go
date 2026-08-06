@@ -109,7 +109,7 @@ func TestLoadPolicyConfig(t *testing.T) {
 - name: allow-all
   any: true
 - name: pattern-match
-  pattern:
+  certnames:
     allow:
       - "*.example.com"
 `
@@ -127,7 +127,7 @@ func TestLoadPolicyConfig(t *testing.T) {
 	if !cfg.Policies[0].Any {
 		t.Error("expected first policy to have any=true")
 	}
-	if cfg.Policies[1].Pattern == nil {
+	if cfg.Policies[1].Certnames == nil {
 		t.Error("expected second policy to have pattern")
 	}
 }
@@ -200,8 +200,8 @@ func TestEvaluatePolicies_NoPolicies(t *testing.T) {
 
 func TestEvaluatePolicy_PatternMatch(t *testing.T) {
 	policy := Policy{
-		Name:    "pattern",
-		Pattern: &PatternConf{Allow: []string{"*.example.com"}},
+		Name:      "pattern",
+		Certnames: &PatternConf{Allow: []string{"*.example.com"}},
 	}
 	csr := generateCSR(t, "node1.example.com", nil, nil)
 
@@ -216,8 +216,8 @@ func TestEvaluatePolicy_PatternMatch(t *testing.T) {
 
 func TestEvaluatePolicy_PatternMultiple(t *testing.T) {
 	policy := Policy{
-		Name:    "multi-pattern",
-		Pattern: &PatternConf{Allow: []string{"*.prod.com", "*.staging.com"}},
+		Name:      "multi-pattern",
+		Certnames: &PatternConf{Allow: []string{"*.prod.com", "*.staging.com"}},
 	}
 	csr := generateCSR(t, "node1.staging.com", nil, nil)
 
@@ -241,8 +241,8 @@ func TestEvaluatePolicy_CSRAttributes(t *testing.T) {
 	csr := generateCSR(t, "node1", nil, []pkix.Extension{ext})
 
 	policy := Policy{
-		Name:    "env-check",
-		Pattern: &PatternConf{Allow: []string{"*"}},
+		Name:      "env-check",
+		Certnames: &PatternConf{Allow: []string{"*"}},
 		CSRAttributes: []CSRAttributeConf{
 			{Name: "pp_environment", Value: "production"},
 		},
@@ -262,8 +262,8 @@ func TestEvaluatePolicy_CSRAttributeNotPresent(t *testing.T) {
 	csr := generateCSR(t, "node1", nil, nil)
 
 	policy := Policy{
-		Name:    "env-check",
-		Pattern: &PatternConf{Allow: []string{"*"}},
+		Name:      "env-check",
+		Certnames: &PatternConf{Allow: []string{"*"}},
 		CSRAttributes: []CSRAttributeConf{
 			{Name: "pp_environment", Value: "production"},
 		},
@@ -280,7 +280,7 @@ func TestEvaluatePolicy_DNSAltNames(t *testing.T) {
 	// Policy allows the SANs
 	policy := Policy{
 		Name:        "with-sans",
-		Pattern:     &PatternConf{Allow: []string{"puppet"}},
+		Certnames:   &PatternConf{Allow: []string{"puppet"}},
 		DNSAltNames: &PatternConf{Allow: []string{"*.example.com", "*.local"}},
 	}
 	if !evaluatePolicy(policy, "puppet", csr) {
@@ -299,8 +299,8 @@ func TestEvaluatePolicy_DNSAltNamesNotAllowed(t *testing.T) {
 
 	// Policy has no dnsAltNames field but CSR has SANs -> deny
 	policy := Policy{
-		Name:    "no-sans",
-		Pattern: &PatternConf{Allow: []string{"*"}},
+		Name:      "no-sans",
+		Certnames: &PatternConf{Allow: []string{"*"}},
 	}
 	if evaluatePolicy(policy, "node1", csr) {
 		t.Error("expected CSR with SANs but no SAN policy to deny")
@@ -313,8 +313,8 @@ func TestEvaluatePolicy_ANDLogic(t *testing.T) {
 	csr := generateCSR(t, "web1.prod.com", nil, []pkix.Extension{ext})
 
 	policy := Policy{
-		Name:    "and-logic",
-		Pattern: &PatternConf{Allow: []string{"*.prod.com"}},
+		Name:      "and-logic",
+		Certnames: &PatternConf{Allow: []string{"*.prod.com"}},
 		CSRAttributes: []CSRAttributeConf{
 			{Name: "pp_role", Value: "webserver"},
 		},
@@ -337,8 +337,8 @@ func TestEvaluatePolicies_ORLogic(t *testing.T) {
 
 	cfg := &PolicyConfig{
 		Policies: []Policy{
-			{Name: "prod-only", Pattern: &PatternConf{Allow: []string{"*.prod.com"}}},
-			{Name: "staging-only", Pattern: &PatternConf{Allow: []string{"*.staging.com"}}},
+			{Name: "prod-only", Certnames: &PatternConf{Allow: []string{"*.prod.com"}}},
+			{Name: "staging-only", Certnames: &PatternConf{Allow: []string{"*.staging.com"}}},
 		},
 	}
 
@@ -505,7 +505,7 @@ func TestGuardExtensions_AnyTrueStillGated(t *testing.T) {
 // A certname-matching policy without extensions.allow must deny a pp_cli_auth CSR.
 func TestGuardExtensions_PatternPolicyDenies(t *testing.T) {
 	csr := generateCSR(t, "worker-1", nil, ppCliAuthExt(t))
-	p := Policy{Name: "workers", Pattern: &PatternConf{Allow: []string{"worker-*"}}}
+	p := Policy{Name: "workers", Certnames: &PatternConf{Allow: []string{"worker-*"}}}
 	if evaluatePolicy(p, "worker-1", csr) {
 		t.Error("pattern policy without extensions.allow must deny pp_cli_auth CSR")
 	}
@@ -515,7 +515,7 @@ func TestGuardExtensions_PatternPolicyDenies(t *testing.T) {
 func TestGuardExtensions_TrustedFactNotGated(t *testing.T) {
 	oid, _ := puppet.OIDByName("pp_role")
 	csr := generateCSR(t, "worker-1", nil, []pkix.Extension{makeExtension(t, oid, "web")})
-	p := Policy{Name: "workers", Pattern: &PatternConf{Allow: []string{"worker-*"}}}
+	p := Policy{Name: "workers", Certnames: &PatternConf{Allow: []string{"worker-*"}}}
 	if !evaluatePolicy(p, "worker-1", csr) {
 		t.Error("trusted-fact extension pp_role must not be gated")
 	}

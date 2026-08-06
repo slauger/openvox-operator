@@ -62,6 +62,20 @@ spec:
                 description: CertificateAuthorityRef references the CertificateAuthority
                   this policy applies to.
                 type: string
+              certnames:
+                description: |-
+                  Certnames defines allowed certname glob patterns. The certname must match
+                  at least one.
+                properties:
+                  allow:
+                    description: Allow is a list of glob patterns. The certname must
+                      match at least one.
+                    items:
+                      type: string
+                    type: array
+                required:
+                - allow
+                type: object
               csrAttributes:
                 description: |-
                   CSRAttributes defines CSR extension attributes that must all match (AND logic).
@@ -156,18 +170,6 @@ spec:
                   IPAltNames defines allowed IP subject alternative names as CIDR ranges
                   (e.g. "10.0.0.0/16", "::1/128"). If a CSR carries IP SANs and this is not
                   set, the CSR is denied.
-                properties:
-                  allow:
-                    description: Allow is a list of glob patterns. The certname must
-                      match at least one.
-                    items:
-                      type: string
-                    type: array
-                required:
-                - allow
-                type: object
-              pattern:
-                description: Pattern defines certname glob matching rules.
                 properties:
                   allow:
                     description: Allow is a list of glob patterns. The certname must

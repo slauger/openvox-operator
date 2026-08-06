@@ -25,7 +25,7 @@ type PolicyConfig struct {
 type Policy struct {
 	Name          string             `yaml:"name"`
 	Any           bool               `yaml:"any,omitempty"`
-	Pattern       *PatternConf       `yaml:"pattern,omitempty"`
+	Certnames     *PatternConf       `yaml:"certnames,omitempty"`
 	DNSAltNames   *PatternConf       `yaml:"dnsAltNames,omitempty"`
 	IPAltNames    *PatternConf       `yaml:"ipAltNames,omitempty"`
 	URIAltNames   *PatternConf       `yaml:"uriAltNames,omitempty"`
@@ -127,9 +127,9 @@ func evaluatePolicy(policy Policy, certname string, csr *x509.CertificateRequest
 
 	hasCondition := false
 
-	if policy.Pattern != nil {
+	if policy.Certnames != nil {
 		hasCondition = true
-		if !matchPattern(policy.Pattern, certname) {
+		if !matchPattern(policy.Certnames, certname) {
 			return false
 		}
 	}

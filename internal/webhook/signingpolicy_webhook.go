@@ -37,10 +37,10 @@ func (v *SigningPolicyValidator) validate(ctx context.Context, sp *openvoxv1alph
 		errs = append(errs, field.Invalid(specPath.Child("certificateAuthorityRef"), sp.Spec.CertificateAuthorityRef, err.Error()))
 	}
 
-	if sp.Spec.Pattern != nil {
-		for i, pattern := range sp.Spec.Pattern.Allow {
+	if sp.Spec.Certnames != nil {
+		for i, pattern := range sp.Spec.Certnames.Allow {
 			if pattern == "" {
-				errs = append(errs, field.Invalid(specPath.Child("pattern", "allow").Index(i), pattern, "pattern must not be empty"))
+				errs = append(errs, field.Invalid(specPath.Child("certnames", "allow").Index(i), pattern, "certname pattern must not be empty"))
 			}
 		}
 	}

@@ -106,8 +106,8 @@ func (r *ConfigReconciler) renderAutosignPolicyConfig(ctx context.Context, names
 		// Guard fields (SAN allowlists and extensions) are rendered for every
 		// policy, including any:true, so the autosign binary enforces them and no
 		// policy can implicitly waive escalation protection.
-		if p.Spec.Pattern != nil {
-			renderAllowList(&sb, "pattern", p.Spec.Pattern.Allow)
+		if p.Spec.Certnames != nil {
+			renderAllowList(&sb, "certnames", p.Spec.Certnames.Allow)
 		}
 		if p.Spec.DNSAltNames != nil {
 			renderAllowList(&sb, "dnsAltNames", p.Spec.DNSAltNames.Allow)

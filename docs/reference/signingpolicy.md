@@ -4,7 +4,7 @@ A SigningPolicy defines a policy for automatic CSR signing against a Certificate
 
 Signing has two planes:
 
-- **Match plane** (`any`, `pattern`, `csrAttributes`) -- decides *whether a policy applies* to a CSR.
+- **Match plane** (`any`, `certnames`, `csrAttributes`) -- decides *whether a policy applies* to a CSR.
 - **Guard plane** (`dnsAltNames`, `ipAltNames`, `uriAltNames`, `emailAltNames`, `extensions`) -- **fail-closed** constraints that decide *whether the CSR is safe to sign*. If a CSR carries a SAN type or a privileged authorization extension the policy does not explicitly allow, it is denied. The guard plane applies to **every** policy, including `any: true`, so no policy can implicitly grant a privileged extension.
 
 ## Example
@@ -19,7 +19,7 @@ spec:
   any: true
 ```
 
-### Pattern Matching
+### Certname Matching
 
 ```yaml
 apiVersion: openvox.voxpupuli.org/v1alpha1
@@ -28,7 +28,7 @@ metadata:
   name: trusted-hosts
 spec:
   certificateAuthorityRef: production-ca
-  pattern:
+  certnames:
     allow:
       - "*.example.com"
       - "web-*"
@@ -43,7 +43,7 @@ metadata:
   name: allow-internal-sans
 spec:
   certificateAuthorityRef: production-ca
-  pattern:
+  certnames:
     allow:
       - "*.example.com"
   dnsAltNames:
@@ -63,7 +63,7 @@ metadata:
   name: gateway-sans
 spec:
   certificateAuthorityRef: production-ca
-  pattern:
+  certnames:
     allow:
       - "gateway-*"
   ipAltNames:
@@ -91,7 +91,7 @@ metadata:
   name: ca-admin-bootstrap
 spec:
   certificateAuthorityRef: production-ca
-  pattern:
+  certnames:
     allow:
       - "ca-admin.example.com"
   extensions:
@@ -129,7 +129,7 @@ metadata:
   name: trusted-with-psk
 spec:
   certificateAuthorityRef: production-ca
-  pattern:
+  certnames:
     allow:
       - "*.example.com"
   csrAttributes:
@@ -150,7 +150,7 @@ This policy requires a matching certname pattern **and** a valid PSK **and** the
 |---|---|---|---|
 | `certificateAuthorityRef` | string | **required** | Reference to the CertificateAuthority |
 | `any` | bool | `false` | Sign all CSRs unconditionally |
-| `pattern` | [PatternSpec](#patternspec) | - | Certname glob matching |
+| `certnames` | [PatternSpec](#patternspec) | - | Allowed certname glob patterns; the certname must match at least one |
 | `dnsAltNames` | [PatternSpec](#patternspec) | - | Allowed DNS SAN glob patterns. If a CSR carries DNS SANs and this is unset, it is denied |
 | `ipAltNames` | [PatternSpec](#patternspec) | - | Allowed IP SAN **CIDR** ranges. If a CSR carries IP SANs and this is unset, it is denied |
 | `uriAltNames` | [PatternSpec](#patternspec) | - | Allowed URI SAN wildcard patterns (`*` spans `/`). If a CSR carries URI SANs and this is unset, it is denied |
@@ -219,7 +219,7 @@ flowchart TD
     CheckSAN -->|Yes / none| CheckAny{"any: true?"}
     CheckAny -->|Yes| Sign
 
-    CheckAny -->|No| CheckPattern{"pattern matches?"}
+    CheckAny -->|No| CheckPattern{"certname matches?"}
     CheckPattern -->|No| Next
     CheckPattern -->|Yes / not set| CheckCSR{"csrAttributes match?"}
     CheckCSR -->|No| Next

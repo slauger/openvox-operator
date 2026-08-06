@@ -45,7 +45,7 @@ func TestSigningPolicyValidator(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 			Spec: openvoxv1alpha1.SigningPolicySpec{
 				CertificateAuthorityRef: "my-ca",
-				Pattern: &openvoxv1alpha1.PatternSpec{
+				Certnames: &openvoxv1alpha1.PatternSpec{
 					Allow: []string{"*.example.com"},
 				},
 			},
@@ -78,7 +78,7 @@ func TestSigningPolicyValidator(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 			Spec: openvoxv1alpha1.SigningPolicySpec{
 				CertificateAuthorityRef: "my-ca",
-				Pattern: &openvoxv1alpha1.PatternSpec{
+				Certnames: &openvoxv1alpha1.PatternSpec{
 					Allow: []string{"*.example.com", ""},
 				},
 			},

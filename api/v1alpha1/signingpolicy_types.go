@@ -41,9 +41,10 @@ type SigningPolicySpec struct {
 	// +optional
 	Any bool `json:"any,omitempty"`
 
-	// Pattern defines certname glob matching rules.
+	// Certnames defines allowed certname glob patterns. The certname must match
+	// at least one.
 	// +optional
-	Pattern *PatternSpec `json:"pattern,omitempty"`
+	Certnames *PatternSpec `json:"certnames,omitempty"`
 
 	// DNSAltNames defines allowed DNS subject alternative name patterns (glob).
 	// If a CSR carries DNS SANs and this is not set, the CSR is denied.

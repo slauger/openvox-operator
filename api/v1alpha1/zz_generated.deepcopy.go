@@ -1826,6 +1826,26 @@ func (in *SigningPolicySpec) DeepCopyInto(out *SigningPolicySpec) {
 		*out = new(PatternSpec)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.IPAltNames != nil {
+		in, out := &in.IPAltNames, &out.IPAltNames
+		*out = new(PatternSpec)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.URIAltNames != nil {
+		in, out := &in.URIAltNames, &out.URIAltNames
+		*out = new(PatternSpec)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.EmailAltNames != nil {
+		in, out := &in.EmailAltNames, &out.EmailAltNames
+		*out = new(PatternSpec)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.Extensions != nil {
+		in, out := &in.Extensions, &out.Extensions
+		*out = new(PatternSpec)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.CSRAttributes != nil {
 		in, out := &in.CSRAttributes, &out.CSRAttributes
 		*out = make([]CSRAttributeMatch, len(*in))

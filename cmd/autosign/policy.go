@@ -6,8 +6,11 @@ import (
 	"encoding/asn1"
 	"encoding/pem"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/slauger/openvox-operator/internal/puppet"
 	"gopkg.in/yaml.v3"
@@ -24,6 +27,10 @@ type Policy struct {
 	Any           bool               `yaml:"any,omitempty"`
 	Pattern       *PatternConf       `yaml:"pattern,omitempty"`
 	DNSAltNames   *PatternConf       `yaml:"dnsAltNames,omitempty"`
+	IPAltNames    *PatternConf       `yaml:"ipAltNames,omitempty"`
+	URIAltNames   *PatternConf       `yaml:"uriAltNames,omitempty"`
+	EmailAltNames *PatternConf       `yaml:"emailAltNames,omitempty"`
+	Extensions    *PatternConf       `yaml:"extensions,omitempty"`
 	CSRAttributes []CSRAttributeConf `yaml:"csrAttributes,omitempty"`
 }
 
@@ -99,9 +106,21 @@ func evaluatePolicies(cfg *PolicyConfig, certname string, csr *x509.CertificateR
 	return false
 }
 
-// evaluatePolicy checks a single policy (AND within). All set fields must match.
+// evaluatePolicy checks a single policy. The guard plane (privileged extensions
+// and SAN types) is fail-closed and applies to every policy, including any:true,
+// so no policy can implicitly waive escalation protection. The match plane
+// (pattern, csrAttributes) is AND within a policy.
 func evaluatePolicy(policy Policy, certname string, csr *x509.CertificateRequest) bool {
-	// any: true approves unconditionally
+	// Guard plane: a CSR carrying a privileged authorization extension or a SAN
+	// type the policy does not explicitly allow is never signed.
+	if !guardExtensions(policy, csr) {
+		return false
+	}
+	if !guardSANs(policy, csr) {
+		return false
+	}
+
+	// any: true approves unconditionally once the guards pass.
 	if policy.Any {
 		return true
 	}
@@ -122,18 +141,131 @@ func evaluatePolicy(policy Policy, certname string, csr *x509.CertificateRequest
 		}
 	}
 
-	// SAN validation: if CSR has SANs, they must be explicitly allowed
-	if len(csr.DNSNames) > 0 {
-		if policy.DNSAltNames == nil {
-			return false
+	// A policy with no conditions matches nothing.
+	return hasCondition
+}
+
+// guardExtensions denies CSRs that carry a privileged authorization extension
+// (OID under the 1.3.6.1.4.1.34380.1.3 arc) unless the policy explicitly allows
+// it by name. Authorization-arc OIDs with no known name cannot be allow-listed
+// and are always denied. Non-authorization extensions are not gated here.
+func guardExtensions(policy Policy, csr *x509.CertificateRequest) bool {
+	var allowed map[string]bool
+	if policy.Extensions != nil {
+		allowed = make(map[string]bool, len(policy.Extensions.Allow))
+		for _, name := range policy.Extensions.Allow {
+			allowed[name] = true
 		}
-		if !matchDNSAltNames(policy.DNSAltNames, csr.DNSNames) {
+	}
+	for _, ext := range csr.Extensions {
+		if !puppet.IsAuthorizationOID(ext.Id) {
+			continue
+		}
+		name, known := puppet.NameByOID(ext.Id)
+		if !known || !allowed[name] {
 			return false
 		}
 	}
+	return true
+}
 
-	// A policy with no conditions matches nothing
-	return hasCondition
+// guardSANs fail-closes every SAN type: if the CSR carries SANs of a given type,
+// the policy must allow that type and every value must match an allow entry.
+func guardSANs(policy Policy, csr *x509.CertificateRequest) bool {
+	if len(csr.DNSNames) > 0 {
+		if policy.DNSAltNames == nil || !matchDNSAltNames(policy.DNSAltNames, csr.DNSNames) {
+			return false
+		}
+	}
+	if len(csr.IPAddresses) > 0 {
+		if policy.IPAltNames == nil || !allIPInCIDRs(policy.IPAltNames.Allow, csr.IPAddresses) {
+			return false
+		}
+	}
+	if len(csr.URIs) > 0 {
+		if policy.URIAltNames == nil || !allWildcardMatch(policy.URIAltNames.Allow, uriStrings(csr.URIs)) {
+			return false
+		}
+	}
+	if len(csr.EmailAddresses) > 0 {
+		if policy.EmailAltNames == nil || !allWildcardMatch(policy.EmailAltNames.Allow, csr.EmailAddresses) {
+			return false
+		}
+	}
+	return true
+}
+
+// allIPInCIDRs reports whether every IP is contained in at least one allowed
+// CIDR range. Invalid CIDR entries never match (fail-closed on the allow side).
+func allIPInCIDRs(cidrs []string, ips []net.IP) bool {
+	nets := make([]*net.IPNet, 0, len(cidrs))
+	for _, c := range cidrs {
+		if _, n, err := net.ParseCIDR(c); err == nil {
+			nets = append(nets, n)
+		}
+	}
+	for _, ip := range ips {
+		matched := false
+		for _, n := range nets {
+			if n.Contains(ip) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
+}
+
+// allWildcardMatch reports whether every name matches at least one wildcard
+// pattern, where '*' spans any characters (including '/' and '@').
+func allWildcardMatch(patterns, names []string) bool {
+	for _, name := range names {
+		matched := false
+		for _, p := range patterns {
+			if wildcardMatch(p, name) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
+}
+
+// wildcardMatch matches name against a pattern where '*' matches any sequence of
+// characters; all other characters match literally. Unlike filepath.Match, '*'
+// is not stopped by '/' or '@', which suits URIs and email addresses.
+func wildcardMatch(pattern, name string) bool {
+	parts := strings.Split(pattern, "*")
+	if len(parts) == 1 {
+		return pattern == name
+	}
+	if !strings.HasPrefix(name, parts[0]) {
+		return false
+	}
+	name = name[len(parts[0]):]
+	for _, seg := range parts[1 : len(parts)-1] {
+		idx := strings.Index(name, seg)
+		if idx < 0 {
+			return false
+		}
+		name = name[idx+len(seg):]
+	}
+	return strings.HasSuffix(name, parts[len(parts)-1])
+}
+
+// uriStrings renders CSR URI SANs to their string form.
+func uriStrings(uris []*url.URL) []string {
+	out := make([]string, len(uris))
+	for i, u := range uris {
+		out[i] = u.String()
+	}
+	return out
 }
 
 // matchPattern checks if certname matches any of the allow patterns.

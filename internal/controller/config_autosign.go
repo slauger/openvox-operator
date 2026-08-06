@@ -101,23 +101,28 @@ func (r *ConfigReconciler) renderAutosignPolicyConfig(ctx context.Context, names
 
 		if p.Spec.Any {
 			sb.WriteString("    any: true\n")
-			continue
 		}
 
+		// Guard fields (SAN allowlists and extensions) are rendered for every
+		// policy, including any:true, so the autosign binary enforces them and no
+		// policy can implicitly waive escalation protection.
 		if p.Spec.Pattern != nil {
-			sb.WriteString("    pattern:\n")
-			sb.WriteString("      allow:\n")
-			for _, a := range p.Spec.Pattern.Allow {
-				fmt.Fprintf(&sb, "        - %q\n", a)
-			}
+			renderAllowList(&sb, "pattern", p.Spec.Pattern.Allow)
 		}
-
 		if p.Spec.DNSAltNames != nil {
-			sb.WriteString("    dnsAltNames:\n")
-			sb.WriteString("      allow:\n")
-			for _, a := range p.Spec.DNSAltNames.Allow {
-				fmt.Fprintf(&sb, "        - %q\n", a)
-			}
+			renderAllowList(&sb, "dnsAltNames", p.Spec.DNSAltNames.Allow)
+		}
+		if p.Spec.IPAltNames != nil {
+			renderAllowList(&sb, "ipAltNames", p.Spec.IPAltNames.Allow)
+		}
+		if p.Spec.URIAltNames != nil {
+			renderAllowList(&sb, "uriAltNames", p.Spec.URIAltNames.Allow)
+		}
+		if p.Spec.EmailAltNames != nil {
+			renderAllowList(&sb, "emailAltNames", p.Spec.EmailAltNames.Allow)
+		}
+		if p.Spec.Extensions != nil {
+			renderAllowList(&sb, "extensions", p.Spec.Extensions.Allow)
 		}
 
 		if len(p.Spec.CSRAttributes) > 0 {
@@ -140,6 +145,15 @@ func (r *ConfigReconciler) renderAutosignPolicyConfig(ctx context.Context, names
 	}
 
 	return sb.String(), nil
+}
+
+// renderAllowList writes an "{field}: { allow: [...] }" block with quoted entries.
+func renderAllowList(sb *strings.Builder, field string, allow []string) {
+	fmt.Fprintf(sb, "    %s:\n", field)
+	sb.WriteString("      allow:\n")
+	for _, a := range allow {
+		fmt.Fprintf(sb, "        - %q\n", a)
+	}
 }
 
 // updateSigningPolicyStatus sets the phase and condition on a SigningPolicy.

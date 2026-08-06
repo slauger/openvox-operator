@@ -158,6 +158,52 @@ func TestSigningPolicyValidator(t *testing.T) {
 		}
 	})
 
+	t.Run("valid ipAltNames CIDR and extensions", func(t *testing.T) {
+		c := setupTestClient(ca)
+		v := &SigningPolicyValidator{Client: c}
+		sp := &openvoxv1alpha1.SigningPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			Spec: openvoxv1alpha1.SigningPolicySpec{
+				CertificateAuthorityRef: "my-ca",
+				IPAltNames:              &openvoxv1alpha1.PatternSpec{Allow: []string{"10.0.0.0/16", "::1/128"}},
+				Extensions:              &openvoxv1alpha1.PatternSpec{Allow: []string{"pp_cli_auth"}},
+			},
+		}
+		if _, err := v.ValidateCreate(context.Background(), sp); err != nil {
+			t.Errorf("expected no error, got %v", err)
+		}
+	})
+
+	t.Run("invalid ipAltNames CIDR is rejected", func(t *testing.T) {
+		c := setupTestClient(ca)
+		v := &SigningPolicyValidator{Client: c}
+		sp := &openvoxv1alpha1.SigningPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			Spec: openvoxv1alpha1.SigningPolicySpec{
+				CertificateAuthorityRef: "my-ca",
+				IPAltNames:              &openvoxv1alpha1.PatternSpec{Allow: []string{"10.0.0.5"}}, // not a CIDR
+			},
+		}
+		if _, err := v.ValidateCreate(context.Background(), sp); err == nil {
+			t.Error("expected error for non-CIDR ipAltNames entry")
+		}
+	})
+
+	t.Run("unknown extension name is rejected", func(t *testing.T) {
+		c := setupTestClient(ca)
+		v := &SigningPolicyValidator{Client: c}
+		sp := &openvoxv1alpha1.SigningPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			Spec: openvoxv1alpha1.SigningPolicySpec{
+				CertificateAuthorityRef: "my-ca",
+				Extensions:              &openvoxv1alpha1.PatternSpec{Allow: []string{"not_a_real_extension"}},
+			},
+		}
+		if _, err := v.ValidateCreate(context.Background(), sp); err == nil {
+			t.Error("expected error for unknown extension name")
+		}
+	})
+
 	t.Run("delete always succeeds", func(t *testing.T) {
 		v := &SigningPolicyValidator{Client: setupTestClient()}
 		_, err := v.ValidateDelete(context.Background(), &openvoxv1alpha1.SigningPolicy{})

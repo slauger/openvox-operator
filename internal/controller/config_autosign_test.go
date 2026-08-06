@@ -175,6 +175,53 @@ func TestRenderAutosignPolicyConfig(t *testing.T) {
 				"\n    any: true",
 			},
 		},
+		{
+			name: "SAN and extension allowlists rendered",
+			policies: []openvoxv1alpha1.SigningPolicy{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: testNamespace},
+					Spec: openvoxv1alpha1.SigningPolicySpec{
+						CertificateAuthorityRef: "ca",
+						Pattern:                 &openvoxv1alpha1.PatternSpec{Allow: []string{"svc-*"}},
+						IPAltNames:              &openvoxv1alpha1.PatternSpec{Allow: []string{"10.0.0.0/16"}},
+						URIAltNames:             &openvoxv1alpha1.PatternSpec{Allow: []string{"spiffe://example.com/*"}},
+						EmailAltNames:           &openvoxv1alpha1.PatternSpec{Allow: []string{"*@example.com"}},
+						Extensions:              &openvoxv1alpha1.PatternSpec{Allow: []string{"pp_cli_auth"}},
+					},
+				},
+			},
+			contains: []string{
+				"ipAltNames:",
+				`"10.0.0.0/16"`,
+				"uriAltNames:",
+				`"spiffe://example.com/*"`,
+				"emailAltNames:",
+				`"*@example.com"`,
+				"extensions:",
+				`"pp_cli_auth"`,
+			},
+		},
+		{
+			name: "any:true still renders guard fields",
+			policies: []openvoxv1alpha1.SigningPolicy{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "bootstrap", Namespace: testNamespace},
+					Spec: openvoxv1alpha1.SigningPolicySpec{
+						CertificateAuthorityRef: "ca",
+						Any:                     true,
+						Extensions:              &openvoxv1alpha1.PatternSpec{Allow: []string{"pp_cli_auth"}},
+						IPAltNames:              &openvoxv1alpha1.PatternSpec{Allow: []string{"10.0.0.0/8"}},
+					},
+				},
+			},
+			contains: []string{
+				"any: true",
+				"extensions:",
+				`"pp_cli_auth"`,
+				"ipAltNames:",
+				`"10.0.0.0/8"`,
+			},
+		},
 	}
 
 	for _, tt := range tests {

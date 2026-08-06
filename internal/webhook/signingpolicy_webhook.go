@@ -2,6 +2,7 @@ package webhook
 
 import (
 	"context"
+	"net"
 
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -44,10 +45,43 @@ func (v *SigningPolicyValidator) validate(ctx context.Context, sp *openvoxv1alph
 		}
 	}
 
-	if sp.Spec.DNSAltNames != nil {
-		for i, pattern := range sp.Spec.DNSAltNames.Allow {
+	for _, f := range []struct {
+		name string
+		spec *openvoxv1alpha1.PatternSpec
+	}{
+		{"dnsAltNames", sp.Spec.DNSAltNames},
+		{"uriAltNames", sp.Spec.URIAltNames},
+		{"emailAltNames", sp.Spec.EmailAltNames},
+	} {
+		if f.spec == nil {
+			continue
+		}
+		for i, pattern := range f.spec.Allow {
 			if pattern == "" {
-				errs = append(errs, field.Invalid(specPath.Child("dnsAltNames", "allow").Index(i), pattern, "pattern must not be empty"))
+				errs = append(errs, field.Invalid(specPath.Child(f.name, "allow").Index(i), pattern, "pattern must not be empty"))
+			}
+		}
+	}
+
+	if sp.Spec.IPAltNames != nil {
+		for i, cidr := range sp.Spec.IPAltNames.Allow {
+			if _, _, err := net.ParseCIDR(cidr); err != nil {
+				errs = append(errs, field.Invalid(specPath.Child("ipAltNames", "allow").Index(i), cidr, "must be a valid CIDR, e.g. 10.0.0.0/16"))
+			}
+		}
+	}
+
+	// Extensions listed here can only take effect if they are known Puppet OIDs
+	// (the autosign guard resolves CSR extensions to names). Reject unknown names
+	// early so a typo doesn't silently fail to allow a privileged extension.
+	if sp.Spec.Extensions != nil {
+		for i, name := range sp.Spec.Extensions.Allow {
+			extPath := specPath.Child("extensions", "allow").Index(i)
+			switch {
+			case name == "":
+				errs = append(errs, field.Invalid(extPath, name, "extension name must not be empty"))
+			case !puppet.IsKnownOID(name):
+				errs = append(errs, field.Invalid(extPath, name, "unknown Puppet extension name"))
 			}
 		}
 	}

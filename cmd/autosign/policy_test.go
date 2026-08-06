@@ -8,12 +8,48 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/pem"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/slauger/openvox-operator/internal/puppet"
 )
+
+// generateCSRWithSANs creates a test CSR carrying the given SAN sets.
+func generateCSRWithSANs(t *testing.T, cn string, dns []string, ips []net.IP, uris []*url.URL, emails []string) *x509.CertificateRequest {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generating key: %v", err)
+	}
+	template := &x509.CertificateRequest{
+		Subject:        pkix.Name{CommonName: cn},
+		DNSNames:       dns,
+		IPAddresses:    ips,
+		URIs:           uris,
+		EmailAddresses: emails,
+	}
+	csrDER, err := x509.CreateCertificateRequest(rand.Reader, template, key)
+	if err != nil {
+		t.Fatalf("creating CSR: %v", err)
+	}
+	csr, err := x509.ParseCertificateRequest(csrDER)
+	if err != nil {
+		t.Fatalf("parsing CSR: %v", err)
+	}
+	return csr
+}
+
+func mustURL(t *testing.T, raw string) *url.URL {
+	t.Helper()
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("parsing URL %q: %v", raw, err)
+	}
+	return u
+}
 
 // generateCSR creates a test CSR with optional SANs and extensions.
 func generateCSR(t *testing.T, cn string, dnsNames []string, extensions []pkix.Extension) *x509.CertificateRequest {
@@ -438,5 +474,128 @@ func TestGlobMatch_InvalidPattern(t *testing.T) {
 	// filepath.Match returns error for patterns with unclosed bracket
 	if globMatch("[invalid", "test") {
 		t.Error("expected false for invalid glob pattern")
+	}
+}
+
+func ppCliAuthExt(t *testing.T) []pkix.Extension {
+	t.Helper()
+	oid, ok := puppet.OIDByName("pp_cli_auth")
+	if !ok {
+		t.Fatal("pp_cli_auth OID not found")
+	}
+	return []pkix.Extension{makeExtension(t, oid, "true")}
+}
+
+// A privileged authorization extension must be denied even by an any:true policy
+// unless the policy explicitly allows it.
+func TestGuardExtensions_AnyTrueStillGated(t *testing.T) {
+	csr := generateCSR(t, "node.example.com", nil, ppCliAuthExt(t))
+
+	deny := Policy{Name: "bootstrap", Any: true}
+	if evaluatePolicy(deny, "node.example.com", csr) {
+		t.Error("any:true must not sign a CSR carrying pp_cli_auth without extensions.allow")
+	}
+
+	allow := Policy{Name: "bootstrap", Any: true, Extensions: &PatternConf{Allow: []string{"pp_cli_auth"}}}
+	if !evaluatePolicy(allow, "node.example.com", csr) {
+		t.Error("any:true with extensions.allow [pp_cli_auth] should sign")
+	}
+}
+
+// A certname-matching policy without extensions.allow must deny a pp_cli_auth CSR.
+func TestGuardExtensions_PatternPolicyDenies(t *testing.T) {
+	csr := generateCSR(t, "worker-1", nil, ppCliAuthExt(t))
+	p := Policy{Name: "workers", Pattern: &PatternConf{Allow: []string{"worker-*"}}}
+	if evaluatePolicy(p, "worker-1", csr) {
+		t.Error("pattern policy without extensions.allow must deny pp_cli_auth CSR")
+	}
+}
+
+// Trusted-fact extensions (...1.1.* arc) are not gated.
+func TestGuardExtensions_TrustedFactNotGated(t *testing.T) {
+	oid, _ := puppet.OIDByName("pp_role")
+	csr := generateCSR(t, "worker-1", nil, []pkix.Extension{makeExtension(t, oid, "web")})
+	p := Policy{Name: "workers", Pattern: &PatternConf{Allow: []string{"worker-*"}}}
+	if !evaluatePolicy(p, "worker-1", csr) {
+		t.Error("trusted-fact extension pp_role must not be gated")
+	}
+}
+
+// An authorization-arc OID with no known name cannot be allow-listed and is denied.
+func TestGuardExtensions_UnknownAuthzOIDDenied(t *testing.T) {
+	unknown := asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 34380, 1, 3, 999}
+	csr := generateCSR(t, "node", nil, []pkix.Extension{makeExtension(t, unknown, "x")})
+	p := Policy{Name: "any", Any: true, Extensions: &PatternConf{Allow: []string{"pp_cli_auth"}}}
+	if evaluatePolicy(p, "node", csr) {
+		t.Error("unknown authorization-arc OID must be denied, not allow-listable")
+	}
+}
+
+func TestGuardSANs_IPCIDR(t *testing.T) {
+	csr := generateCSRWithSANs(t, "svc", nil, []net.IP{net.ParseIP("10.0.5.4")}, nil, nil)
+
+	allow := Policy{Name: "svc", Any: true, IPAltNames: &PatternConf{Allow: []string{"10.0.0.0/16"}}}
+	if !evaluatePolicy(allow, "svc", csr) {
+		t.Error("IP within allowed CIDR should sign")
+	}
+
+	outside := Policy{Name: "svc", Any: true, IPAltNames: &PatternConf{Allow: []string{"192.168.0.0/16"}}}
+	if evaluatePolicy(outside, "svc", csr) {
+		t.Error("IP outside allowed CIDR must be denied")
+	}
+
+	// IP SAN present but no ipAltNames → deny, even for any:true.
+	none := Policy{Name: "svc", Any: true}
+	if evaluatePolicy(none, "svc", csr) {
+		t.Error("IP SAN without ipAltNames must be denied")
+	}
+}
+
+func TestGuardSANs_URIWildcard(t *testing.T) {
+	csr := generateCSRWithSANs(t, "svc", nil, nil,
+		[]*url.URL{mustURL(t, "spiffe://example.com/workload/db")}, nil)
+
+	allow := Policy{Name: "svc", Any: true, URIAltNames: &PatternConf{Allow: []string{"spiffe://example.com/workload/*"}}}
+	if !evaluatePolicy(allow, "svc", csr) {
+		t.Error("URI matching wildcard (across '/') should sign")
+	}
+
+	deny := Policy{Name: "svc", Any: true, URIAltNames: &PatternConf{Allow: []string{"spiffe://other.com/*"}}}
+	if evaluatePolicy(deny, "svc", csr) {
+		t.Error("URI not matching allow must be denied")
+	}
+}
+
+func TestGuardSANs_EmailWildcard(t *testing.T) {
+	csr := generateCSRWithSANs(t, "svc", nil, nil, nil, []string{"ops@example.com"})
+	allow := Policy{Name: "svc", Any: true, EmailAltNames: &PatternConf{Allow: []string{"*@example.com"}}}
+	if !evaluatePolicy(allow, "svc", csr) {
+		t.Error("email matching *@example.com should sign")
+	}
+	deny := Policy{Name: "svc", Any: true, EmailAltNames: &PatternConf{Allow: []string{"*@other.com"}}}
+	if evaluatePolicy(deny, "svc", csr) {
+		t.Error("email not matching allow must be denied")
+	}
+}
+
+func TestWildcardMatch(t *testing.T) {
+	cases := []struct {
+		pattern, name string
+		want          bool
+	}{
+		{"spiffe://example.com/workload/*", "spiffe://example.com/workload/db", true},
+		{"spiffe://example.com/*", "spiffe://example.com/a/b/c", true},
+		{"*@example.com", "ops@example.com", true},
+		{"*@example.com", "ops@other.com", false},
+		{"exact", "exact", true},
+		{"exact", "other", false},
+		{"*", "anything/at@all", true},
+		{"a*b*c", "axxbyyc", true},
+		{"a*b*c", "axxc", false},
+	}
+	for _, c := range cases {
+		if got := wildcardMatch(c.pattern, c.name); got != c.want {
+			t.Errorf("wildcardMatch(%q, %q) = %v, want %v", c.pattern, c.name, got, c.want)
+		}
 	}
 }

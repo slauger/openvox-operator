@@ -37,7 +37,7 @@ func TestRenderAutosignPolicyConfig(t *testing.T) {
 				},
 			},
 			contains: []string{
-				"- name: allow-all",
+				`- name: "allow-all"`,
 				"any: true",
 			},
 		},
@@ -55,9 +55,9 @@ func TestRenderAutosignPolicyConfig(t *testing.T) {
 				},
 			},
 			contains: []string{
-				"- name: psk-policy",
+				`- name: "psk-policy"`,
 				"csrAttributes:",
-				"- name: pp_preshared_key",
+				`- name: "pp_preshared_key"`,
 				`value: "my-key-value"`,
 			},
 		},
@@ -86,7 +86,7 @@ func TestRenderAutosignPolicyConfig(t *testing.T) {
 				newSecret("psk-secret", map[string][]byte{"key": []byte("secret-value")}),
 			},
 			contains: []string{
-				"- name: pp_preshared_key",
+				`- name: "pp_preshared_key"`,
 				`value: "secret-value"`,
 			},
 		},
@@ -109,8 +109,8 @@ func TestRenderAutosignPolicyConfig(t *testing.T) {
 				},
 			},
 			contains: []string{
-				"- name: alpha",
-				"- name: zebra",
+				`- name: "alpha"`,
+				`- name: "zebra"`,
 			},
 		},
 		{
@@ -151,6 +151,28 @@ func TestRenderAutosignPolicyConfig(t *testing.T) {
 				"allow:",
 				`"puppet"`,
 				`"puppet.local"`,
+			},
+		},
+		{
+			name: "malicious attribute name is quoted, not injected",
+			policies: []openvoxv1alpha1.SigningPolicy{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "inject", Namespace: testNamespace},
+					Spec: openvoxv1alpha1.SigningPolicySpec{
+						CertificateAuthorityRef: "ca",
+						CSRAttributes: []openvoxv1alpha1.CSRAttributeMatch{
+							{Name: "pp_role\n    any: true", Value: "x"},
+						},
+					},
+				},
+			},
+			contains: []string{
+				// Rendered as a single-line quoted scalar with the newline escaped.
+				`- name: "pp_role\n    any: true"`,
+			},
+			// The injected key must never appear as a real structural YAML line.
+			excludes: []string{
+				"\n    any: true",
 			},
 		},
 	}
@@ -203,9 +225,9 @@ func TestRenderAutosignPolicyConfig_SortOrder(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	alphaIdx := strings.Index(out, "- name: alpha")
-	bravoIdx := strings.Index(out, "- name: bravo")
-	charlieIdx := strings.Index(out, "- name: charlie")
+	alphaIdx := strings.Index(out, `- name: "alpha"`)
+	bravoIdx := strings.Index(out, `- name: "bravo"`)
+	charlieIdx := strings.Index(out, `- name: "charlie"`)
 
 	if alphaIdx < 0 || bravoIdx < 0 || charlieIdx < 0 {
 		t.Fatalf("not all policies found in output:\n%s", out)

@@ -545,7 +545,7 @@ func TestConfigReconcile_AutosignPolicy(t *testing.T) {
 	if !strings.Contains(policyYAML, "any: true") {
 		t.Errorf("autosign policy missing any:true\n---\n%s", policyYAML)
 	}
-	if !strings.Contains(policyYAML, "name: allow-all") {
+	if !strings.Contains(policyYAML, `name: "allow-all"`) {
 		t.Errorf("autosign policy missing policy name\n---\n%s", policyYAML)
 	}
 }

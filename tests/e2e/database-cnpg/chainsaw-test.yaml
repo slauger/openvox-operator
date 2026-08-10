@@ -4,6 +4,13 @@ metadata:
   name: database-cnpg
 spec:
   namespace: e2e-database-cnpg
+  bindings:
+    - name: registry
+      value: (env('IMAGE_REGISTRY') || 'ghcr.io/slauger')
+    - name: imageTag
+      value: (env('IMAGE_TAG') || 'latest')
+    - name: major
+      value: (env('OPENVOX_MAJOR') || '8')
   steps:
     - name: Install CNPG PostgreSQL cluster
       try:
@@ -38,11 +45,11 @@ spec:
               helm upgrade --install openvox-stack-db "${REPO_ROOT}/charts/openvox-stack" \
                 --namespace e2e-database-cnpg --create-namespace \
                 --values "${REPO_ROOT}/charts/openvox-stack/ci/database-cnpg-values.yaml" \
-                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server \
+                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server-${OPENVOX_MAJOR:-8} \
                 --set config.image.tag="${IMAGE_TAG}" \
                 --set config.image.pullPolicy=Always \
-                --set database.image.repository=${IMAGE_REGISTRY}/openvox-db \
-                --set database.image.tag=latest \
+                --set database.image.repository=${IMAGE_REGISTRY}/openvox-db-${OPENVOX_MAJOR:-8} \
+                --set database.image.tag="${IMAGE_TAG}" \
                 --set database.image.pullPolicy=Always
       catch:
         - events: {}
@@ -91,6 +98,106 @@ spec:
                 ports:
                   - port: 8081
 
+    - name: Assert Server is Running
+      try:
+        - assert:
+            resource:
+              apiVersion: openvox.voxpupuli.org/v1alpha1
+              kind: Server
+              metadata:
+                name: openvox-stack-db-ca
+              status:
+                phase: Running
+                ready: 1
+                desired: 1
+
+    - name: Verify routes.yaml routes facts to PuppetDB
+      try:
+        - script:
+            timeout: 1m
+            content: |
+              set -eu
+              NS=e2e-database-cnpg
+              # The operator must render routes.yaml (facts terminus -> puppetdb) into
+              # the Config ConfigMap and mount it, otherwise facts never reach PuppetDB.
+              ROUTES=$(kubectl get configmap openvox-stack-db-config -n "${NS}" \
+                -o jsonpath='{.data.routes\.yaml}')
+              echo "routes.yaml:"; echo "${ROUTES}"
+              echo "${ROUTES}" | grep -qF 'terminus: puppetdb' \
+                || { echo "ERROR: routes.yaml does not route facts to puppetdb"; exit 1; }
+
+              POD=$(kubectl get pods -n "${NS}" \
+                -l openvox.voxpupuli.org/server=openvox-stack-db-ca \
+                -o jsonpath='{.items[0].metadata.name}')
+              kubectl exec "${POD}" -n "${NS}" -- \
+                cat /etc/puppetlabs/puppet/routes.yaml | grep -qF 'terminus: puppetdb' \
+                || { echo "ERROR: routes.yaml not mounted into the server pod"; exit 1; }
+              echo "OK: routes.yaml renders and is mounted with the puppetdb facts terminus"
+
+    - name: Run a Puppet agent so it submits facts
+      try:
+        - apply:
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: puppet-agent-facts
+                namespace: e2e-database-cnpg
+              spec:
+                backoffLimit: 0
+                template:
+                  spec:
+                    restartPolicy: Never
+                    containers:
+                      - name: puppet-agent
+                        image: (join('', [$registry, '/openvox-agent-', $major, ':', $imageTag]))
+                        imagePullPolicy: Always
+                        command: ["sh", "-c"]
+                        args:
+                          - |
+                            puppet agent --test \
+                              --server openvox-stack-db-server \
+                              --waitforcert 30 \
+                              --certname agent-db-facts-test;
+                            EXIT=$?;
+                            if [ $EXIT -eq 0 ] || [ $EXIT -eq 2 ]; then exit 0; else exit $EXIT; fi
+                        securityContext:
+                          runAsUser: 0
+        - script:
+            timeout: 5m
+            content: |
+              kubectl wait --for=condition=Complete job/puppet-agent-facts \
+                -n e2e-database-cnpg --timeout=300s
+
+    - name: Assert the agent's facts landed in PuppetDB
+      try:
+        - script:
+            timeout: 3m
+            content: |
+              set -eu
+              NS=e2e-database-cnpg
+              CERTNAME=agent-db-facts-test
+              # PuppetDB ingests commands asynchronously, so poll the query API (plain
+              # HTTP on localhost inside the puppetdb pod) until the node's facts appear.
+              found=0
+              for i in $(seq 1 30); do
+                OUT=$(kubectl exec deploy/openvox-stack-db-puppetdb -n "${NS}" -- \
+                  curl -sf "http://127.0.0.1:8080/pdb/query/v4/facts" 2>/dev/null || true)
+                if echo "${OUT}" | grep -q "\"${CERTNAME}\""; then
+                  found=1
+                  echo "OK: PuppetDB has facts for ${CERTNAME}"
+                  break
+                fi
+                echo "waiting for facts to be ingested (${i})..."
+                sleep 5
+              done
+              if [ "${found}" -ne 1 ]; then
+                echo "ERROR: no facts for ${CERTNAME} in PuppetDB (routes.yaml facts terminus not effective)"
+                kubectl exec deploy/openvox-stack-db-puppetdb -n "${NS}" -- \
+                  curl -sf "http://127.0.0.1:8080/pdb/query/v4/nodes" 2>/dev/null || true
+                exit 1
+              fi
+
     - name: Check operator logs for errors (warning only)
       try:
         - script:
@@ -118,6 +225,7 @@ spec:
         - script:
             timeout: 2m
             content: |
+              kubectl logs -n e2e-database-cnpg job/puppet-agent-facts || true
               helm uninstall openvox-stack-db --namespace e2e-database-cnpg --wait 2>/dev/null || true
               helm uninstall pg-cluster --namespace e2e-database-cnpg --wait 2>/dev/null || true
               kubectl delete namespace e2e-database-cnpg --ignore-not-found 2>/dev/null || true

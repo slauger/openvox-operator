@@ -202,6 +202,18 @@ helm install production \
   --set database.postgres.credentialsSecretRef=pg-cluster-app
 ```
 
+## Content images
+
+The OpenVox Server and DB content images are published under their plain names,
+`ghcr.io/slauger/openvox-server` and `ghcr.io/slauger/openvox-db`. A major-suffixed variant
+(`openvox-server-8` / `openvox-db-8`) is also published for pinning a specific OpenVox major;
+the unsuffixed name tracks the current default major and shares its image digest.
+
+The exact OpenVox versions baked into each image are pinned in
+[`images/openvox-versions.yaml`](images/openvox-versions.yaml) (kept current by Renovate),
+and every operator release lists the shipped component versions in its GitHub release notes.
+The operator uses these images everywhere by default (chart values, CRD defaults, samples).
+
 ## Local Development
 
 The `local-build` and `local-deploy` targets build all container images locally and deploy the operator via Helm with `pullPolicy: Never`. This works with clusters that have direct access to the local image store (e.g. Docker Desktop Kubernetes via kubeadm).

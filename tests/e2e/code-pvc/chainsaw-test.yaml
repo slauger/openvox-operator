@@ -9,8 +9,10 @@ spec:
       value: (env('IMAGE_REGISTRY') || 'ghcr.io/slauger')
     - name: imageTag
       value: (env('IMAGE_TAG') || 'latest')
+    - name: major
+      value: (env('OPENVOX_MAJOR') || '8')
   steps:
-    - name: Create PVC and populate with Puppet code
+    - name: Create PVC and populate with a Puppet environment
       try:
         - apply:
             resource:
@@ -42,13 +44,16 @@ spec:
                         command: ["sh", "-c"]
                         args:
                           - |
-                            mkdir -p /code/production/manifests
-                            cat > /code/production/manifests/site.pp << 'SITEPP'
+                            # The PVC holds a single environment's content (mounted as the
+                            # "production" environment via code[].environment), so the tree
+                            # is rooted at the environment, not at environments/.
+                            mkdir -p /code/manifests
+                            cat > /code/manifests/site.pp << 'SITEPP'
                             node default {
                               notify { 'code-pvc-test': message => 'Hello from PVC code' }
                             }
                             SITEPP
-                            cat > /code/production/environment.conf << 'ENVCONF'
+                            cat > /code/environment.conf << 'ENVCONF'
                             modulepath = modules:$basemodulepath
                             manifest = manifests/site.pp
                             ENVCONF
@@ -67,7 +72,7 @@ spec:
               kubectl wait --for=condition=Complete job/init-code \
                 -n e2e-code-pvc --timeout=120s
 
-    - name: Install openvox-stack with PVC code
+    - name: Install openvox-stack with a code list (PVC environment + image mountPath)
       try:
         - script:
             timeout: 2m
@@ -75,12 +80,17 @@ spec:
               REPO_ROOT=$(git rev-parse --show-toplevel)
               IMAGE_TAG=${IMAGE_TAG:-$(git describe --always)}
               IMAGE_REGISTRY=${IMAGE_REGISTRY:-ghcr.io/slauger}
+              CODE_IMAGE="${IMAGE_REGISTRY}/openvox-e2e-code:${IMAGE_TAG}"
+              # config.code as a list: the PVC as the "production" environment plus the
+              # e2e-code image mounted at a codedir path (hieradata) to exercise both
+              # the environment and mountPath targets and multiple code volumes.
               helm upgrade --install e2e-code-pvc "${REPO_ROOT}/charts/openvox-stack" \
                 --namespace e2e-code-pvc --create-namespace \
                 --values "${REPO_ROOT}/charts/openvox-stack/ci/code-pvc-values.yaml" \
-                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server \
+                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server-${OPENVOX_MAJOR:-8} \
                 --set config.image.tag="${IMAGE_TAG}" \
-                --set config.image.pullPolicy=Always
+                --set config.image.pullPolicy=Always \
+                --set-json "config.code=[{\"claimName\":\"puppet-code\",\"environment\":\"production\"},{\"image\":\"${CODE_IMAGE}\",\"imagePullPolicy\":\"Always\",\"mountPath\":\"/etc/puppetlabs/code/hieradata\"}]"
       catch:
         - events: {}
 
@@ -97,7 +107,29 @@ spec:
                 ready: 1
                 desired: 1
 
-    - name: Run Puppet agent
+    - name: Verify both code volumes are mounted at their targets
+      try:
+        - script:
+            timeout: 1m
+            content: |
+              set -eu
+              NS=e2e-code-pvc
+              POD=$(kubectl get pods -n "${NS}" \
+                -l openvox.voxpupuli.org/server=e2e-code-pvc-ca \
+                -o jsonpath='{.items[0].metadata.name}')
+              echo "pod=${POD}"
+              fail() { echo "ERROR: $1"; kubectl get pod "${POD}" -n "${NS}" -o yaml; exit 1; }
+
+              MOUNTS=$(kubectl get pod "${POD}" -n "${NS}" \
+                -o jsonpath='{.spec.containers[?(@.name=="openvox-server")].volumeMounts[*].mountPath}')
+              echo "mounts=${MOUNTS}"
+              echo "${MOUNTS}" | tr ' ' '\n' | grep -qx '/etc/puppetlabs/code/environments/production' \
+                || fail "environment code mount missing"
+              echo "${MOUNTS}" | tr ' ' '\n' | grep -qx '/etc/puppetlabs/code/hieradata' \
+                || fail "mountPath code mount missing"
+              echo "OK: code list mounted both the environment and the mountPath entry"
+
+    - name: Run Puppet agent against the PVC environment
       try:
         - apply:
             resource:
@@ -113,7 +145,7 @@ spec:
                     restartPolicy: Never
                     containers:
                       - name: puppet-agent
-                        image: (join('', [$registry, '/openvox-agent:', $imageTag]))
+                        image: (join('', [$registry, '/openvox-agent-', $major, ':', $imageTag]))
                         imagePullPolicy: Always
                         command: ["sh", "-c"]
                         args:

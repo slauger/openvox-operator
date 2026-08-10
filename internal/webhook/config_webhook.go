@@ -53,6 +53,8 @@ func (v *ConfigValidator) validate(ctx context.Context, c *openvoxv1alpha1.Confi
 		}
 	}
 
+	errs = append(errs, validateCodeList(c.Spec.Code, specPath.Child("code"))...)
+
 	if len(errs) > 0 {
 		return nil, errs.ToAggregate()
 	}

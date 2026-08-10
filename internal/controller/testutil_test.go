@@ -81,7 +81,7 @@ func newConfig(name string, opts ...configOption) *openvoxv1alpha1.Config {
 		Spec: openvoxv1alpha1.ConfigSpec{
 			ReadOnlyRootFilesystem: true,
 			Image: openvoxv1alpha1.ImageSpec{
-				Repository: "ghcr.io/slauger/openvox-server",
+				Repository: "ghcr.io/slauger/openvox-server-8",
 				Tag:        "latest",
 				PullPolicy: corev1.PullIfNotPresent,
 			},
@@ -119,15 +119,33 @@ func withReadOnlyRootFS(v bool) configOption {
 	}
 }
 
+func withAutosignCommand(cmd string) configOption {
+	return func(c *openvoxv1alpha1.Config) {
+		c.Spec.Puppet.AutosignCommand = cmd
+	}
+}
+
+func withExternalNodesCommand(cmd string) configOption {
+	return func(c *openvoxv1alpha1.Config) {
+		c.Spec.Puppet.ExternalNodesCommand = cmd
+	}
+}
+
 func withCodeImage(image string) configOption {
 	return func(c *openvoxv1alpha1.Config) {
-		c.Spec.Code = &openvoxv1alpha1.CodeSpec{Image: image}
+		c.Spec.Code = []openvoxv1alpha1.CodeSpec{{Image: image}}
 	}
 }
 
 func withCodePVC(claimName string) configOption {
 	return func(c *openvoxv1alpha1.Config) {
-		c.Spec.Code = &openvoxv1alpha1.CodeSpec{ClaimName: claimName}
+		c.Spec.Code = []openvoxv1alpha1.CodeSpec{{ClaimName: claimName}}
+	}
+}
+
+func withCodeList(code ...openvoxv1alpha1.CodeSpec) configOption {
+	return func(c *openvoxv1alpha1.Config) {
+		c.Spec.Code = code
 	}
 }
 
@@ -521,7 +539,7 @@ func newDatabase(name string, opts ...databaseOption) *openvoxv1alpha1.Database 
 		Spec: openvoxv1alpha1.DatabaseSpec{
 			CertificateRef: "production-db-cert",
 			Image: openvoxv1alpha1.ImageSpec{
-				Repository: "ghcr.io/slauger/openvox-db",
+				Repository: "ghcr.io/slauger/openvox-db-8",
 				Tag:        "latest",
 				PullPolicy: corev1.PullIfNotPresent,
 			},

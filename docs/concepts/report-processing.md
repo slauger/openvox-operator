@@ -106,7 +106,7 @@ metadata:
 spec:
   authorityRef: production-ca
   image:
-    repository: ghcr.io/slauger/openvox-server
+    repository: ghcr.io/slauger/openvox-server-8
     tag: "8.12.1"
 ```
 

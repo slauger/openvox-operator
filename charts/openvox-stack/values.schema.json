@@ -32,10 +32,17 @@
             "type": "object",
             "properties": {
                 "code": {
-                    "type": "object",
+                    "type": [
+                        "object",
+                        "array"
+                    ],
                     "properties": {
                         "claimName": {
                             "description": "Existing PVC claim name for code volume.",
+                            "type": "string"
+                        },
+                        "environment": {
+                            "description": "Mount this source as a single Puppet environment at environmentpath/\u003cenvironment\u003e. Mutually exclusive with mountPath.",
                             "type": "string"
                         },
                         "image": {
@@ -53,6 +60,10 @@
                         },
                         "imagePullSecret": {
                             "description": "Pull secret for the code init container.",
+                            "type": "string"
+                        },
+                        "mountPath": {
+                            "description": "Mount this source at an absolute path under the Puppet codedir (/etc/puppetlabs/code). Mutually exclusive with environment.",
                             "type": "string"
                         }
                     }
@@ -90,12 +101,20 @@
                 "puppet": {
                     "type": "object",
                     "properties": {
+                        "autosignCommand": {
+                            "description": "Custom autosign executable path. Replaces the built-in binary and disables the SigningPolicy flow.",
+                            "type": "string"
+                        },
                         "environmentPath": {
                             "description": "Path to Puppet environments.",
                             "type": "string"
                         },
                         "environmentTimeout": {
                             "description": "Environment timeout setting.",
+                            "type": "string"
+                        },
+                        "externalNodesCommand": {
+                            "description": "Custom ENC executable path. Replaces the built-in binary and disables the NodeClassifier flow.",
                             "type": "string"
                         },
                         "extraConfig": {

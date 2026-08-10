@@ -12,7 +12,7 @@ metadata:
 spec:
   authorityRef: lab-ca
   image:
-    repository: ghcr.io/slauger/openvox-server
+    repository: ghcr.io/slauger/openvox-server-8
     tag: "8.12.1"
 ---
 apiVersion: openvox.voxpupuli.org/v1alpha1
@@ -73,7 +73,7 @@ spec:
   authorityRef: production-ca
   databaseRef: production-db
   image:
-    repository: ghcr.io/slauger/openvox-server
+    repository: ghcr.io/slauger/openvox-server-8
     tag: "8.12.1"
   puppet:
     environmentTimeout: unlimited
@@ -155,7 +155,7 @@ metadata:
 spec:
   certificateRef: production-db-cert
   image:
-    repository: ghcr.io/slauger/openvox-db
+    repository: ghcr.io/slauger/openvox-db-8
     tag: latest
   postgres:
     host: pg-rw.openvox.svc        # CloudNativePG read/write Service

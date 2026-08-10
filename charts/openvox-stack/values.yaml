@@ -13,7 +13,7 @@ config:
   image:
     # @schema description: OpenVox Server image repository.
     # -- OpenVox Server image repository.
-    repository: ghcr.io/slauger/openvox-server
+    repository: ghcr.io/slauger/openvox-server-8
     # @schema description: Image tag. Defaults to the chart appVersion.
     # -- Image tag. Defaults to the chart appVersion.
     tag: ""
@@ -58,6 +58,13 @@ config:
     #   server:
     #     strict_variables: "true"
     #   agent: {}
+    # @schema description: Custom autosign executable path. Replaces the built-in binary and disables the SigningPolicy flow.
+    # -- Custom autosign executable path. When set, replaces the built-in autosign binary and disables the SigningPolicy-driven flow. The executable must be present in the server image or mounted via a Server's extraVolumes.
+    autosignCommand: ""
+    # @schema description: Custom ENC executable path. Replaces the built-in binary and disables the NodeClassifier flow.
+    # -- Custom ENC (external_nodes) executable path. When set, replaces the built-in ENC binary and disables the NodeClassifier-driven flow. The executable must be present in the server image or mounted via a Server's extraVolumes.
+    externalNodesCommand: ""
+  # @schema type:[object, array]
   code:
     # @schema description: Init container image for Puppet code deployment.
     # -- Init container image for Puppet code deployment.
@@ -72,6 +79,19 @@ config:
     # @schema description: Existing PVC claim name for code volume.
     # -- Existing PVC claim name for code volume.
     claimName: ""
+    # @schema description: Mount this source as a single Puppet environment at environmentpath/<environment>. Mutually exclusive with mountPath.
+    # -- Mount this source as a single Puppet environment at `<environmentpath>/<environment>`. Mutually exclusive with `mountPath`.
+    environment: ""
+    # @schema description: Mount this source at an absolute path under the Puppet codedir (/etc/puppetlabs/code). Mutually exclusive with environment.
+    # -- Mount this source at an absolute path under the Puppet codedir (`/etc/puppetlabs/code`), e.g. the global modules dir. Mutually exclusive with `environment`.
+    mountPath: ""
+  # For multiple code sources (per-environment images, a global modules dir,
+  # hieradata), set config.code to a list instead of the object above:
+  # code:
+  #   - image: registry/control-repo-production:latest
+  #     environment: production
+  #   - claimName: shared-modules
+  #     mountPath: /etc/puppetlabs/code/modules
   # puppetserver:
   #   maxRequestsPerInstance: 0
   #   borrowTimeout: 1200000
@@ -199,7 +219,7 @@ database:
   image:
     # @schema description: OpenVox DB image repository.
     # -- OpenVox DB image repository.
-    repository: ghcr.io/slauger/openvox-db
+    repository: ghcr.io/slauger/openvox-db-8
     # @schema description: Image tag. Defaults to the chart appVersion.
     # -- Image tag. Defaults to the chart appVersion.
     tag: ""
@@ -290,7 +310,7 @@ servers:
     # javaArgs: "-Xms512m -Xmx1024m"
     # maxActiveInstances: 2
     # image:
-    #   repository: ghcr.io/slauger/openvox-server
+    #   repository: ghcr.io/slauger/openvox-server-8
     #   tag: custom
     # code:
     #   image: ghcr.io/slauger/openvox-e2e-code:latest

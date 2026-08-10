@@ -51,6 +51,8 @@ func (v *ServerValidator) validate(ctx context.Context, s *openvoxv1alpha1.Serve
 		warnings = append(warnings, fmt.Sprintf("running CA role with %d replicas; CA data is stored on a PVC and concurrent writes may cause issues", *s.Spec.Replicas))
 	}
 
+	errs = append(errs, validateCodeList(s.Spec.Code, specPath.Child("code"))...)
+
 	if len(errs) > 0 {
 		return warnings, errs.ToAggregate()
 	}

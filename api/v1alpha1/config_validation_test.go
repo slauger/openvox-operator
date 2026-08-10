@@ -34,31 +34,80 @@ func TestConfigValidation(t *testing.T) {
 		{
 			name: "code with image only accepted",
 			mutate: func(c *Config) {
-				c.Spec.Code = &CodeSpec{Image: "registry.example.com/code:latest"}
+				c.Spec.Code = []CodeSpec{{Image: "registry.example.com/code:latest"}}
 			},
 		},
 		{
 			name: "code with claimName only accepted",
 			mutate: func(c *Config) {
-				c.Spec.Code = &CodeSpec{ClaimName: "my-pvc"}
+				c.Spec.Code = []CodeSpec{{ClaimName: "my-pvc"}}
 			},
 		},
 		{
 			name: "code with both image and claimName rejected",
 			mutate: func(c *Config) {
-				c.Spec.Code = &CodeSpec{
+				c.Spec.Code = []CodeSpec{{
 					Image:     "registry.example.com/code:latest",
 					ClaimName: "my-pvc",
-				}
+				}}
 			},
 			wantErr: "image and claimName are mutually exclusive",
 		},
 		{
 			name: "code with neither image nor claimName rejected",
 			mutate: func(c *Config) {
-				c.Spec.Code = &CodeSpec{}
+				c.Spec.Code = []CodeSpec{{}}
 			},
 			wantErr: "either image or claimName must be set",
+		},
+		{
+			name: "code entry with environment accepted",
+			mutate: func(c *Config) {
+				c.Spec.Code = []CodeSpec{{Image: "registry.example.com/code:latest", Environment: "production"}}
+			},
+		},
+		{
+			name: "code entry with mountPath under codedir accepted",
+			mutate: func(c *Config) {
+				c.Spec.Code = []CodeSpec{{Image: "registry.example.com/code:latest", MountPath: "/etc/puppetlabs/code/modules"}}
+			},
+		},
+		{
+			name: "code entry with environment and mountPath rejected",
+			mutate: func(c *Config) {
+				c.Spec.Code = []CodeSpec{{
+					Image:       "registry.example.com/code:latest",
+					Environment: "production",
+					MountPath:   "/etc/puppetlabs/code/modules",
+				}}
+			},
+			wantErr: "environment and mountPath are mutually exclusive",
+		},
+		{
+			name: "code entry with mountPath outside codedir rejected",
+			mutate: func(c *Config) {
+				c.Spec.Code = []CodeSpec{{Image: "registry.example.com/code:latest", MountPath: "/opt/puppet/code"}}
+			},
+			wantErr: "mountPath must be under the Puppet codedir",
+		},
+		{
+			name: "multiple code entries with targets accepted",
+			mutate: func(c *Config) {
+				c.Spec.Code = []CodeSpec{
+					{Image: "registry.example.com/prod:latest", Environment: "production"},
+					{ClaimName: "modules", MountPath: "/etc/puppetlabs/code/modules"},
+				}
+			},
+		},
+		{
+			name: "multiple code entries without targets rejected",
+			mutate: func(c *Config) {
+				c.Spec.Code = []CodeSpec{
+					{Image: "registry.example.com/a:latest"},
+					{Image: "registry.example.com/b:latest"},
+				}
+			},
+			wantErr: "each entry must set either environment or mountPath",
 		},
 		{
 			name: "valid compileMode jit",

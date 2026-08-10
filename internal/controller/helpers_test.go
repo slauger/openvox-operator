@@ -86,7 +86,7 @@ func TestResolveImage(t *testing.T) {
 	cfg := &openvoxv1alpha1.Config{
 		Spec: openvoxv1alpha1.ConfigSpec{
 			Image: openvoxv1alpha1.ImageSpec{
-				Repository: "ghcr.io/slauger/openvox-server",
+				Repository: "ghcr.io/slauger/openvox-server-8",
 				Tag:        "latest",
 			},
 		},
@@ -102,7 +102,7 @@ func TestResolveImage(t *testing.T) {
 			server: &openvoxv1alpha1.Server{
 				Spec: openvoxv1alpha1.ServerSpec{},
 			},
-			want: "ghcr.io/slauger/openvox-server:latest",
+			want: "ghcr.io/slauger/openvox-server-8:latest",
 		},
 		{
 			name: "server tag override",
@@ -113,7 +113,7 @@ func TestResolveImage(t *testing.T) {
 					},
 				},
 			},
-			want: "ghcr.io/slauger/openvox-server:v8.12.1",
+			want: "ghcr.io/slauger/openvox-server-8:v8.12.1",
 		},
 		{
 			name: "server repository override only",
@@ -151,12 +151,11 @@ func TestResolveImage(t *testing.T) {
 }
 
 func TestResolveCode(t *testing.T) {
-	cfgCode := &openvoxv1alpha1.CodeSpec{
-		Image: "ghcr.io/slauger/puppet-code:latest",
-	}
 	cfg := &openvoxv1alpha1.Config{
 		Spec: openvoxv1alpha1.ConfigSpec{
-			Code: cfgCode,
+			Code: []openvoxv1alpha1.CodeSpec{{
+				Image: "ghcr.io/slauger/puppet-code:latest",
+			}},
 		},
 	}
 
@@ -165,18 +164,51 @@ func TestResolveCode(t *testing.T) {
 		Spec: openvoxv1alpha1.ServerSpec{},
 	}
 	got := resolveCode(server, cfg)
-	if got != cfgCode {
-		t.Error("expected config code spec when server has no override")
+	if len(got) != 1 || got[0].Image != "ghcr.io/slauger/puppet-code:latest" {
+		t.Errorf("expected config code spec when server has no override, got %+v", got)
 	}
 
-	// Server with code override -> use server's
-	serverCode := &openvoxv1alpha1.CodeSpec{
+	// Server with code override -> use server's (replace, not merge)
+	server.Spec.Code = []openvoxv1alpha1.CodeSpec{{
 		Image: "custom/code:v2",
-	}
-	server.Spec.Code = serverCode
+	}}
 	got = resolveCode(server, cfg)
-	if got != serverCode {
-		t.Error("expected server code spec when override is set")
+	if len(got) != 1 || got[0].Image != "custom/code:v2" {
+		t.Errorf("expected server code spec when override is set, got %+v", got)
+	}
+}
+
+func TestResolveCodeMounts(t *testing.T) {
+	cfg := &openvoxv1alpha1.Config{}
+
+	// Single whole-tree entry keeps the stable "code" volume at environmentpath.
+	single := &openvoxv1alpha1.Server{Spec: openvoxv1alpha1.ServerSpec{
+		Code: []openvoxv1alpha1.CodeSpec{{Image: "img:1"}},
+	}}
+	got := resolveCodeMounts(single, cfg)
+	if len(got) != 1 || got[0].VolumeName != "code" || got[0].MountPath != defaultEnvironmentPath {
+		t.Errorf("single whole-tree entry: got %+v", got)
+	}
+
+	// Multiple entries map to environment subdirs and absolute mountPaths.
+	multi := &openvoxv1alpha1.Server{Spec: openvoxv1alpha1.ServerSpec{
+		Code: []openvoxv1alpha1.CodeSpec{
+			{Image: "img:prod", Environment: "production"},
+			{ClaimName: "modules", MountPath: "/etc/puppetlabs/code/modules"},
+		},
+	}}
+	got = resolveCodeMounts(multi, cfg)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 mounts, got %d", len(got))
+	}
+	if got[0].MountPath != defaultEnvironmentPath+"/production" {
+		t.Errorf("environment entry mountPath = %q", got[0].MountPath)
+	}
+	if got[1].MountPath != "/etc/puppetlabs/code/modules" {
+		t.Errorf("mountPath entry mountPath = %q", got[1].MountPath)
+	}
+	if got[0].VolumeName == got[1].VolumeName {
+		t.Errorf("volume names must be unique, both %q", got[0].VolumeName)
 	}
 }
 

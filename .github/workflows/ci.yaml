@@ -35,6 +35,18 @@ jobs:
   shellcheck:
     uses: ./.github/workflows/_shellcheck.yaml
 
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Build OpenVox version matrix
+        id: matrix
+        run: |
+          echo "matrix=$(yq -o=json -I=0 '{"include": .include}' images/openvox-versions.yaml)" >> "$GITHUB_OUTPUT"
+
   openvox-operator:
     needs: go
     uses: ./.github/workflows/_container-build.yaml
@@ -51,7 +63,10 @@ jobs:
       image_tag: develop
 
   openvox-server:
-    needs: shellcheck
+    needs: [shellcheck, prepare]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     uses: ./.github/workflows/_container-build.yaml
     permissions:
       contents: read
@@ -59,14 +74,24 @@ jobs:
       id-token: write
       attestations: write
     with:
-      image_name: openvox-server
+      image_name: openvox-server-${{ matrix.major }}
+      # Publish the unsuffixed backward-compat alias only for the default major.
+      alias_image_name: ${{ matrix.latest && 'openvox-server' || '' }}
+      allow_failure: ${{ matrix.major != '8' }}
       dockerfile: images/openvox-server/Containerfile
       context: '.'
       push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
       image_tag: develop
+      build_args: |
+        OPENVOXSERVER_VERSION=${{ matrix.server }}
+        OPENVOXDB_TERMINI_VERSION=${{ matrix.termini }}
+        OPENVOX_VERSION=${{ matrix.openvox }}
 
   openvox-db:
-    needs: shellcheck
+    needs: [shellcheck, prepare]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     uses: ./.github/workflows/_container-build.yaml
     permissions:
       contents: read
@@ -74,11 +99,16 @@ jobs:
       id-token: write
       attestations: write
     with:
-      image_name: openvox-db
+      image_name: openvox-db-${{ matrix.major }}
+      # Publish the unsuffixed backward-compat alias only for the default major.
+      alias_image_name: ${{ matrix.latest && 'openvox-db' || '' }}
+      allow_failure: ${{ matrix.major != '8' }}
       dockerfile: images/openvox-db/Containerfile
       context: '.'
       push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
       image_tag: develop
+      build_args: |
+        OPENVOXDB_VERSION=${{ matrix.db }}
 
   openvox-e2e-code:
     needs: shellcheck
@@ -97,7 +127,10 @@ jobs:
       sign: false
 
   openvox-agent:
-    needs: shellcheck
+    needs: [shellcheck, prepare]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     uses: ./.github/workflows/_container-build.yaml
     permissions:
       contents: read
@@ -105,11 +138,15 @@ jobs:
       id-token: write
       attestations: write
     with:
-      image_name: openvox-agent
+      image_name: openvox-agent-${{ matrix.major }}
+      allow_failure: ${{ matrix.major != '8' }}
       dockerfile: images/openvox-agent/Containerfile
       context: 'images/openvox-agent'
       push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
       image_tag: develop
+      build_args: |
+        OPENVOX_AGENT_VERSION=${{ matrix.agent }}
+        OPENVOX_MAJOR=${{ matrix.major }}
       sign: false
 
   openvox-mock:

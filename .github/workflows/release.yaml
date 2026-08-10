@@ -44,6 +44,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  prepare:
+    needs: semantic-release
+    if: needs.semantic-release.outputs.new-release-published == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Build OpenVox version matrix
+        id: matrix
+        run: |
+          echo "matrix=$(yq -o=json -I=0 '{"include": .include}' images/openvox-versions.yaml)" >> "$GITHUB_OUTPUT"
+
   openvox-operator:
     needs: semantic-release
     if: needs.semantic-release.outputs.new-release-published == 'true'
@@ -62,8 +76,11 @@ jobs:
       image_tag: ${{ needs.semantic-release.outputs.new-release-version }}
 
   openvox-server:
-    needs: semantic-release
+    needs: [semantic-release, prepare]
     if: needs.semantic-release.outputs.new-release-published == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     uses: ./.github/workflows/_container-build.yaml
     permissions:
       contents: read
@@ -71,16 +88,26 @@ jobs:
       id-token: write
       attestations: write
     with:
-      image_name: openvox-server
+      image_name: openvox-server-${{ matrix.major }}
+      # Publish the unsuffixed backward-compat alias only for the default major.
+      alias_image_name: ${{ matrix.latest && 'openvox-server' || '' }}
+      allow_failure: ${{ matrix.major != '8' }}
       dockerfile: images/openvox-server/Containerfile
       context: '.'
       push: true
-      latest: true
+      latest: ${{ matrix.latest }}
       image_tag: ${{ needs.semantic-release.outputs.new-release-version }}
+      build_args: |
+        OPENVOXSERVER_VERSION=${{ matrix.server }}
+        OPENVOXDB_TERMINI_VERSION=${{ matrix.termini }}
+        OPENVOX_VERSION=${{ matrix.openvox }}
 
   openvox-db:
-    needs: semantic-release
+    needs: [semantic-release, prepare]
     if: needs.semantic-release.outputs.new-release-published == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     uses: ./.github/workflows/_container-build.yaml
     permissions:
       contents: read
@@ -88,12 +115,17 @@ jobs:
       id-token: write
       attestations: write
     with:
-      image_name: openvox-db
+      image_name: openvox-db-${{ matrix.major }}
+      # Publish the unsuffixed backward-compat alias only for the default major.
+      alias_image_name: ${{ matrix.latest && 'openvox-db' || '' }}
+      allow_failure: ${{ matrix.major != '8' }}
       dockerfile: images/openvox-db/Containerfile
       context: '.'
       push: true
-      latest: true
+      latest: ${{ matrix.latest }}
       image_tag: ${{ needs.semantic-release.outputs.new-release-version }}
+      build_args: |
+        OPENVOXDB_VERSION=${{ matrix.db }}
 
   validate-openvox-operator:
     needs: [semantic-release, openvox-operator]
@@ -107,6 +139,8 @@ jobs:
       image: ${{ needs.openvox-operator.outputs.image }}
       digest: ${{ needs.openvox-operator.outputs.digest }}
 
+  # Only the default major (8) is conforma-validated: it is the released,
+  # :latest-tagged image. Major 9 is a best-effort pre-release build.
   validate-openvox-server:
     needs: [semantic-release, openvox-server]
     if: needs.semantic-release.outputs.new-release-published == 'true'
@@ -116,8 +150,8 @@ jobs:
       id-token: write
       packages: read
     with:
-      image: ${{ needs.openvox-server.outputs.image }}
-      digest: ${{ needs.openvox-server.outputs.digest }}
+      # ec resolves the tag to a digest itself.
+      image: ghcr.io/${{ github.repository_owner }}/openvox-server-8:${{ needs.semantic-release.outputs.new-release-version }}
 
   validate-openvox-db:
     needs: [semantic-release, openvox-db]
@@ -128,8 +162,7 @@ jobs:
       id-token: write
       packages: read
     with:
-      image: ${{ needs.openvox-db.outputs.image }}
-      digest: ${{ needs.openvox-db.outputs.digest }}
+      image: ghcr.io/${{ github.repository_owner }}/openvox-db-8:${{ needs.semantic-release.outputs.new-release-version }}
 
   helm-charts:
     needs: [semantic-release, openvox-operator, openvox-server, openvox-db]
@@ -204,6 +237,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
       - name: Download chart artifacts
         uses: actions/download-artifact@v8
         with:
@@ -216,3 +252,21 @@ jobs:
         run: |
           VERSION="${{ needs.semantic-release.outputs.new-release-version }}"
           gh release upload "v${VERSION}" *.tgz
+
+      - name: Append OpenVox component versions to release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          VERSION="${{ needs.semantic-release.outputs.new-release-version }}"
+          ROWS=$(yq -r '.include[] | "| " + .major + " | " + .server + " | " + .db + " | " + .agent + " |"' images/openvox-versions.yaml)
+          BODY=$(gh release view "v${VERSION}" --json body -q .body)
+          {
+            printf '%s\n\n' "${BODY}"
+            printf '## OpenVox component versions\n\n'
+            printf 'Content images shipped with this release. Major 8 is the default and the only one tagged `:latest`; major 9 is a pre-release.\n\n'
+            printf '| Major | openvox-server | openvox-db | openvox-agent |\n'
+            printf '|---|---|---|---|\n'
+            printf '%s\n' "${ROWS}"
+          } > release-notes.md
+          gh release edit "v${VERSION}" --notes-file release-notes.md

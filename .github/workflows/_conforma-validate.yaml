@@ -8,9 +8,10 @@ on:
         required: true
         type: string
       digest:
-        description: 'Image manifest digest (sha256:...)'
-        required: true
+        description: 'Image manifest digest (sha256:...). If empty, the tag in image is resolved by ec.'
+        required: false
         type: string
+        default: ''
       strict:
         description: 'Fail on policy violations'
         required: false
@@ -26,7 +27,7 @@ jobs:
       packages: read
     env:
       # renovate: datasource=github-releases depName=conforma/cli
-      EC_VERSION: "0.9.96"
+      EC_VERSION: "0.9.102"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -46,9 +47,13 @@ jobs:
 
       - name: Validate image with Conforma
         run: |
+          IMAGE_REF="${{ inputs.image }}"
+          if [[ -n "${{ inputs.digest }}" ]]; then
+            IMAGE_REF="${{ inputs.image }}@${{ inputs.digest }}"
+          fi
           ARGS=(
             validate image
-            --image "${{ inputs.image }}@${{ inputs.digest }}"
+            --image "${IMAGE_REF}"
             --policy .conforma/policy.yaml
             --certificate-identity-regexp "https://github.com/${{ github.repository }}/"
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com"

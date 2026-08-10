@@ -8,6 +8,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
+	"github.com/slauger/openvox-operator/internal/puppet"
 )
 
 // SigningPolicyValidator validates SigningPolicy resources.
@@ -48,6 +49,20 @@ func (v *SigningPolicyValidator) validate(ctx context.Context, sp *openvoxv1alph
 			if pattern == "" {
 				errs = append(errs, field.Invalid(specPath.Child("dnsAltNames", "allow").Index(i), pattern, "pattern must not be empty"))
 			}
+		}
+	}
+
+	// The autosign binary only matches attributes with a known Puppet OID; an
+	// unknown name would never match. Enforcing the allowlist here also blocks
+	// YAML-injection payloads via the free-form name field (defense in depth to
+	// the %q-quoted renderer).
+	for i, attr := range sp.Spec.CSRAttributes {
+		namePath := specPath.Child("csrAttributes").Index(i).Child("name")
+		switch {
+		case attr.Name == "":
+			errs = append(errs, field.Invalid(namePath, attr.Name, "name must not be empty"))
+		case !puppet.IsKnownOID(attr.Name):
+			errs = append(errs, field.Invalid(namePath, attr.Name, "unknown Puppet extension name"))
 		}
 	}
 

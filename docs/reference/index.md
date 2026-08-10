@@ -52,7 +52,7 @@ These types are reused across multiple CRDs.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `repository` | string | `ghcr.io/slauger/openvox-server` | Container image repository |
+| `repository` | string | `ghcr.io/slauger/openvox-server-8` | Container image repository |
 | `tag` | string | `latest` | Container image tag |
 | `pullPolicy` | string | `IfNotPresent` | Image pull policy |
 | `pullSecrets` | []LocalObjectReference | - | Image pull secrets |
@@ -66,14 +66,38 @@ These types are reused across multiple CRDs.
 
 ### CodeSpec
 
-Used by [Config](config.md) and [Server](server.md) to define the Puppet code source. Either `claimName` or `image` may be set, not both.
+`code` on [Config](config.md) and [Server](server.md) is a **list** of code sources.
+Each entry sets exactly one source (`claimName` **or** `image`, not both) and an
+optional mount target (`environment` **or** `mountPath`, not both).
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `claimName` | string | - | Name of an existing PVC containing Puppet code |
-| `image` | string | - | OCI image reference containing Puppet code (Kubernetes 1.35+, or 1.31+ with feature gate) |
+| `claimName` | string | - | Name of an existing PVC containing Puppet code (mutually exclusive with `image`) |
+| `image` | string | - | OCI image reference containing Puppet code, Kubernetes 1.35+ or 1.31+ with feature gate (mutually exclusive with `claimName`) |
 | `imagePullPolicy` | string | `IfNotPresent` | When to pull the code image |
 | `imagePullSecret` | string | - | Secret name for pulling from private registries |
+| `environment` | string | - | Mount this source as a single Puppet environment at `<environmentpath>/<environment>`. Must be unique across the list (mutually exclusive with `mountPath`) |
+| `mountPath` | string | - | Mount this source at an absolute path under the Puppet codedir (`/etc/puppetlabs/code`), e.g. the global modules dir or hieradata (mutually exclusive with `environment`) |
+
+**Mount target rules:**
+
+- **0 entries** - an `emptyDir` is mounted at `environmentpath` so Puppet Server can
+  bootstrap its default `production` environment.
+- **1 entry without `environment`/`mountPath`** - the source is mounted as the whole
+  `environments` tree at `environmentpath` (the pre-list behaviour).
+- **More than 1 entry** - each entry must set `environment` or `mountPath`;
+  `environment` values must be unique. `mountPath` must be under `/etc/puppetlabs/code`.
+
+Entries are mounted read-only. A Server's `code` replaces (does not merge with) the
+Config's `code`.
+
+```yaml
+code:
+  - image: registry/control-repo-production:latest
+    environment: production                 # -> <environmentpath>/production
+  - claimName: shared-modules
+    mountPath: /etc/puppetlabs/code/modules # global modules dir
+```
 
 ### PodSecurityContextSpec
 

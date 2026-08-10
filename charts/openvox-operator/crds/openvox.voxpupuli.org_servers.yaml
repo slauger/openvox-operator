@@ -1008,35 +1008,79 @@ spec:
                   is mounted into the Server pods.
                 type: string
               code:
-                description: Code overrides the Config's code volume for this Server.
-                properties:
-                  claimName:
-                    description: |-
-                      ClaimName references an existing PVC containing Puppet code.
-                      Mutually exclusive with Image.
-                    type: string
-                  image:
-                    description: |-
-                      Image is an OCI image reference containing Puppet code.
-                      Mounted as a read-only image volume (Kubernetes 1.35+, or 1.31+ with ImageVolume feature gate).
-                      Mutually exclusive with ClaimName.
-                    type: string
-                  imagePullPolicy:
-                    default: IfNotPresent
-                    description: ImagePullPolicy defines when to pull the code image.
-                    type: string
-                  imagePullSecret:
-                    description: ImagePullSecret references a Secret for pulling from
-                      private registries.
-                    type: string
-                type: object
+                description: |-
+                  Code overrides the Config's code volumes for this Server (replace, not merge).
+                  A single entry without environment or mountPath is mounted as the whole
+                  environments tree; with more than one entry each must set a unique environment
+                  or a mountPath.
+                items:
+                  description: |-
+                    CodeSpec defines one source of Puppet code to mount into Server pods.
+                    Either ClaimName (PVC) or Image (OCI image volume) must be set, not both.
+
+                    The mount target is chosen by Environment or MountPath (mutually exclusive):
+                      - Environment mounts at <environmentpath>/<environment> (a Puppet environment).
+                      - MountPath mounts at an absolute path, which must be under the Puppet codedir
+                        (/etc/puppetlabs/code) -- use this for the global modules dir or hieradata.
+                      - Neither: the source is mounted as the whole environments tree at
+                        environmentpath. This is only valid for a single-entry code list.
+                  properties:
+                    claimName:
+                      description: |-
+                        ClaimName references an existing PVC containing Puppet code.
+                        Mutually exclusive with Image.
+                      maxLength: 253
+                      type: string
+                    environment:
+                      description: |-
+                        Environment mounts this source as a single Puppet environment at
+                        <environmentpath>/<environment>. Mutually exclusive with MountPath.
+                        Environment values must be unique across the code list.
+                      maxLength: 253
+                      type: string
+                    image:
+                      description: |-
+                        Image is an OCI image reference containing Puppet code.
+                        Mounted as a read-only image volume (Kubernetes 1.35+, or 1.31+ with ImageVolume feature gate).
+                        Mutually exclusive with ClaimName.
+                      maxLength: 512
+                      type: string
+                    imagePullPolicy:
+                      default: IfNotPresent
+                      description: ImagePullPolicy defines when to pull the code image.
+                      type: string
+                    imagePullSecret:
+                      description: ImagePullSecret references a Secret for pulling
+                        from private registries.
+                      type: string
+                    mountPath:
+                      description: |-
+                        MountPath mounts this source at an absolute path, which must be under the
+                        Puppet codedir (/etc/puppetlabs/code). Use it for targets that are not a
+                        single environment, such as the global modules directory or hieradata.
+                        Mutually exclusive with Environment.
+                      maxLength: 512
+                      type: string
+                  type: object
+                  x-kubernetes-validations:
+                  - message: image and claimName are mutually exclusive
+                    rule: '!(has(self.image) && size(self.image) > 0 && has(self.claimName)
+                      && size(self.claimName) > 0)'
+                  - message: either image or claimName must be set
+                    rule: (has(self.image) && size(self.image) > 0) || (has(self.claimName)
+                      && size(self.claimName) > 0)
+                  - message: environment and mountPath are mutually exclusive
+                    rule: '!(has(self.environment) && size(self.environment) > 0 &&
+                      has(self.mountPath) && size(self.mountPath) > 0)'
+                  - message: mountPath must be under the Puppet codedir (/etc/puppetlabs/code)
+                    rule: '!has(self.mountPath) || size(self.mountPath) == 0 || self.mountPath.startsWith(''/etc/puppetlabs/code'')'
+                maxItems: 64
+                type: array
                 x-kubernetes-validations:
-                - message: image and claimName are mutually exclusive
-                  rule: '!(has(self.image) && size(self.image) > 0 && has(self.claimName)
-                    && size(self.claimName) > 0)'
-                - message: either image or claimName must be set
-                  rule: (has(self.image) && size(self.image) > 0) || (has(self.claimName)
-                    && size(self.claimName) > 0)
+                - message: with more than one code entry, each entry must set either
+                    environment or mountPath
+                  rule: size(self) <= 1 || self.all(e, (has(e.environment) && e.environment
+                    != '') || (has(e.mountPath) && e.mountPath != ''))
               configRef:
                 description: ConfigRef references the Config this Server belongs to.
                 type: string
@@ -3244,7 +3288,7 @@ spec:
                       x-kubernetes-map-type: atomic
                     type: array
                   repository:
-                    default: ghcr.io/slauger/openvox-server
+                    default: ghcr.io/slauger/openvox-server-8
                     description: Repository is the container image repository.
                     type: string
                   tag:

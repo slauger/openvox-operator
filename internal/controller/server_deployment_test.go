@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -118,6 +119,122 @@ func TestBuildPodSpec_CARole(t *testing.T) {
 	for _, v := range podSpec.Volumes {
 		if v.Name == "code" {
 			t.Error("CA-only pod should not have code volume")
+		}
+	}
+}
+
+func TestBuildPodSpec_RoutesYAMLMount(t *testing.T) {
+	routesMount := func(podSpec corev1.PodSpec) *corev1.VolumeMount {
+		for i, vm := range podSpec.Containers[0].VolumeMounts {
+			if vm.Name == "routes-yaml" {
+				return &podSpec.Containers[0].VolumeMounts[i]
+			}
+		}
+		return nil
+	}
+
+	// PuppetDB wired up -> routes.yaml mounted at $confdir/routes.yaml.
+	cfgWithDB := newConfig("production", withDatabaseRef("production-db"))
+	server := newServer("test-server", withServerRole(true))
+	podSpec := testBuildPodSpec(server, cfgWithDB)
+
+	vm := routesMount(podSpec)
+	if vm == nil {
+		t.Fatal("server pod should mount routes-yaml when PuppetDB is the active backend")
+	}
+	if vm.MountPath != "/etc/puppetlabs/puppet/routes.yaml" || vm.SubPath != "routes.yaml" {
+		t.Errorf("unexpected routes.yaml mount: path=%q subPath=%q", vm.MountPath, vm.SubPath)
+	}
+	hasVol := false
+	for _, v := range podSpec.Volumes {
+		if v.Name == "routes-yaml" {
+			hasVol = true
+		}
+	}
+	if !hasVol {
+		t.Error("server pod should have a routes-yaml volume")
+	}
+
+	// No PuppetDB wired up -> no routes.yaml mount (SubPath would fail on a missing key).
+	cfgNoDB := newConfig("production")
+	if routesMount(testBuildPodSpec(server, cfgNoDB)) != nil {
+		t.Error("server pod should not mount routes-yaml when PuppetDB is not wired up")
+	}
+}
+
+func TestBuildPodSpec_MultipleCodeVolumes(t *testing.T) {
+	cfg := newConfig("production", withCodeList(
+		openvoxv1alpha1.CodeSpec{Image: "ghcr.io/slauger/prod:latest", Environment: "production"},
+		openvoxv1alpha1.CodeSpec{ClaimName: "modules", MountPath: "/etc/puppetlabs/code/modules"},
+	))
+	server := newServer("test-server", withServerRole(true))
+
+	podSpec := testBuildPodSpec(server, cfg)
+
+	mountByName := map[string]string{}
+	for _, vm := range podSpec.Containers[0].VolumeMounts {
+		mountByName[vm.Name] = vm.MountPath
+	}
+
+	// Environment entry -> <environmentpath>/production; mountPath entry -> absolute path.
+	envPath := resolveEnvironmentPath(cfg)
+	var codeMountPaths []string
+	codeVolumes := 0
+	for _, v := range podSpec.Volumes {
+		if strings.HasPrefix(v.Name, "code") {
+			codeVolumes++
+			codeMountPaths = append(codeMountPaths, mountByName[v.Name])
+		}
+	}
+	if codeVolumes != 2 {
+		t.Fatalf("expected 2 code volumes, got %d (%v)", codeVolumes, codeMountPaths)
+	}
+	wantPaths := map[string]bool{
+		envPath + "/production":        true,
+		"/etc/puppetlabs/code/modules": true,
+	}
+	for _, p := range codeMountPaths {
+		if !wantPaths[p] {
+			t.Errorf("unexpected code mount path %q", p)
+		}
+	}
+}
+
+func TestBuildPodSpec_AutosignCommandSkipsPolicyMount(t *testing.T) {
+	cfg := newConfig("production", withAutosignCommand("/usr/local/bin/custom-autosign"))
+	server := newServer("test-ca", withCA(true), withServerRole(false))
+
+	podSpec := testBuildPodSpec(server, cfg)
+
+	for _, vm := range podSpec.Containers[0].VolumeMounts {
+		if vm.Name == "autosign-policy" {
+			t.Error("autosign-policy mount should be skipped when autosignCommand is set")
+		}
+	}
+	for _, v := range podSpec.Volumes {
+		if v.Name == "autosign-policy" {
+			t.Error("autosign-policy volume should be skipped when autosignCommand is set")
+		}
+	}
+}
+
+func TestBuildPodSpec_ExternalNodesCommandSkipsENCMount(t *testing.T) {
+	cfg := newConfig("production",
+		withNodeClassifierRef("my-enc"),
+		withExternalNodesCommand("/usr/local/bin/custom-enc"),
+	)
+	server := newServer("test-server", withServerRole(true))
+
+	podSpec := testBuildPodSpec(server, cfg)
+
+	for _, vm := range podSpec.Containers[0].VolumeMounts {
+		if vm.Name == "enc-config" {
+			t.Error("enc-config mount should be skipped when externalNodesCommand is set")
+		}
+	}
+	for _, v := range podSpec.Volumes {
+		if v.Name == "enc-config" {
+			t.Error("enc-config volume should be skipped when externalNodesCommand is set")
 		}
 	}
 }

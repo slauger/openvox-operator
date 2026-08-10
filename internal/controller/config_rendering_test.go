@@ -7,6 +7,65 @@ import (
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
 
+func TestRenderRoutesYAML(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  *openvoxv1alpha1.Config
+		want bool // expect a non-empty routes.yaml routing facts to puppetdb
+	}{
+		{
+			name: "databaseRef + puppetdb backend",
+			cfg:  newConfig("c", withDatabaseRef("db")),
+			want: true,
+		},
+		{
+			name: "explicit serverUrls + puppetdb backend",
+			cfg: func() *openvoxv1alpha1.Config {
+				c := newConfig("c")
+				c.Spec.PuppetDB.ServerURLs = []string{"https://pdb:8081"}
+				return c
+			}(),
+			want: true,
+		},
+		{
+			name: "no puppetdb wired up",
+			cfg:  newConfig("c"),
+			want: false,
+		},
+		{
+			name: "wired up but backend is not puppetdb",
+			cfg: newConfig("c", withDatabaseRef("db"), withPuppetSpec(openvoxv1alpha1.PuppetSpec{
+				Storeconfigs: false,
+				StoreBackend: "",
+				Reports:      "store",
+			})),
+			want: false,
+		},
+		{
+			name: "wired up via reports=puppetdb only",
+			cfg: newConfig("c", withDatabaseRef("db"), withPuppetSpec(openvoxv1alpha1.PuppetSpec{
+				Storeconfigs: false,
+				Reports:      "puppetdb",
+			})),
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := renderRoutesYAML(tt.cfg)
+			if tt.want {
+				for _, want := range []string{"master:", "facts:", "terminus: puppetdb", "cache: json"} {
+					if !strings.Contains(got, want) {
+						t.Errorf("routes.yaml missing %q\n---\n%s", want, got)
+					}
+				}
+			} else if got != "" {
+				t.Errorf("expected empty routes.yaml, got:\n%s", got)
+			}
+		})
+	}
+}
+
 func TestRenderMetricsConf(t *testing.T) {
 	r := newConfigReconciler(setupTestClient())
 

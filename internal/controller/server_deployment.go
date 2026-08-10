@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -82,15 +83,23 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 		"openvox.voxpupuli.org/ca-secret-hash":  caHash,
 	}
 
-	// Add code image annotation for server:true pods to trigger rollout on image change
+	// Add code image annotation for server:true pods to trigger rollout on image change.
+	// All code image references are joined so a change to any of them rolls the pod.
 	if server.Spec.Server {
-		if code := resolveCode(server, cfg); code != nil && code.Image != "" {
-			annotations["openvox.voxpupuli.org/code-image"] = code.Image
+		var codeImages []string
+		for _, e := range resolveCode(server, cfg) {
+			if e.Image != "" {
+				codeImages = append(codeImages, e.Image)
+			}
+		}
+		if len(codeImages) > 0 {
+			annotations["openvox.voxpupuli.org/code-image"] = strings.Join(codeImages, ",")
 		}
 	}
 
-	// Add ENC secret hash annotation for server pods to trigger rollout on ENC config changes
-	if server.Spec.Server && cfg.Spec.NodeClassifierRef != "" {
+	// Add ENC secret hash annotation for server pods to trigger rollout on ENC config changes.
+	// Skipped when a custom externalNodesCommand disables the NodeClassifier-driven flow.
+	if server.Spec.Server && cfg.Spec.NodeClassifierRef != "" && cfg.Spec.Puppet.ExternalNodesCommand == "" {
 		encSecretName := fmt.Sprintf("%s-enc", server.Spec.ConfigRef)
 		if encHash, err := r.secretHash(ctx, encSecretName, server.Namespace); err == nil {
 			annotations["openvox.voxpupuli.org/enc-secret-hash"] = encHash
@@ -102,6 +111,18 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 		reportSecretName := fmt.Sprintf("%s-report-webhook", server.Spec.ConfigRef)
 		if reportHash, err := r.secretHash(ctx, reportSecretName, server.Namespace); err == nil {
 			annotations["openvox.voxpupuli.org/report-webhook-secret-hash"] = reportHash
+		}
+	}
+
+	// Add autosign-policy secret hash annotation for CA pods to trigger rollout on
+	// SigningPolicy changes. The policy Secret is subPath-mounted, so kubelet does not
+	// live-sync it; hashing it into the pod template rolls the CA pod when the rendered
+	// policy changes, so a SigningPolicy edit applies without a manual restart.
+	// Skipped when a custom autosignCommand disables the SigningPolicy-driven flow.
+	if server.Spec.CA && cfg.Spec.Puppet.AutosignCommand == "" {
+		autosignSecretName := fmt.Sprintf("%s-autosign-policy", ca.Name)
+		if autosignHash, err := r.secretHash(ctx, autosignSecretName, server.Namespace); err == nil {
+			annotations["openvox.voxpupuli.org/autosign-policy-secret-hash"] = autosignHash
 		}
 	}
 
@@ -223,6 +244,16 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 		configMapVolume("metrics-conf", configMapName, "metrics.conf"),
 	}
 
+	// routes.yaml routes the facts terminus to PuppetDB. Mounted only when PuppetDB
+	// is the active backend, matching the ConfigMap key rendered by the Config
+	// controller (SubPath mounts require the key to exist).
+	if puppetDBActiveForFacts(cfg) {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name: "routes-yaml", MountPath: "/etc/puppetlabs/puppet/routes.yaml", SubPath: "routes.yaml", ReadOnly: true,
+		})
+		volumes = append(volumes, configMapVolume("routes-yaml", configMapName, "routes.yaml"))
+	}
+
 	// Non-CA pods: mount CRL secret as directory (NOT SubPath) for kubelet auto-sync,
 	// and use the standard webserver.conf pointing to the CRL secret mount.
 	// CA pods: no CRL volume (Puppetserver manages CRL from PVC), use webserver-ca.conf.
@@ -269,61 +300,67 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 			configMapVolumeWithKey("ca-cfg", configMapName, "ca-enabled.cfg", "ca.cfg"),
 		)
 
-		// Mount autosign policy Secret (always present, managed by Config controller)
-		autosignSecretName := fmt.Sprintf("%s-autosign-policy", ca.Name)
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      "autosign-policy",
-			MountPath: "/etc/puppetlabs/puppet/autosign-policy.yaml",
-			SubPath:   "autosign-policy.yaml",
-			ReadOnly:  true,
-		})
-		volumes = append(volumes, corev1.Volume{
-			Name: "autosign-policy",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: autosignSecretName,
+		// Mount autosign policy Secret (managed by the Config controller).
+		// Skipped when a custom autosignCommand disables the SigningPolicy-driven
+		// flow: the command is then responsible for its own signing decision.
+		if cfg.Spec.Puppet.AutosignCommand == "" {
+			autosignSecretName := fmt.Sprintf("%s-autosign-policy", ca.Name)
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      "autosign-policy",
+				MountPath: "/etc/puppetlabs/puppet/autosign-policy.yaml",
+				SubPath:   "autosign-policy.yaml",
+				ReadOnly:  true,
+			})
+			volumes = append(volumes, corev1.Volume{
+				Name: "autosign-policy",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: autosignSecretName,
+					},
 				},
-			},
-		})
+			})
+		}
 	} else {
 		volumes = append(volumes,
 			configMapVolumeWithKey("ca-cfg", configMapName, "ca-disabled.cfg", "ca.cfg"),
 		)
 	}
 
-	// Code volume: only mounted for server:true pods (CA-only pods don't compile catalogs)
+	// Code volumes: only mounted for server:true pods (CA-only pods don't compile catalogs)
 	if server.Spec.Server {
-		if code := resolveCode(server, cfg); code != nil {
-			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name:      "code",
-				MountPath: resolveEnvironmentPath(cfg),
-				ReadOnly:  true,
-			})
-			switch {
-			case code.Image != "":
-				pullPolicy := code.ImagePullPolicy
-				if pullPolicy == "" {
-					pullPolicy = corev1.PullIfNotPresent
+		if codeMounts := resolveCodeMounts(server, cfg); len(codeMounts) > 0 {
+			for _, cm := range codeMounts {
+				volumeMounts = append(volumeMounts, corev1.VolumeMount{
+					Name:      cm.VolumeName,
+					MountPath: cm.MountPath,
+					ReadOnly:  true,
+				})
+				switch {
+				case cm.Spec.Image != "":
+					pullPolicy := cm.Spec.ImagePullPolicy
+					if pullPolicy == "" {
+						pullPolicy = corev1.PullIfNotPresent
+					}
+					volumes = append(volumes, corev1.Volume{
+						Name: cm.VolumeName,
+						VolumeSource: corev1.VolumeSource{
+							Image: &corev1.ImageVolumeSource{
+								Reference:  cm.Spec.Image,
+								PullPolicy: pullPolicy,
+							},
+						},
+					})
+				case cm.Spec.ClaimName != "":
+					volumes = append(volumes, corev1.Volume{
+						Name: cm.VolumeName,
+						VolumeSource: corev1.VolumeSource{
+							PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+								ClaimName: cm.Spec.ClaimName,
+								ReadOnly:  true,
+							},
+						},
+					})
 				}
-				volumes = append(volumes, corev1.Volume{
-					Name: "code",
-					VolumeSource: corev1.VolumeSource{
-						Image: &corev1.ImageVolumeSource{
-							Reference:  code.Image,
-							PullPolicy: pullPolicy,
-						},
-					},
-				})
-			case code.ClaimName != "":
-				volumes = append(volumes, corev1.Volume{
-					Name: "code",
-					VolumeSource: corev1.VolumeSource{
-						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-							ClaimName: code.ClaimName,
-							ReadOnly:  true,
-						},
-					},
-				})
 			}
 		} else {
 			// No external code source configured: mount a writable emptyDir at the
@@ -341,8 +378,9 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 		}
 	}
 
-	// ENC: mount config Secret and cache emptyDir for server:true pods with nodeClassifierRef
-	if server.Spec.Server && cfg.Spec.NodeClassifierRef != "" {
+	// ENC: mount config Secret and cache emptyDir for server:true pods with nodeClassifierRef.
+	// Skipped when a custom externalNodesCommand disables the NodeClassifier-driven flow.
+	if server.Spec.Server && cfg.Spec.NodeClassifierRef != "" && cfg.Spec.Puppet.ExternalNodesCommand == "" {
 		encSecretName := fmt.Sprintf("%s-enc", server.Spec.ConfigRef)
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{
@@ -499,12 +537,16 @@ chmod 640 /ssl/private_keys/puppet.pem`
 		Volumes:                   volumes,
 	}
 
-	// Add imagePullSecrets for code image if configured
+	// Add imagePullSecrets for code images if configured (deduplicated across entries)
 	if server.Spec.Server {
-		if code := resolveCode(server, cfg); code != nil && code.ImagePullSecret != "" {
-			podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, corev1.LocalObjectReference{
-				Name: code.ImagePullSecret,
-			})
+		seen := make(map[string]bool)
+		for _, e := range resolveCode(server, cfg) {
+			if e.ImagePullSecret != "" && !seen[e.ImagePullSecret] {
+				seen[e.ImagePullSecret] = true
+				podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, corev1.LocalObjectReference{
+					Name: e.ImagePullSecret,
+				})
+			}
 		}
 	}
 

@@ -8,16 +8,16 @@
 # Run:
 #   podman run --rm openvox-server:latest
 
-# renovate: datasource=github-releases depName=OpenVoxProject/openvox-server
+# OpenVox versions are the single source of truth in images/openvox-versions.yaml
+# and injected as build-args by CI. The defaults below are a fallback for standalone
+# local builds and pin the stable 8.x line.
 ARG OPENVOXSERVER_VERSION=8.15.2
-# renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
 ARG OPENVOXDB_TERMINI_VERSION=8.15.0
-# renovate: datasource=github-releases depName=OpenVoxProject/openvox
 ARG OPENVOX_VERSION=8.28.1
 ################################################################################
 # Stage: base — JRE + minimal runtime deps (no Ruby)
 ################################################################################
-FROM registry.access.redhat.com/ubi9/ubi:9.8-1785807559 AS base
+FROM registry.access.redhat.com/ubi9/ubi:9.8-1786339177 AS base
 
 ARG JDK_VERSION=21
 

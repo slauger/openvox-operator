@@ -8,6 +8,11 @@ on:
         required: false
         type: string
         default: 'develop'
+      openvox_major:
+        description: 'OpenVox major to test against (8 = default/stable, 9 = beta; requires the -9 images to exist)'
+        required: false
+        type: string
+        default: '8'
 
 jobs:
   e2e-base:
@@ -15,6 +20,7 @@ jobs:
     with:
       image_tag: ${{ inputs.image_tag }}
       operator: base
+      openvox_major: ${{ inputs.openvox_major }}
       tests: '["single-node","multi-server","agent-basic","agent-broken","agent-idempotent","agent-concurrent","agent-report","database-cnpg","readonly-rootfs","code-pvc","autosign-policy","cert-rotation"]'
     secrets: inherit
 
@@ -24,6 +30,7 @@ jobs:
     with:
       image_tag: ${{ inputs.image_tag }}
       operator: base
+      openvox_major: ${{ inputs.openvox_major }}
       tests: '["agent-enc","agent-full"]'
     secrets: inherit
 
@@ -33,6 +40,7 @@ jobs:
     with:
       image_tag: ${{ inputs.image_tag }}
       operator: gateway
+      openvox_major: ${{ inputs.openvox_major }}
       tests: '["pool-gateway"]'
     secrets: inherit
 
@@ -42,5 +50,6 @@ jobs:
     with:
       image_tag: ${{ inputs.image_tag }}
       operator: webhooks-cm
+      openvox_major: ${{ inputs.openvox_major }}
       tests: '["webhook-validation-server","webhook-validation-config","webhook-validation-database","webhook-smoke"]'
     secrets: inherit

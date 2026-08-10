@@ -67,8 +67,9 @@ spec:
                   CSRAttributes defines CSR extension attributes that must all match (AND logic).
                   Each entry specifies an attribute name and the expected value (inline or from a Secret).
                 items:
-                  description: CSRAttributeMatch defines a single CSR extension attribute
-                    to match.
+                  description: |-
+                    CSRAttributeMatch defines a single CSR extension attribute to match.
+                    Either value or valueFrom may be set, not both.
                   properties:
                     name:
                       description: Name is the CSR extension attribute name (e.g.
@@ -100,6 +101,9 @@ spec:
                   required:
                   - name
                   type: object
+                  x-kubernetes-validations:
+                  - message: value and valueFrom are mutually exclusive
+                    rule: '!(has(self.value) && size(self.value) > 0 && has(self.valueFrom))'
                 type: array
               dnsAltNames:
                 description: |-

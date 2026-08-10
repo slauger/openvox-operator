@@ -27,7 +27,7 @@ flowchart LR
 2. It validates that the PostgreSQL credentials Secret exists
 3. It renders a `database.ini` Secret with the PostgreSQL connection string and a ConfigMap with `jetty.ini`, `config.ini`, and `auth.conf`
 4. It creates a Deployment of OpenVox DB pods that connect to the external PostgreSQL backend over SSL and serve mTLS traffic on port 8081
-5. A `Config` can reference the Database via `databaseRef` to automatically wire the PuppetDB connection URL into Server pods -- the operator reads `status.url` and writes it into `puppetdb.conf` (no need to set `puppetdb.serverUrls` manually)
+5. A `Config` can reference the Database via `databaseRef` to automatically wire the PuppetDB connection URL into Server pods -- the operator reads `status.url` and writes it into `puppetdb.conf` (no need to set `puppetdb.serverUrls` manually), and renders a `routes.yaml` so facts are stored in PuppetDB too (see [Fact Storage](#fact-storage))
 
 ## Why an External PostgreSQL?
 
@@ -70,7 +70,7 @@ spec:
   authorityRef: production-ca
   databaseRef: production-db   # operator reads Database.status.url
   image:
-    repository: ghcr.io/slauger/openvox-server
+    repository: ghcr.io/slauger/openvox-server-8
     tag: "8.12.1"
 ```
 
@@ -96,6 +96,21 @@ Puppet Agent → Puppet Server → openvox-report → Database (mTLS) → Postgr
 ```
 
 See [Report Processing](report-processing.md) for the full pipeline and [ReportProcessor](../reference/reportprocessor.md) for configuration options.
+
+## Fact Storage
+
+PuppetDB stores catalogs, reports, **and facts**, but the three are wired independently. `storeconfigs_backend = puppetdb` triggers the `replace catalog` command (catalogs and exported resources) and `reports = puppetdb` triggers `store report`, but neither switches the facts indirector. Facts only reach PuppetDB when the `facts` terminus points at `puppetdb`, which is configured through `routes.yaml`:
+
+```yaml
+master:
+  facts:
+    terminus: puppetdb
+    cache: json
+```
+
+The operator renders this `routes.yaml` automatically and mounts it at `$confdir/routes.yaml` (Puppet's default `route_file`) whenever PuppetDB is the active backend -- i.e. a `databaseRef` or `puppetdb.serverUrls` is set **and** `storeBackend`/`reports` use `puppetdb`. Like every other rendered config file it lives in the Config ConfigMap, so a change rolls the Server pods automatically (see [Configuration Rollout](config-rollout.md)). No manual `routes.yaml` is required.
+
+Without it, everything fact-based stays empty: PQL / `puppetdb_query()` on facts, inventory and node fact age, dashboard fact views, and fact-based exported-resource queries.
 
 ## PostgreSQL Credentials
 

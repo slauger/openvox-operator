@@ -2,9 +2,8 @@ signingPolicies:
   - name: autosign-any
     any: true
 
-config:
-  code:
-    claimName: puppet-code
+# config.code is set as a list via --set-json in the chainsaw test (a PVC "production"
+# environment plus an image mountPath), so it is intentionally not defined here.
 
 servers:
   - name: ca

@@ -71,15 +71,27 @@ func (r *ConfigReconciler) renderPuppetConf(ctx context.Context, cfg *openvoxv1a
 			}
 		}
 
-		// Always point to the autosign binary. The binary reads the policy config
-		// Secret (mounted by the server controller) and decides sign/deny.
-		// This keeps puppet.conf static -- policy changes only update the Secret,
-		// which kubelet syncs without a pod restart.
-		fmt.Fprintf(&sb, "autosign = %s\n", autosignBinaryPath)
+		// Autosign: by default point to the built-in binary, which reads the policy
+		// Secret (mounted by the server controller) and decides sign/deny. A policy
+		// change rewrites the Secret and the server controller rolls the CA pod via
+		// the autosign-policy-secret-hash annotation, so it applies without a manual
+		// restart. A custom autosignCommand replaces the built-in binary and disables
+		// the SigningPolicy-driven flow (the policy Secret is not mounted).
+		autosignCmd := autosignBinaryPath
+		if cfg.Spec.Puppet.AutosignCommand != "" {
+			autosignCmd = cfg.Spec.Puppet.AutosignCommand
+		}
+		fmt.Fprintf(&sb, "autosign = %s\n", autosignCmd)
 	}
 
-	// ENC settings
-	if cfg.Spec.NodeClassifierRef != "" {
+	// ENC settings: a custom externalNodesCommand replaces the built-in binary and
+	// disables the NodeClassifier-driven flow (the ENC Secret is not mounted).
+	// Otherwise the built-in binary is used when a NodeClassifier is referenced.
+	switch {
+	case cfg.Spec.Puppet.ExternalNodesCommand != "":
+		sb.WriteString("node_terminus = exec\n")
+		fmt.Fprintf(&sb, "external_nodes = %s\n", cfg.Spec.Puppet.ExternalNodesCommand)
+	case cfg.Spec.NodeClassifierRef != "":
 		sb.WriteString("node_terminus = exec\n")
 		fmt.Fprintf(&sb, "external_nodes = %s\n", encBinaryPath)
 	}
@@ -137,6 +149,37 @@ func (r *ConfigReconciler) renderPuppetDBConf(ctx context.Context, cfg *openvoxv
 			strings.Join(cfg.Spec.PuppetDB.ServerURLs, ",")), nil
 	}
 	return "[main]\nsoft_write_failure = true\n", nil
+}
+
+// puppetDBActiveForFacts reports whether PuppetDB is wired up (via DatabaseRef or
+// explicit ServerURLs) and configured as the active backend for storeconfigs or
+// reports. Only then must the facts indirector be routed to PuppetDB via
+// routes.yaml: storeconfigs_backend and reports=puppetdb trigger the `replace
+// catalog` and `store report` commands, but neither switches the facts terminus,
+// so without routes.yaml the `replace facts` command is never issued.
+func puppetDBActiveForFacts(cfg *openvoxv1alpha1.Config) bool {
+	wired := cfg.Spec.DatabaseRef != "" || len(cfg.Spec.PuppetDB.ServerURLs) > 0
+	if !wired {
+		return false
+	}
+	return (cfg.Spec.Puppet.Storeconfigs && cfg.Spec.Puppet.StoreBackend == "puppetdb") ||
+		strings.Contains(cfg.Spec.Puppet.Reports, "puppetdb")
+}
+
+// renderRoutesYAML returns the routes.yaml that points the facts indirector
+// terminus at PuppetDB, so the `replace facts` command is issued on every agent
+// run. Mounted at $confdir/routes.yaml, which Puppet's route_file setting already
+// points at by default. Returns "" when PuppetDB is not the active backend, in
+// which case no routes.yaml is rendered or mounted.
+func renderRoutesYAML(cfg *openvoxv1alpha1.Config) string {
+	if !puppetDBActiveForFacts(cfg) {
+		return ""
+	}
+	return "---\n" +
+		"master:\n" +
+		"  facts:\n" +
+		"    terminus: puppetdb\n" +
+		"    cache: json\n"
 }
 
 // renderWebserverConf returns the webserver.conf for non-CA servers.

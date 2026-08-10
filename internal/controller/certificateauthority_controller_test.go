@@ -216,7 +216,7 @@ func TestCAReconcile_JobCreation(t *testing.T) {
 	}
 
 	container := job.Spec.Template.Spec.Containers[0]
-	expectedImage := "ghcr.io/slauger/openvox-server:latest"
+	expectedImage := "ghcr.io/slauger/openvox-server-8:latest"
 	if container.Image != expectedImage {
 		t.Errorf("expected image %q, got %q", expectedImage, container.Image)
 	}

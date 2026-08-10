@@ -158,6 +158,13 @@ func (r *ConfigReconciler) reconcileConfigMap(ctx context.Context, cfg *openvoxv
 		"ca-disabled.cfg":   "puppetlabs.services.ca.certificate-authority-disabled-service/certificate-authority-disabled-service\npuppetlabs.trapperkeeper.services.watcher.filesystem-watch-service/filesystem-watch-service\n",
 	}
 
+	// Route the facts terminus to PuppetDB (only when PuppetDB is the active
+	// backend). Without this, facts never reach PuppetDB. The Server controller
+	// mounts it at $confdir/routes.yaml under the same condition.
+	if routes := renderRoutesYAML(cfg); routes != "" {
+		data["routes.yaml"] = routes
+	}
+
 	cm := &corev1.ConfigMap{}
 	err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: cfg.Namespace}, cm)
 	if errors.IsNotFound(err) {

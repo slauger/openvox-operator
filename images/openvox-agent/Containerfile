@@ -13,7 +13,7 @@ ARG OPENVOX_AGENT_VERSION=8.28.1
 # OPENVOX_MAJOR selects the release repo (openvox${OPENVOX_MAJOR}-release-el-9).
 ARG OPENVOX_MAJOR=8
 
-FROM registry.access.redhat.com/ubi9/ubi:9.8-1786339177
+FROM registry.access.redhat.com/ubi9/ubi:9.8-1786416589
 
 ARG OPENVOX_AGENT_VERSION
 ARG OPENVOX_MAJOR

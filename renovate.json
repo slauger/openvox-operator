@@ -66,7 +66,8 @@
       "matchManagers": [
         "gomod"
       ],
-      "groupName": "Go dependencies"
+      "groupName": "Go dependencies",
+      "semanticCommitType": "fix"
     },
     {
       "matchManagers": [
@@ -78,7 +79,8 @@
       "matchManagers": [
         "dockerfile"
       ],
-      "groupName": "Container base images"
+      "groupName": "Container base images",
+      "semanticCommitType": "fix"
     },
     {
       "matchManagers": [
@@ -92,7 +94,8 @@
       ],
       "matchCurrentValue": "/^8\\./",
       "allowedVersions": "<9.0.0",
-      "groupName": "OpenVox 8 versions"
+      "groupName": "OpenVox 8 versions",
+      "semanticCommitType": "fix"
     },
     {
       "matchManagers": [
@@ -107,7 +110,8 @@
       "matchCurrentValue": "/^9\\./",
       "allowedVersions": ">=9.0.0",
       "ignoreUnstable": false,
-      "groupName": "OpenVox 9 versions"
+      "groupName": "OpenVox 9 versions",
+      "semanticCommitType": "fix"
     },
     {
       "matchManagers": [

@@ -360,17 +360,9 @@ func (r *PoolReconciler) injectDNSAltNames(ctx context.Context, pool *openvoxv1a
 		if err := r.Update(ctx, cert); err != nil {
 			return fmt.Errorf("updating Certificate %s: %w", cert.Name, err)
 		}
-
-		// Reset certificate phase to trigger re-signing with the new alt name
-		if cert.Status.Phase == openvoxv1alpha1.CertificatePhaseSigned {
-			if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
-				cert.Status.Phase = openvoxv1alpha1.CertificatePhasePending
-			}); err != nil {
-				return fmt.Errorf("resetting Certificate %s phase: %w", cert.Name, err)
-			}
-			logger.Info("reset Certificate phase to Pending for re-signing",
-				"certificate", cert.Name)
-		}
+		// The Certificate controller notices the changed alt names through its
+		// signed-spec hash and re-signs on its own. Resetting its phase from
+		// here would race the controller that owns that status.
 	}
 
 	return nil

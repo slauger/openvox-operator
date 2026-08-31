@@ -28,6 +28,11 @@ type ConfigReconciler struct {
 	Recorder events.EventRecorder
 }
 
+// Event reasons for Config.
+const (
+	EventReasonReportWebhookRenderFailed = "ReportWebhookRenderFailed"
+)
+
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=configs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=configs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=configs/finalizers,verbs=update
@@ -38,7 +43,6 @@ type ConfigReconciler struct {
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=databases,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificateauthorities,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=reportprocessors,verbs=get;list;watch
-// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=reportprocessors/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=configmaps;serviceaccounts;secrets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch;delete
 

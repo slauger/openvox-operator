@@ -1,8 +1,10 @@
 package controller
 
 import (
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -145,5 +147,47 @@ func drain(rec *events.FakeRecorder) int {
 		default:
 			return n
 		}
+	}
+}
+
+// TestPoolInjectDNSAltName_TriggersResignWithoutStatusWrite is the point of
+// decoupling the two controllers: the Pool changes the Certificate spec and
+// nothing else. The re-signing follows from the Certificate controller noticing
+// its own spec drift, not from a foreign status write.
+func TestPoolInjectDNSAltName_TriggersResignWithoutStatusWrite(t *testing.T) {
+	ca := newCertificateAuthority("production-ca")
+	cert := newCertificate("web-cert", "production-ca", openvoxv1alpha1.CertificatePhaseSigned)
+	cert.Status.SignedSpecHash = signingSpecHash(cert)
+	notAfter := metav1.NewTime(metav1.Now().Add(365 * 24 * time.Hour))
+	cert.Status.NotAfter = &notAfter
+
+	server := newServer("web")
+	server.Spec.CertificateRef = "web-cert"
+	server.Spec.PoolRefs = []string{"puppet"}
+
+	pool := newPool("puppet", withRoute(true, "puppet.example.com", "gw"))
+	pool.Spec.Route.InjectDNSAltName = true
+
+	c := setupTestClient(ca, cert, server, pool)
+	pr := newPoolReconciler(c, true)
+
+	if err := pr.injectDNSAltNames(testCtx(), pool); err != nil {
+		t.Fatalf("injecting alt names: %v", err)
+	}
+
+	key := types.NamespacedName{Name: "web-cert", Namespace: testNamespace}
+	afterInject := &openvoxv1alpha1.Certificate{}
+	if err := c.Get(testCtx(), key, afterInject); err != nil {
+		t.Fatalf("reading Certificate: %v", err)
+	}
+
+	if !slices.Contains(afterInject.Spec.DNSAltNames, "puppet.example.com") {
+		t.Fatalf("the hostname should have been added to the spec, got %v", afterInject.Spec.DNSAltNames)
+	}
+	if afterInject.Status.Phase != openvoxv1alpha1.CertificatePhaseSigned {
+		t.Errorf("the Pool must not touch the Certificate status, phase is %q", afterInject.Status.Phase)
+	}
+	if afterInject.Status.SignedSpecHash == signingSpecHash(afterInject) {
+		t.Error("the recorded hash should now differ from the spec, which is what makes the controller re-sign")
 	}
 }

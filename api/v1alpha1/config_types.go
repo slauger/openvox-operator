@@ -86,7 +86,7 @@ type ConfigSpec struct {
 	// server-var-dir is redirected to /run/puppetserver.
 	// +kubebuilder:default=true
 	// +optional
-	ReadOnlyRootFilesystem bool `json:"readOnlyRootFilesystem,omitempty"`
+	ReadOnlyRootFilesystem *bool `json:"readOnlyRootFilesystem,omitempty"`
 }
 
 // PuppetServerSpec defines puppetserver.conf, webserver.conf and auth.conf settings.
@@ -414,7 +414,7 @@ type PuppetSpec struct {
 	// Storeconfigs enables storeconfigs.
 	// +kubebuilder:default=true
 	// +optional
-	Storeconfigs bool `json:"storeconfigs,omitempty"`
+	Storeconfigs *bool `json:"storeconfigs,omitempty"`
 
 	// StoreBackend is the storeconfigs backend.
 	// +kubebuilder:default="puppetdb"

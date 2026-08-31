@@ -71,23 +71,23 @@ type CertificateAuthoritySpec struct {
 	// AllowSubjectAltNames controls whether SANs are allowed in CSRs.
 	// +kubebuilder:default=true
 	// +optional
-	AllowSubjectAltNames bool `json:"allowSubjectAltNames,omitempty"`
+	AllowSubjectAltNames *bool `json:"allowSubjectAltNames,omitempty"`
 
 	// AllowAuthorizationExtensions controls whether authorization extensions
 	// (pp_role, pp_environment, etc.) are allowed in CSRs.
 	// +kubebuilder:default=true
 	// +optional
-	AllowAuthorizationExtensions bool `json:"allowAuthorizationExtensions,omitempty"`
+	AllowAuthorizationExtensions *bool `json:"allowAuthorizationExtensions,omitempty"`
 
 	// EnableInfraCRL enables infrastructure CRL for compile server revocation.
 	// +kubebuilder:default=true
 	// +optional
-	EnableInfraCRL bool `json:"enableInfraCRL,omitempty"`
+	EnableInfraCRL *bool `json:"enableInfraCRL,omitempty"`
 
 	// AllowAutoRenewal allows agents to automatically renew certificates before expiry.
 	// +kubebuilder:default=true
 	// +optional
-	AllowAutoRenewal bool `json:"allowAutoRenewal,omitempty"`
+	AllowAutoRenewal *bool `json:"allowAutoRenewal,omitempty"`
 
 	// AutoRenewalCertTTL is the TTL threshold for automatic certificate renewal.
 	// Uses duration format: "90d", "30d", "2160h".

@@ -79,7 +79,7 @@ func newConfig(name string, opts ...configOption) *openvoxv1alpha1.Config {
 			Namespace: testNamespace,
 		},
 		Spec: openvoxv1alpha1.ConfigSpec{
-			ReadOnlyRootFilesystem: true,
+			ReadOnlyRootFilesystem: boolPtr(true),
 			Image: openvoxv1alpha1.ImageSpec{
 				Repository: "ghcr.io/slauger/openvox-server-8",
 				Tag:        "latest",
@@ -89,7 +89,7 @@ func newConfig(name string, opts ...configOption) *openvoxv1alpha1.Config {
 				EnvironmentTimeout: "unlimited",
 				EnvironmentPath:    "/etc/puppetlabs/code/environments",
 				HieraConfig:        "$confdir/hiera.yaml",
-				Storeconfigs:       true,
+				Storeconfigs:       boolPtr(true),
 				StoreBackend:       "puppetdb",
 				Reports:            "puppetdb",
 			},
@@ -115,7 +115,7 @@ func withNodeClassifierRef(ref string) configOption {
 
 func withReadOnlyRootFS(v bool) configOption {
 	return func(c *openvoxv1alpha1.Config) {
-		c.Spec.ReadOnlyRootFilesystem = v
+		c.Spec.ReadOnlyRootFilesystem = boolPtr(v)
 	}
 }
 
@@ -194,7 +194,7 @@ func newServer(name string, opts ...serverOption) *openvoxv1alpha1.Server {
 		Spec: openvoxv1alpha1.ServerSpec{
 			ConfigRef:      "production",
 			CertificateRef: "production-cert",
-			Server:         true,
+			Server:         boolPtr(true),
 			CA:             false,
 			Replicas:       &replicas,
 		},
@@ -208,15 +208,15 @@ func newServer(name string, opts ...serverOption) *openvoxv1alpha1.Server {
 func withCA(ca bool) serverOption {
 	return func(s *openvoxv1alpha1.Server) {
 		s.Spec.CA = ca
-		if ca && !s.Spec.Server {
-			s.Spec.Server = false
+		if ca && !serverRoleEnabled(s) {
+			s.Spec.Server = boolPtr(false)
 		}
 	}
 }
 
 func withServerRole(server bool) serverOption {
 	return func(s *openvoxv1alpha1.Server) {
-		s.Spec.Server = server
+		s.Spec.Server = boolPtr(server)
 	}
 }
 
@@ -371,10 +371,10 @@ func newCertificateAuthority(name string, opts ...caOption) *openvoxv1alpha1.Cer
 		},
 		Spec: openvoxv1alpha1.CertificateAuthoritySpec{
 			TTL:                          "5y",
-			AllowSubjectAltNames:         true,
-			AllowAuthorizationExtensions: true,
-			EnableInfraCRL:               true,
-			AllowAutoRenewal:             true,
+			AllowSubjectAltNames:         boolPtr(true),
+			AllowAuthorizationExtensions: boolPtr(true),
+			EnableInfraCRL:               boolPtr(true),
+			AllowAutoRenewal:             boolPtr(true),
 			AutoRenewalCertTTL:           "90d",
 		},
 	}

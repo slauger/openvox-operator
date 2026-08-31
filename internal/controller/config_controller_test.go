@@ -82,7 +82,7 @@ func TestConfigReconcile_PuppetConfRendering(t *testing.T) {
 		{
 			name: "storeconfigs enabled",
 			opts: []configOption{withPuppetSpec(openvoxv1alpha1.PuppetSpec{
-				Storeconfigs: true,
+				Storeconfigs: boolPtr(true),
 				StoreBackend: "puppetdb",
 				Reports:      "puppetdb",
 			})},
@@ -91,7 +91,7 @@ func TestConfigReconcile_PuppetConfRendering(t *testing.T) {
 		{
 			name: "storeconfigs disabled",
 			opts: []configOption{withPuppetSpec(openvoxv1alpha1.PuppetSpec{
-				Storeconfigs: false,
+				Storeconfigs: boolPtr(false),
 				Reports:      "puppetdb",
 			})},
 			excludes: []string{"storeconfigs = true"},

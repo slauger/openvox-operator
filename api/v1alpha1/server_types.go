@@ -62,9 +62,10 @@ type ServerSpec struct {
 
 	// Server enables the server role (catalog compilation, file serving).
 	// A Server with both CA and Server serves as a combined CA+server.
+	// Set this to false for a CA-only instance.
 	// +kubebuilder:default=true
 	// +optional
-	Server bool `json:"server,omitempty"`
+	Server *bool `json:"server,omitempty"`
 
 	// Replicas is the number of Server instances.
 	// +kubebuilder:default=1

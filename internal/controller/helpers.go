@@ -254,3 +254,9 @@ func resolveImage(server *openvoxv1alpha1.Server, cfg *openvoxv1alpha1.Config) s
 	}
 	return fmt.Sprintf("%s:%s", cfg.Spec.Image.Repository, cfg.Spec.Image.Tag)
 }
+
+// serverRoleEnabled reports whether the Server runs the catalog server role.
+// The spec field defaults to true, so an unset value enables the role.
+func serverRoleEnabled(server *openvoxv1alpha1.Server) bool {
+	return openvoxv1alpha1.BoolValue(server.Spec.Server, true)
+}

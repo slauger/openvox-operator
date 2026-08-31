@@ -3762,6 +3762,7 @@ spec:
                 description: |-
                   Server enables the server role (catalog compilation, file serving).
                   A Server with both CA and Server serves as a combined CA+server.
+                  Set this to false for a CA-only instance.
                 type: boolean
               topologySpreadConstraints:
                 description: TopologySpreadConstraints controls how pods are spread

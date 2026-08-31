@@ -165,10 +165,17 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 		return fmt.Errorf("getting Deployment %s: %w", deployName, err)
 	}
 
+	if err := assertControlledBy(deploy, server, "Deployment"); err != nil {
+		return err
+	}
+
 	// Update existing Deployment with conflict retry
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		if err := r.Get(ctx, types.NamespacedName{Name: deployName, Namespace: server.Namespace}, deploy); err != nil {
 			return fmt.Errorf("getting Deployment %s: %w", deployName, err)
+		}
+		if err := assertControlledBy(deploy, server, "Deployment"); err != nil {
+			return err
 		}
 		if !server.Spec.Autoscaling.Enabled {
 			deploy.Spec.Replicas = &replicas

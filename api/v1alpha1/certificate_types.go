@@ -94,6 +94,12 @@ const (
 
 // CertificateStatus defines the observed state of Certificate.
 type CertificateStatus struct {
+	// ObservedGeneration is the .metadata.generation that was last processed by
+	// the controller. A value below .metadata.generation means the rest of this
+	// status has not caught up with the current spec yet.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
 	// Phase is the current lifecycle phase.
 	// +optional
 	Phase CertificatePhase `json:"phase,omitempty"`

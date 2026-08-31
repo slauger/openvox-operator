@@ -17,6 +17,25 @@ import (
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
 
+// newFailingCALookupClient returns a client whose CertificateAuthority lookups
+// always fail with a transient error, while every other request is served
+// normally.
+func newFailingCALookupClient(objs ...client.Object) client.WithWatch {
+	return fake.NewClientBuilder().
+		WithScheme(testScheme()).
+		WithObjects(objs...).
+		WithStatusSubresource(&openvoxv1alpha1.Config{}, &openvoxv1alpha1.CertificateAuthority{}).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if _, ok := obj.(*openvoxv1alpha1.CertificateAuthority); ok {
+					return serverTimeout("certificateauthorities")
+				}
+				return cl.Get(ctx, key, obj, opts...)
+			},
+		}).
+		Build()
+}
+
 // serverTimeout mimics the transient failure an overloaded or restarting API
 // server returns. It is deliberately not a NotFound.
 func serverTimeout(resource string) error {
@@ -33,19 +52,7 @@ func TestReconcile_TransientCALookupFailure(t *testing.T) {
 	cfg := newConfig("production", withAuthorityRef("production-ca"))
 	ca := newCertificateAuthority("production-ca")
 
-	c := fake.NewClientBuilder().
-		WithScheme(testScheme()).
-		WithObjects(cfg, ca).
-		WithStatusSubresource(&openvoxv1alpha1.Config{}, &openvoxv1alpha1.CertificateAuthority{}).
-		WithInterceptorFuncs(interceptor.Funcs{
-			Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-				if _, ok := obj.(*openvoxv1alpha1.CertificateAuthority); ok {
-					return serverTimeout("certificateauthorities")
-				}
-				return cl.Get(ctx, key, obj, opts...)
-			},
-		}).
-		Build()
+	c := newFailingCALookupClient(cfg, ca)
 
 	r := newConfigReconciler(c)
 	_, err := r.Reconcile(testCtx(), testRequest(cfg.Name))

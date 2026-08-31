@@ -125,6 +125,7 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	// Update status
 	endpoints := r.countEndpoints(ctx, pool)
 	if err := updateStatusWithRetry(ctx, r.Client, pool, func() {
+		pool.Status.ObservedGeneration = pool.Generation
 		pool.Status.ServiceName = pool.Name
 		pool.Status.Endpoints = endpoints
 	}); err != nil {

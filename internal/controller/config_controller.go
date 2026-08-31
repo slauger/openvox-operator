@@ -89,13 +89,14 @@ func (r *ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// Update status
 	if err := updateStatusWithRetry(ctx, r.Client, cfg, func() {
+		cfg.Status.ObservedGeneration = cfg.Generation
 		cfg.Status.Phase = openvoxv1alpha1.ConfigPhaseRunning
 		meta.SetStatusCondition(&cfg.Status.Conditions, metav1.Condition{
 			Type:               openvoxv1alpha1.ConditionConfigReady,
 			Status:             metav1.ConditionTrue,
 			Reason:             "ConfigMapsCreated",
 			Message:            "Configuration ConfigMaps are up to date",
-			LastTransitionTime: metav1.Now(),
+			ObservedGeneration: cfg.Generation,
 		})
 	}); err != nil {
 		return ctrl.Result{}, err

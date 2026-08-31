@@ -89,7 +89,7 @@ func (r *CertificateAuthorityReconciler) reconcileOperatorSigningCert(ctx contex
 			Status:             metav1.ConditionTrue,
 			Reason:             "OperatorSigningReady",
 			Message:            fmt.Sprintf("Operator signing certificate %s is active", certName),
-			LastTransitionTime: metav1.Now(),
+			ObservedGeneration: ca.Generation,
 		})
 	}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("updating signing secret status: %w", err)

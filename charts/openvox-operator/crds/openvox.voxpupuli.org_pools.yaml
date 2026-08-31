@@ -133,6 +133,13 @@ spec:
                 description: Endpoints is the number of Pods behind the Service.
                 format: int32
                 type: integer
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the .metadata.generation that was last processed by
+                  the controller. A value below .metadata.generation means the rest of this
+                  status has not caught up with the current spec yet.
+                format: int64
+                type: integer
               serviceName:
                 description: ServiceName is the name of the created Kubernetes Service.
                 type: string

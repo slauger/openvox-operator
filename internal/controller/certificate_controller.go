@@ -188,6 +188,7 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 		notAfter := r.extractNotAfter(ctx, tlsSecretName, cert.Namespace)
 		if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
+			cert.Status.ObservedGeneration = cert.Generation
 			cert.Status.Phase = openvoxv1alpha1.CertificatePhaseSigned
 			cert.Status.SecretName = tlsSecretName
 			cert.Status.NotAfter = notAfter
@@ -196,7 +197,7 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				Status:             metav1.ConditionTrue,
 				Reason:             "CertificateSigned",
 				Message:            "Certificate is signed and available",
-				LastTransitionTime: metav1.Now(),
+				ObservedGeneration: cert.Generation,
 			})
 		}); err != nil {
 			return ctrl.Result{}, err
@@ -257,7 +258,7 @@ func (r *CertificateReconciler) reconcileCertSigning(ctx context.Context, cert *
 				Status:             metav1.ConditionFalse,
 				Reason:             "SigningFailed",
 				Message:            errMsg,
-				LastTransitionTime: metav1.Now(),
+				ObservedGeneration: cert.Generation,
 			})
 		}); statusErr != nil {
 			logger.Error(statusErr, "failed to update Certificate status", "name", cert.Name)
@@ -277,6 +278,7 @@ func (r *CertificateReconciler) reconcileCertSigning(ctx context.Context, cert *
 	tlsSecretName := fmt.Sprintf("%s-tls", cert.Name)
 	notAfter := r.extractNotAfter(ctx, tlsSecretName, cert.Namespace)
 	if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
+		cert.Status.ObservedGeneration = cert.Generation
 		cert.Status.Phase = openvoxv1alpha1.CertificatePhaseSigned
 		cert.Status.SecretName = tlsSecretName
 		cert.Status.NotAfter = notAfter
@@ -285,7 +287,7 @@ func (r *CertificateReconciler) reconcileCertSigning(ctx context.Context, cert *
 			Status:             metav1.ConditionTrue,
 			Reason:             "CertificateSigned",
 			Message:            "Certificate is signed and available",
-			LastTransitionTime: metav1.Now(),
+			ObservedGeneration: cert.Generation,
 		})
 	}); err != nil {
 		return ctrl.Result{}, err

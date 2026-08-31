@@ -108,6 +108,12 @@ type PoolServiceSpec struct {
 
 // PoolStatus defines the observed state of Pool.
 type PoolStatus struct {
+	// ObservedGeneration is the .metadata.generation that was last processed by
+	// the controller. A value below .metadata.generation means the rest of this
+	// status has not caught up with the current spec yet.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
 	// ServiceName is the name of the created Kubernetes Service.
 	// +optional
 	ServiceName string `json:"serviceName,omitempty"`

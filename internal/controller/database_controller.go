@@ -159,6 +159,7 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if db.Spec.Replicas != nil {
 			replicas = *db.Spec.Replicas
 		}
+		db.Status.ObservedGeneration = db.Generation
 		db.Status.Desired = replicas
 		db.Status.Ready = ready
 

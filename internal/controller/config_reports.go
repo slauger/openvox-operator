@@ -233,16 +233,17 @@ func (r *ConfigReconciler) updateReportProcessorStatus(ctx context.Context, rp *
 				Status:             metav1.ConditionFalse,
 				Reason:             "Error",
 				Message:            errMsg,
-				LastTransitionTime: metav1.Now(),
+				ObservedGeneration: rp.Generation,
 			})
 		} else {
+			rp.Status.ObservedGeneration = rp.Generation
 			rp.Status.Phase = openvoxv1alpha1.ReportProcessorPhaseActive
 			meta.SetStatusCondition(&rp.Status.Conditions, metav1.Condition{
 				Type:               openvoxv1alpha1.ConditionReportProcessorReady,
 				Status:             metav1.ConditionTrue,
 				Reason:             "ConfigRendered",
 				Message:            "Report processor configuration is active",
-				LastTransitionTime: metav1.Now(),
+				ObservedGeneration: rp.Generation,
 			})
 		}
 	}); statusErr != nil {

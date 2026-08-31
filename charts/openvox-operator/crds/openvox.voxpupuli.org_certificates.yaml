@@ -169,6 +169,13 @@ spec:
                 description: NotAfter is the expiration time of the signed certificate.
                 format: date-time
                 type: string
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the .metadata.generation that was last processed by
+                  the controller. A value below .metadata.generation means the rest of this
+                  status has not caught up with the current spec yet.
+                format: int64
+                type: integer
               phase:
                 description: Phase is the current lifecycle phase.
                 enum:

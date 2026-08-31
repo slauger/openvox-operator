@@ -163,7 +163,7 @@ func (r *ConfigReconciler) updateSigningPolicyStatus(ctx context.Context, sp *op
 				Status:             metav1.ConditionFalse,
 				Reason:             "Error",
 				Message:            errMsg,
-				LastTransitionTime: metav1.Now(),
+				ObservedGeneration: sp.Generation,
 			})
 		} else {
 			sp.Status.Phase = openvoxv1alpha1.SigningPolicyPhaseActive
@@ -172,7 +172,7 @@ func (r *ConfigReconciler) updateSigningPolicyStatus(ctx context.Context, sp *op
 				Status:             metav1.ConditionTrue,
 				Reason:             "PolicyRendered",
 				Message:            "Signing policy is active",
-				LastTransitionTime: metav1.Now(),
+				ObservedGeneration: sp.Generation,
 			})
 		}
 	}); statusErr != nil {

@@ -148,6 +148,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if server.Spec.Replicas != nil {
 			replicas = *server.Spec.Replicas
 		}
+		server.Status.ObservedGeneration = server.Generation
 		server.Status.Desired = replicas
 		server.Status.Ready = ready
 
@@ -161,7 +162,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 				Status:             metav1.ConditionTrue,
 				Reason:             "ReplicasReady",
 				Message:            fmt.Sprintf("%d/%d replicas ready", ready, replicas),
-				LastTransitionTime: metav1.Now(),
+				ObservedGeneration: server.Generation,
 			})
 		} else {
 			server.Status.Phase = openvoxv1alpha1.ServerPhasePending
@@ -170,7 +171,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 				Status:             metav1.ConditionFalse,
 				Reason:             "ReplicasNotReady",
 				Message:            fmt.Sprintf("0/%d replicas ready", replicas),
-				LastTransitionTime: metav1.Now(),
+				ObservedGeneration: server.Generation,
 			})
 		}
 	}); err != nil {

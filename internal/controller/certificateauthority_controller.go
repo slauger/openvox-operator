@@ -142,6 +142,7 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	if err := updateStatusWithRetry(ctx, r.Client, ca, func() {
+		ca.Status.ObservedGeneration = ca.Generation
 		ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseReady
 		ca.Status.CASecretName = caSecretName
 		ca.Status.ServiceName = serviceName
@@ -154,7 +155,7 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 			Status:             metav1.ConditionTrue,
 			Reason:             "CAInitialized",
 			Message:            "CA is initialized and ready",
-			LastTransitionTime: metav1.Now(),
+			ObservedGeneration: ca.Generation,
 		})
 	}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("updating CertificateAuthority status %s: %w", ca.Name, err)
@@ -269,6 +270,7 @@ func (r *CertificateAuthorityReconciler) reconcileExternalCA(ctx context.Context
 	// Note: ServiceName is intentionally not set for external CAs -
 	// no internal ClusterIP Service is created.
 	if err := updateStatusWithRetry(ctx, r.Client, ca, func() {
+		ca.Status.ObservedGeneration = ca.Generation
 		ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseExternal
 		ca.Status.CASecretName = caSecretName
 		ca.Status.NotAfter = notAfter
@@ -277,7 +279,7 @@ func (r *CertificateAuthorityReconciler) reconcileExternalCA(ctx context.Context
 			Status:             metav1.ConditionTrue,
 			Reason:             "ExternalCA",
 			Message:            extMsg,
-			LastTransitionTime: metav1.Now(),
+			ObservedGeneration: ca.Generation,
 		})
 	}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("updating external CertificateAuthority status %s: %w", ca.Name, err)

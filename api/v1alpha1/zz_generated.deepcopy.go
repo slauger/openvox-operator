@@ -250,7 +250,11 @@ func (in *CertificateAuthoritySpec) DeepCopyInto(out *CertificateAuthoritySpec) 
 		*out = new(bool)
 		**out = **in
 	}
-	out.Storage = in.Storage
+	if in.Storage != nil {
+		in, out := &in.Storage, &out.Storage
+		*out = new(StorageSpec)
+		**out = **in
+	}
 	in.Resources.DeepCopyInto(&out.Resources)
 	out.IntermediateCA = in.IntermediateCA
 	if in.External != nil {

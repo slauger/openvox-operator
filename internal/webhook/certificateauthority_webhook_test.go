@@ -37,7 +37,7 @@ func TestCertificateAuthorityValidator(t *testing.T) {
 				TTL:                "5y",
 				AutoRenewalCertTTL: "90d",
 				CRLRefreshInterval: "5m",
-				Storage:            openvoxv1alpha1.StorageSpec{Size: "1Gi"},
+				Storage:            &openvoxv1alpha1.StorageSpec{Size: "1Gi"},
 			},
 		}
 		_, err := v.ValidateCreate(context.Background(), ca)
@@ -96,7 +96,7 @@ func TestCertificateAuthorityValidator(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 			Spec: openvoxv1alpha1.CertificateAuthoritySpec{
 				TTL:     "5y",
-				Storage: openvoxv1alpha1.StorageSpec{Size: "not-a-quantity"},
+				Storage: &openvoxv1alpha1.StorageSpec{Size: "not-a-quantity"},
 			},
 		}
 		_, err := v.ValidateCreate(context.Background(), ca)

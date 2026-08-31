@@ -105,8 +105,7 @@ func TestCAReconcile_PVCCreation(t *testing.T) {
 func TestCAReconcile_PVCCustomStorageClass(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
 	ca.Status.Phase = ""
-	ca.Spec.Storage.StorageClass = "fast-ssd"
-	ca.Spec.Storage.Size = "10Gi"
+	ca.Spec.Storage = &openvoxv1alpha1.StorageSpec{StorageClass: "fast-ssd", Size: "10Gi"}
 	cfg := caPrereqs("test-ca")
 	c := setupTestClient(ca, cfg)
 	r := newCertificateAuthorityReconciler(c)

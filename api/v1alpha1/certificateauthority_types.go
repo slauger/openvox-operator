@@ -58,7 +58,7 @@ type ExternalCASpec struct {
 }
 
 // CertificateAuthoritySpec defines the desired state of CertificateAuthority.
-// +kubebuilder:validation:XValidation:rule="!(has(self.external) && has(self.storage) && size(self.storage.size) > 0 && self.storage.size != '1Gi')",message="external and custom storage are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(has(self.external) && has(self.storage))",message="external and storage are mutually exclusive"
 type CertificateAuthoritySpec struct {
 	// TTL is the CA certificate TTL as a duration string.
 	// Supported units: s (seconds), m (minutes), h (hours), d (days), y (years).
@@ -95,9 +95,15 @@ type CertificateAuthoritySpec struct {
 	// +optional
 	AutoRenewalCertTTL string `json:"autoRenewalCertTTL,omitempty"`
 
-	// Storage defines the PVC settings for CA data.
+	// Storage defines the PVC settings for CA data. An external CA keeps no
+	// state in the cluster, so the two are mutually exclusive.
+	//
+	// Declared as a pointer so has(self.storage) means "the user set it" rather
+	// than "the struct exists"; with a value type the exclusivity rule could
+	// only be expressed by comparing against the default size, which then
+	// wrongly accepted a storage block that happened to match that default.
 	// +optional
-	Storage StorageSpec `json:"storage,omitempty"`
+	Storage *StorageSpec `json:"storage,omitempty"`
 
 	// Resources defines the compute resources for the CA setup Job.
 	// If not specified, defaults are applied (requests: 200m CPU, 768Mi memory; limits: 1 CPU, 1Gi memory).

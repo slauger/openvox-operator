@@ -77,7 +77,7 @@ func (v *CertificateAuthorityValidator) validate(ca *openvoxv1alpha1.Certificate
 		errs = append(errs, field.Invalid(specPath.Child("crlRefreshInterval"), ca.Spec.CRLRefreshInterval, err.Error()))
 	}
 
-	if ca.Spec.Storage.Size != "" {
+	if ca.Spec.Storage != nil && ca.Spec.Storage.Size != "" {
 		if _, err := resource.ParseQuantity(ca.Spec.Storage.Size); err != nil {
 			errs = append(errs, field.Invalid(specPath.Child("storage", "size"), ca.Spec.Storage.Size, "must be a valid Kubernetes quantity (e.g. 1Gi, 500Mi)"))
 		}

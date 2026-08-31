@@ -228,7 +228,14 @@ spec:
                     type: integer
                 type: object
               storage:
-                description: Storage defines the PVC settings for CA data.
+                description: |-
+                  Storage defines the PVC settings for CA data. An external CA keeps no
+                  state in the cluster, so the two are mutually exclusive.
+
+                  Declared as a pointer so has(self.storage) means "the user set it" rather
+                  than "the struct exists"; with a value type the exclusivity rule could
+                  only be expressed by comparing against the default size, which then
+                  wrongly accepted a storage block that happened to match that default.
                 properties:
                   size:
                     default: 1Gi
@@ -249,9 +256,8 @@ spec:
                 type: string
             type: object
             x-kubernetes-validations:
-            - message: external and custom storage are mutually exclusive
-              rule: '!(has(self.external) && has(self.storage) && size(self.storage.size)
-                > 0 && self.storage.size != ''1Gi'')'
+            - message: external and storage are mutually exclusive
+              rule: '!(has(self.external) && has(self.storage))'
           status:
             description: CertificateAuthorityStatus defines the observed state of
               CertificateAuthority.

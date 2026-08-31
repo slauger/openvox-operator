@@ -20,9 +20,10 @@ func (r *CertificateAuthorityReconciler) reconcileCAPVC(ctx context.Context, ca 
 	pvc := &corev1.PersistentVolumeClaim{}
 	err := r.Get(ctx, types.NamespacedName{Name: pvcName, Namespace: ca.Namespace}, pvc)
 	if errors.IsNotFound(err) {
+		storage := resolveCAStorage(ca)
 		storageSize := DefaultCAStorageGi
-		if ca.Spec.Storage.Size != "" {
-			storageSize = ca.Spec.Storage.Size
+		if storage.Size != "" {
+			storageSize = storage.Size
 		}
 
 		pvc = &corev1.PersistentVolumeClaim{
@@ -41,8 +42,8 @@ func (r *CertificateAuthorityReconciler) reconcileCAPVC(ctx context.Context, ca 
 			},
 		}
 
-		if ca.Spec.Storage.StorageClass != "" {
-			pvc.Spec.StorageClassName = &ca.Spec.Storage.StorageClass
+		if storage.StorageClass != "" {
+			pvc.Spec.StorageClassName = &storage.StorageClass
 		}
 
 		if err := controllerutil.SetControllerReference(ca, pvc, r.Scheme); err != nil {
@@ -53,4 +54,18 @@ func (r *CertificateAuthorityReconciler) reconcileCAPVC(ctx context.Context, ca 
 		return fmt.Errorf("getting PVC %s: %w", pvcName, err)
 	}
 	return nil
+}
+
+// resolveCAStorage returns the configured storage settings, or an empty struct
+// when none were given.
+//
+// The kubebuilder default on StorageSpec.Size does not apply when the whole
+// storage object is omitted -- nested defaults need the parent to be present --
+// so the fallback lives here, the same way resolveEnvironmentPath handles
+// spec.puppet.environmentPath.
+func resolveCAStorage(ca *openvoxv1alpha1.CertificateAuthority) openvoxv1alpha1.StorageSpec {
+	if ca.Spec.Storage != nil {
+		return *ca.Spec.Storage
+	}
+	return openvoxv1alpha1.StorageSpec{}
 }

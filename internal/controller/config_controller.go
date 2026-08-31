@@ -36,6 +36,7 @@ type ConfigReconciler struct {
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=nodeclassifiers,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=nodeclassifiers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=databases,verbs=get;list;watch
+// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificateauthorities,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=reportprocessors,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=reportprocessors/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=configmaps;serviceaccounts;secrets,verbs=get;list;watch;create;update;patch;delete
@@ -122,6 +123,9 @@ func (r *ConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		)).
 		Watches(&openvoxv1alpha1.Database{}, handler.EnqueueRequestsFromMapFunc(
 			r.enqueueConfigsForDatabase(mgr.GetClient()),
+		)).
+		Watches(&openvoxv1alpha1.CertificateAuthority{}, handler.EnqueueRequestsFromMapFunc(
+			r.enqueueConfigsForCertificateAuthority(mgr.GetClient()),
 		)).
 		Complete(r)
 }
@@ -240,6 +244,30 @@ func (r *ConfigReconciler) enqueueConfigsForDatabase(c client.Reader) handler.Ma
 					NamespacedName: types.NamespacedName{Name: cfg.Name, Namespace: cfg.Namespace},
 				})
 			}
+		}
+		return requests
+	}
+}
+
+// enqueueConfigsForCertificateAuthority maps a CertificateAuthority change to
+// every Config referencing it. puppet.conf, auth.conf and ca.conf are all
+// rendered from the CA spec, so the Config has to re-render when it changes --
+// including when the CA is created after the Config.
+func (r *ConfigReconciler) enqueueConfigsForCertificateAuthority(c client.Client) handler.MapFunc {
+	return func(ctx context.Context, obj client.Object) []reconcile.Request {
+		cfgList := &openvoxv1alpha1.ConfigList{}
+		if err := c.List(ctx, cfgList,
+			client.InNamespace(obj.GetNamespace()),
+			client.MatchingFields{IndexAuthorityRef: obj.GetName()}); err != nil {
+			log.FromContext(ctx).Error(err, "failed to list Configs in watcher", "ca", obj.GetName())
+			return nil
+		}
+
+		requests := make([]reconcile.Request, 0, len(cfgList.Items))
+		for _, cfg := range cfgList.Items {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: cfg.Name, Namespace: cfg.Namespace},
+			})
 		}
 		return requests
 	}

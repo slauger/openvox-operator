@@ -17,6 +17,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
@@ -473,5 +474,8 @@ func (r *DatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&policyv1.PodDisruptionBudget{}).
 		Owns(&networkingv1.NetworkPolicy{}).
 		Watches(&corev1.Secret{}, enqueueDatabasesForSecret(mgr.GetClient())).
+		Watches(&openvoxv1alpha1.Certificate{}, handler.EnqueueRequestsFromMapFunc(
+			enqueueDatabasesForCertificate(mgr.GetClient()),
+		)).
 		Complete(r)
 }

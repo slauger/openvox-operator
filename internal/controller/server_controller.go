@@ -19,6 +19,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
@@ -439,6 +440,15 @@ func (r *ServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).
 		Owns(&networkingv1.NetworkPolicy{}).
 		Watches(&corev1.Secret{}, enqueueServersForSecret(mgr.GetClient())).
+		Watches(&openvoxv1alpha1.Config{}, handler.EnqueueRequestsFromMapFunc(
+			enqueueServersForConfigObject(mgr.GetClient()),
+		)).
+		Watches(&openvoxv1alpha1.Certificate{}, handler.EnqueueRequestsFromMapFunc(
+			enqueueServersForCertificate(mgr.GetClient()),
+		)).
+		Watches(&openvoxv1alpha1.CertificateAuthority{}, handler.EnqueueRequestsFromMapFunc(
+			enqueueServersForCertificateAuthority(mgr.GetClient()),
+		)).
 		Complete(r)
 }
 

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
@@ -132,4 +133,82 @@ func TestCondition_LastTransitionTimeIsStable(t *testing.T) {
 	if later := readTransitionTime("repeated reconciles"); later != first {
 		t.Errorf("LastTransitionTime changed without a status transition: %s -> %s", first, later)
 	}
+}
+
+// TestReadyConditions_DatabaseAndPool covers the two resources that declared a
+// readiness contract without ever fulfilling it: Database had the constant but
+// never set the condition, and Pool had no conditions at all.
+func TestReadyConditions_DatabaseAndPool(t *testing.T) {
+	t.Run("Pool reports no endpoints", func(t *testing.T) {
+		pool := newPool("puppet")
+		c := setupTestClient(pool)
+		r := newPoolReconciler(c, false)
+
+		if _, err := r.Reconcile(testCtx(), testRequest("puppet")); err != nil {
+			t.Fatalf("reconcile: %v", err)
+		}
+
+		got := &openvoxv1alpha1.Pool{}
+		if err := c.Get(testCtx(), types.NamespacedName{Name: "puppet", Namespace: testNamespace}, got); err != nil {
+			t.Fatalf("reading Pool: %v", err)
+		}
+		cond := meta.FindStatusCondition(got.Status.Conditions, openvoxv1alpha1.ConditionPoolReady)
+		if cond == nil {
+			t.Fatal("expected a Ready condition on the Pool")
+		}
+		if cond.Status != metav1.ConditionFalse || cond.Reason != "NoEndpoints" {
+			t.Errorf("expected Ready=False/NoEndpoints, got %s/%s", cond.Status, cond.Reason)
+		}
+	})
+
+	t.Run("Database reports its replicas", func(t *testing.T) {
+		objs := append(databasePrereqs(), newDatabase("puppetdb"))
+		c := setupTestClient(objs...)
+		r := newDatabaseReconciler(c)
+
+		if _, err := r.Reconcile(testCtx(), testRequest("puppetdb")); err != nil {
+			t.Fatalf("reconcile: %v", err)
+		}
+
+		got := &openvoxv1alpha1.Database{}
+		if err := c.Get(testCtx(), types.NamespacedName{Name: "puppetdb", Namespace: testNamespace}, got); err != nil {
+			t.Fatalf("reading Database: %v", err)
+		}
+		cond := meta.FindStatusCondition(got.Status.Conditions, openvoxv1alpha1.ConditionDatabaseReady)
+		if cond == nil {
+			t.Fatal("expected a Ready condition on the Database")
+		}
+		if cond.ObservedGeneration != got.Generation {
+			t.Errorf("condition should carry the observed generation, got %d want %d",
+				cond.ObservedGeneration, got.Generation)
+		}
+	})
+}
+
+// TestCertificateUsable_PrefersConditionOverPhase pins the readiness contract:
+// consumers look at the condition, not at the phase.
+func TestCertificateUsable_PrefersConditionOverPhase(t *testing.T) {
+	t.Run("signed condition and secret name are enough", func(t *testing.T) {
+		cert := newCertificate("web", "production-ca", openvoxv1alpha1.CertificatePhaseSigned)
+		cert.Status.Phase = "" // phase deliberately cleared
+		if !certificateUsable(cert) {
+			t.Error("a certificate with a true CertSigned condition must be usable regardless of phase")
+		}
+	})
+
+	t.Run("phase alone is not enough", func(t *testing.T) {
+		cert := newCertificate("web", "production-ca", openvoxv1alpha1.CertificatePhaseSigned)
+		meta.RemoveStatusCondition(&cert.Status.Conditions, openvoxv1alpha1.ConditionCertSigned)
+		if certificateUsable(cert) {
+			t.Error("a phase without the condition must not count as usable")
+		}
+	})
+
+	t.Run("condition without a secret name is not enough", func(t *testing.T) {
+		cert := newCertificate("web", "production-ca", openvoxv1alpha1.CertificatePhaseSigned)
+		cert.Status.SecretName = ""
+		if certificateUsable(cert) {
+			t.Error("without a secret name there is nothing to mount")
+		}
+	})
 }

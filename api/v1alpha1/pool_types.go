@@ -127,6 +127,11 @@ type PoolStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
+// Condition types for Pool.
+const (
+	ConditionPoolReady = "Ready"
+)
+
 func init() {
 	SchemeBuilder.Register(func(s *runtime.Scheme) error {
 		s.AddKnownTypes(GroupVersion, &Pool{}, &PoolList{})

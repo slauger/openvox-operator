@@ -344,3 +344,14 @@ func reconcilePauseState(ctx context.Context, c client.Client, obj client.Object
 	}
 	return false, nil
 }
+
+// certificateUsable reports whether a Certificate can be mounted: it has been
+// signed and its Secret name is known.
+//
+// The signal is the CertSigned condition rather than status.phase. Conditions
+// are the machine-readable contract; phase is a coarse summary for humans and
+// may lag or be edited without changing what the operator does.
+func certificateUsable(cert *openvoxv1alpha1.Certificate) bool {
+	return meta.IsStatusConditionTrue(cert.Status.Conditions, openvoxv1alpha1.ConditionCertSigned) &&
+		cert.Status.SecretName != ""
+}

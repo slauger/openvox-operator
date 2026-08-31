@@ -110,7 +110,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, fmt.Errorf("getting Certificate %s: %w", server.Spec.CertificateRef, err)
 	}
 
-	if cert.Status.Phase != openvoxv1alpha1.CertificatePhaseSigned || cert.Status.SecretName == "" {
+	if !certificateUsable(cert) {
 		logger.Info("waiting for Certificate to be signed", "certificate", cert.Name, "phase", cert.Status.Phase)
 		if statusErr := updateStatusWithRetry(ctx, r.Client, server, func() {
 			server.Status.Phase = openvoxv1alpha1.ServerPhaseWaitingForCert

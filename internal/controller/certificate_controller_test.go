@@ -43,8 +43,7 @@ func TestCertReconcile_CANotFound(t *testing.T) {
 
 func TestCertReconcile_CANotReady(t *testing.T) {
 	cert := newCertificate("my-cert", "test-ca", "")
-	ca := newCertificateAuthority("test-ca")
-	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhasePending // not ready
+	ca := newCertificateAuthority("test-ca", withCANotReady())
 
 	c := setupTestClient(cert, ca)
 	r := newCertificateReconciler(c)
@@ -115,8 +114,7 @@ func TestCertReconcile_TLSSecretExists(t *testing.T) {
 
 func TestCertReconcile_PhasePending(t *testing.T) {
 	cert := newCertificate("my-cert", "test-ca", "")
-	ca := newCertificateAuthority("test-ca")
-	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhasePending
+	ca := newCertificateAuthority("test-ca", withCANotReady())
 
 	c := setupTestClient(cert, ca)
 	r := newCertificateReconciler(c)
@@ -432,8 +430,7 @@ func TestScheduleRenewalCheck_CooldownPreventsLoop(t *testing.T) {
 
 func TestCertReconcile_FinalizerAdded(t *testing.T) {
 	cert := newCertificate("my-cert", "test-ca", "")
-	ca := newCertificateAuthority("test-ca")
-	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhasePending
+	ca := newCertificateAuthority("test-ca", withCANotReady())
 
 	c := setupTestClient(cert, ca)
 	r := newCertificateReconciler(c)

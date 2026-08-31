@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -137,6 +138,27 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		pool.Status.ObservedGeneration = pool.Generation
 		pool.Status.ServiceName = pool.Name
 		pool.Status.Endpoints = endpoints
+
+		// A Pool is only useful once something is behind its Service. Reporting
+		// that separately from "the Service exists" is what tells an operator
+		// whether traffic can actually reach a server.
+		if endpoints > 0 {
+			meta.SetStatusCondition(&pool.Status.Conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionPoolReady,
+				Status:             metav1.ConditionTrue,
+				Reason:             "EndpointsAvailable",
+				Message:            fmt.Sprintf("%d ready endpoint(s) behind Service %s", endpoints, pool.Name),
+				ObservedGeneration: pool.Generation,
+			})
+		} else {
+			meta.SetStatusCondition(&pool.Status.Conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionPoolReady,
+				Status:             metav1.ConditionFalse,
+				Reason:             "NoEndpoints",
+				Message:            fmt.Sprintf("No ready Server pods select Service %s", pool.Name),
+				ObservedGeneration: pool.Generation,
+			})
+		}
 	}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("updating Pool status %s: %w", pool.Name, err)
 	}

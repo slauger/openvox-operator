@@ -37,6 +37,11 @@ func (v *CertificateAuthorityValidator) ValidateUpdate(_ context.Context, old, c
 // failing against the API server on every attempt, with the cause several
 // layers away from the field that caused it.
 func validateStorageTransition(old, updated *openvoxv1alpha1.CertificateAuthority) error {
+	// Admission always supplies the previous object; a nil one means there is
+	// nothing to compare against.
+	if old == nil || updated == nil {
+		return nil
+	}
 	if old.Spec.Storage == nil || updated.Spec.Storage == nil {
 		return nil
 	}

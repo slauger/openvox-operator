@@ -308,7 +308,11 @@ type ConfigStatus struct {
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
-	// Phase is the current lifecycle phase.
+	// Phase is a coarse, human-readable summary of the observed state.
+	//
+	// It is derived on every reconcile and is never read back as controller
+	// input: use Conditions for anything machine-readable. Editing or losing
+	// the phase does not change what the operator does.
 	// +optional
 	Phase ConfigPhase `json:"phase,omitempty"`
 

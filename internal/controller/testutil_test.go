@@ -6,6 +6,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -345,11 +346,28 @@ func newCertificate(name, authorityRef string, phase openvoxv1alpha1.Certificate
 	cert.Status.Phase = phase
 	if phase == openvoxv1alpha1.CertificatePhaseSigned {
 		cert.Status.SecretName = name + "-tls"
+		// Phase and condition are always set together by the controller, so a
+		// fixture that only sets the phase would not represent a real object.
+		meta.SetStatusCondition(&cert.Status.Conditions, metav1.Condition{
+			Type:    openvoxv1alpha1.ConditionCertSigned,
+			Status:  metav1.ConditionTrue,
+			Reason:  "CertificateSigned",
+			Message: "Certificate is signed and available",
+		})
 	}
 	return cert
 }
 
 type caOption func(*openvoxv1alpha1.CertificateAuthority)
+
+// withCANotReady models a CertificateAuthority that has not finished setting
+// itself up: neither the phase nor the readiness condition may claim otherwise.
+func withCANotReady() caOption {
+	return func(ca *openvoxv1alpha1.CertificateAuthority) {
+		ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhasePending
+		meta.RemoveStatusCondition(&ca.Status.Conditions, openvoxv1alpha1.ConditionCAReady)
+	}
+}
 
 func withExternal(url string) caOption {
 	return func(ca *openvoxv1alpha1.CertificateAuthority) {
@@ -386,6 +404,12 @@ func newCertificateAuthority(name string, opts ...caOption) *openvoxv1alpha1.Cer
 	}
 	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseReady
 	ca.Status.CASecretName = name + "-ca"
+	meta.SetStatusCondition(&ca.Status.Conditions, metav1.Condition{
+		Type:    openvoxv1alpha1.ConditionCAReady,
+		Status:  metav1.ConditionTrue,
+		Reason:  "CAInitialized",
+		Message: "CA is initialized and ready",
+	})
 	for _, o := range opts {
 		o(ca)
 	}

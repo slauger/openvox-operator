@@ -9,6 +9,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -96,7 +97,7 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("getting Certificate %s: %w", db.Spec.CertificateRef, err)
 	}
 
-	if cert.Status.Phase != openvoxv1alpha1.CertificatePhaseSigned || cert.Status.SecretName == "" {
+	if !certificateUsable(cert) {
 		logger.Info("waiting for Certificate to be signed", "certificate", cert.Name, "phase", cert.Status.Phase)
 		if statusErr := updateStatusWithRetry(ctx, r.Client, db, func() {
 			db.Status.Phase = openvoxv1alpha1.DatabasePhaseWaitingForCert
@@ -181,8 +182,22 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 		if ready > 0 {
 			db.Status.Phase = openvoxv1alpha1.DatabasePhaseRunning
+			meta.SetStatusCondition(&db.Status.Conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionDatabaseReady,
+				Status:             metav1.ConditionTrue,
+				Reason:             "ReplicasReady",
+				Message:            fmt.Sprintf("%d/%d replicas ready", ready, replicas),
+				ObservedGeneration: db.Generation,
+			})
 		} else {
 			db.Status.Phase = openvoxv1alpha1.DatabasePhasePending
+			meta.SetStatusCondition(&db.Status.Conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionDatabaseReady,
+				Status:             metav1.ConditionFalse,
+				Reason:             "ReplicasNotReady",
+				Message:            fmt.Sprintf("0/%d replicas ready", replicas),
+				ObservedGeneration: db.Generation,
+			})
 		}
 	}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("updating status for Database %s: %w", db.Name, err)

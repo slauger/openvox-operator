@@ -69,7 +69,7 @@ func (r *CertificateAuthorityReconciler) reconcileOperatorSigningCert(ctx contex
 	}
 
 	// Certificate exists but is not yet signed - let the Certificate controller handle it
-	if signingCert.Status.Phase != openvoxv1alpha1.CertificatePhaseSigned {
+	if !certificateUsable(signingCert) {
 		logger.Info("operator-signing cert not yet signed, waiting", "name", certName, "phase", signingCert.Status.Phase)
 		return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 	}

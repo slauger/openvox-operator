@@ -161,8 +161,10 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, fmt.Errorf("getting CertificateAuthority %s: %w", cert.Spec.AuthorityRef, err)
 	}
 
-	// Wait for CA to be ready (accept both Ready and External phases)
-	if ca.Status.Phase != openvoxv1alpha1.CertificateAuthorityPhaseReady && ca.Status.Phase != openvoxv1alpha1.CertificateAuthorityPhaseExternal {
+	// Wait for the CA to be ready. The condition covers both a locally managed
+	// CA and an external one, and is the machine-readable signal -- phase is a
+	// display value.
+	if !meta.IsStatusConditionTrue(ca.Status.Conditions, openvoxv1alpha1.ConditionCAReady) {
 		logger.Info("waiting for CertificateAuthority to be ready", "ca", ca.Name, "phase", ca.Status.Phase)
 		if statusErr := updateStatusWithRetry(ctx, r.Client, cert, func() {
 			cert.Status.Phase = openvoxv1alpha1.CertificatePhasePending

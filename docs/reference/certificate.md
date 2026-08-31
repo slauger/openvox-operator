@@ -44,8 +44,27 @@ spec:
 | `Requesting` | Certificate signing in progress |
 | `WaitingForSigning` | CSR submitted, waiting for CA to sign (backoff polling in progress) |
 | `Signed` | TLS Secret created, Servers can mount it |
-| `Renewing` | Certificate is within its `renewBefore` window and is being re-signed |
+| `Renewing` | A renewal attempt failed and will be retried |
 | `Error` | Certificate signing failed |
+
+Phases are a human-readable summary of the observed state. The controller never
+reads them back as input: whether a certificate needs renewing is recomputed on
+every reconcile from `status.notAfter` and `spec.renewBefore`, so editing or
+losing the phase does not change what the operator does.
+
+### Re-signing on spec changes
+
+`status.signedSpecHash` records the spec fields the current certificate was
+issued for: `certname`, `dnsAltNames` and `csrExtensions`. When any of them
+changes, the certificate is re-signed on the next reconcile -- adding a DNS alt
+name takes effect immediately instead of waiting for the next renewal.
+
+`renewBefore` is not part of the hash. It only moves the point in time at which
+renewal happens and does not change the certificate itself.
+
+Certificates issued before this field existed carry an empty hash. The
+controller adopts the current spec as the baseline for them rather than
+re-signing every certificate after an operator upgrade.
 
 ### CSR Poll Backoff
 

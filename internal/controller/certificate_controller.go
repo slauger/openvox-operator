@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -164,18 +165,36 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	tlsSecretName := fmt.Sprintf("%s-tls", cert.Name)
 
-	// Handle renewal phase before anything else - a Renewing cert must not
-	// be overridden by the adopt-existing-secret block below.
-	if cert.Status.Phase == openvoxv1alpha1.CertificatePhaseRenewing {
-		return r.reconcileCertRenewal(ctx, cert, ca)
-	}
-
-	// If the certificate is already signed, just schedule renewal checks.
-	// This avoids re-adopting the TLS Secret on every reconcile, which would
-	// reset the phase and prevent entering the Renewing state.
+	// An already signed certificate is not re-adopted on every reconcile -- that
+	// would rewrite the status for no reason. Two things can still make work
+	// necessary: the signing-relevant spec changed, or the renewal window opened.
 	if cert.Status.Phase == openvoxv1alpha1.CertificatePhaseSigned {
+		wantHash := signingSpecHash(cert)
+		switch {
+		case cert.Status.SignedSpecHash == "":
+			// Certificates issued before the hash existed carry no baseline.
+			// Adopt the current spec instead of re-signing every certificate in
+			// the cluster on the first reconcile after an operator upgrade.
+			if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
+				cert.Status.SignedSpecHash = wantHash
+			}); err != nil {
+				return ctrl.Result{}, fmt.Errorf("recording signed spec hash for Certificate %s: %w", cert.Name, err)
+			}
+		case cert.Status.SignedSpecHash != wantHash:
+			logger.Info("signing-relevant spec changed, re-signing certificate",
+				"certname", cert.Spec.Certname)
+			return r.reconcileCertSigning(ctx, cert, ca)
+		}
+
 		if cert.Status.NotAfter == nil {
 			return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
+		}
+		if r.renewalDue(cert) {
+			logger.Info("certificate within renewal window, renewing",
+				"certname", cert.Spec.Certname, "notAfter", cert.Status.NotAfter)
+			r.Recorder.Eventf(cert, nil, corev1.EventTypeNormal, EventReasonCertificateRenewalTriggered, "Reconcile",
+				"Certificate renewal triggered, expires %s", cert.Status.NotAfter.Format(time.RFC3339))
+			return r.reconcileCertRenewal(ctx, cert, ca)
 		}
 		return r.scheduleRenewalCheck(ctx, cert)
 	}
@@ -189,6 +208,7 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		notAfter := r.extractNotAfter(ctx, tlsSecretName, cert.Namespace)
 		if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
 			cert.Status.ObservedGeneration = cert.Generation
+			cert.Status.SignedSpecHash = signingSpecHash(cert)
 			cert.Status.Phase = openvoxv1alpha1.CertificatePhaseSigned
 			cert.Status.SecretName = tlsSecretName
 			cert.Status.NotAfter = notAfter
@@ -279,6 +299,7 @@ func (r *CertificateReconciler) reconcileCertSigning(ctx context.Context, cert *
 	notAfter := r.extractNotAfter(ctx, tlsSecretName, cert.Namespace)
 	if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
 		cert.Status.ObservedGeneration = cert.Generation
+		cert.Status.SignedSpecHash = signingSpecHash(cert)
 		cert.Status.Phase = openvoxv1alpha1.CertificatePhaseSigned
 		cert.Status.SecretName = tlsSecretName
 		cert.Status.NotAfter = notAfter
@@ -387,20 +408,10 @@ func (r *CertificateReconciler) scheduleRenewalCheck(ctx context.Context, cert *
 			return ctrl.Result{RequeueAfter: minRenewalCooldown}, nil
 		}
 
-		logger := log.FromContext(ctx)
-		logger.Info("certificate within renewal window, triggering renewal",
-			"certname", cert.Spec.Certname,
-			"notAfter", notAfter,
-			"renewBefore", renewBefore)
-
-		if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
-			cert.Status.Phase = openvoxv1alpha1.CertificatePhaseRenewing
-		}); err != nil {
-			return ctrl.Result{}, err
-		}
-		r.Recorder.Eventf(cert, nil, corev1.EventTypeNormal, EventReasonCertificateRenewalTriggered, "Reconcile",
-			"Certificate renewal triggered, expires %s", notAfter.Format(time.RFC3339))
-		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+		// Renewal is due. The next reconcile picks it up via renewalDue, which
+		// recomputes the window from notAfter and renewBefore -- no phase is
+		// written to remember the intent.
+		return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 	}
 
 	// Emit warning events at thresholds (only outside the renewal window)
@@ -512,4 +523,46 @@ func (r *CertificateReconciler) handleCertificateCleanup(ctx context.Context, ce
 	r.Recorder.Eventf(cert, nil, corev1.EventTypeNormal, EventReasonCertificateCleaned, "Reconcile",
 		"Certificate %s cleaned from Puppet CA", cert.Spec.Certname)
 	return nil
+}
+
+// signingSpecHash digests the spec fields that end up in the CSR: certname,
+// DNS alt names and CSR extensions. A change means the issued certificate no
+// longer matches the spec and has to be re-signed.
+//
+// renewBefore is deliberately excluded. It only moves the point in time at
+// which renewal happens and says nothing about the certificate's content, so
+// changing it must not cause unnecessary load on the CA.
+func signingSpecHash(cert *openvoxv1alpha1.Certificate) string {
+	names := append([]string(nil), cert.Spec.DNSAltNames...)
+	sort.Strings(names)
+
+	fields := map[string]string{
+		"certname":    cert.Spec.Certname,
+		"dnsAltNames": strings.Join(names, ","),
+	}
+	if e := cert.Spec.CSRExtensions; e != nil {
+		fields["ppCliAuth"] = strconv.FormatBool(e.PpCliAuth)
+		fields["ppRole"] = e.PpRole
+		fields["ppEnvironment"] = e.PpEnvironment
+		for k, v := range e.CustomExtensions {
+			fields["custom/"+k] = v
+		}
+	}
+	return hashStringMap(fields)
+}
+
+// renewalDue reports whether the certificate has entered its renewal window.
+//
+// The answer is derived entirely from observed state -- status.notAfter,
+// spec.renewBefore and the cooldown annotation -- so a lost or hand-edited
+// status phase cannot change what the controller does.
+func (r *CertificateReconciler) renewalDue(cert *openvoxv1alpha1.Certificate) bool {
+	if cert.Status.NotAfter == nil {
+		return false
+	}
+	renewalTime := cert.Status.NotAfter.Add(-parseCertRenewBefore(cert))
+	if r.Clock.Now().Before(renewalTime) {
+		return false
+	}
+	return !r.isWithinRenewalCooldown(cert)
 }

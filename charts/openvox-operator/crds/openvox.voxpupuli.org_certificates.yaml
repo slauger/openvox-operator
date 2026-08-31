@@ -190,6 +190,14 @@ spec:
                 description: SecretName is the name of the Secret containing cert.pem
                   and key.pem.
                 type: string
+              signedSpecHash:
+                description: |-
+                  SignedSpecHash digests the spec fields the current certificate was issued
+                  for: certname, dnsAltNames and csrExtensions. When it no longer matches
+                  the spec, the certificate is re-signed. An empty value means the hash was
+                  never recorded (certificates issued before this field existed) and is
+                  adopted on the next reconcile rather than triggering a re-sign.
+                type: string
             type: object
         type: object
     served: true

@@ -616,6 +616,7 @@ func (r *CertificateReconciler) renewCertificate(ctx context.Context, cert *open
 	notAfter := parseCertNotAfter(ctx, body)
 	if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
 		cert.Status.ObservedGeneration = cert.Generation
+		cert.Status.SignedSpecHash = signingSpecHash(cert)
 		cert.Status.Phase = openvoxv1alpha1.CertificatePhaseSigned
 		cert.Status.SecretName = tlsSecretName
 		cert.Status.NotAfter = notAfter

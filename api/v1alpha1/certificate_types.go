@@ -108,6 +108,14 @@ type CertificateStatus struct {
 	// +optional
 	SecretName string `json:"secretName,omitempty"`
 
+	// SignedSpecHash digests the spec fields the current certificate was issued
+	// for: certname, dnsAltNames and csrExtensions. When it no longer matches
+	// the spec, the certificate is re-signed. An empty value means the hash was
+	// never recorded (certificates issued before this field existed) and is
+	// adopted on the next reconcile rather than triggering a re-sign.
+	// +optional
+	SignedSpecHash string `json:"signedSpecHash,omitempty"`
+
 	// NotAfter is the expiration time of the signed certificate.
 	// +optional
 	NotAfter *metav1.Time `json:"notAfter,omitempty"`

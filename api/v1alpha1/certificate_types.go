@@ -69,6 +69,8 @@ type CertificateSpec struct {
 	Certname string `json:"certname,omitempty"`
 
 	// DNSAltNames is a list of DNS subject alternative names for the certificate.
+	// Order is irrelevant and duplicates are rejected.
+	// +listType=set
 	// +optional
 	DNSAltNames []string `json:"dnsAltNames,omitempty"`
 
@@ -130,6 +132,8 @@ type CertificateStatus struct {
 	NotAfter *metav1.Time `json:"notAfter,omitempty"`
 
 	// Conditions represent the latest available observations.
+	// +listType=map
+	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }

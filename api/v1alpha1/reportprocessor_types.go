@@ -145,6 +145,8 @@ type ReportProcessorStatus struct {
 	Phase ReportProcessorPhase `json:"phase,omitempty"`
 
 	// Conditions represent the latest available observations.
+	// +listType=map
+	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }

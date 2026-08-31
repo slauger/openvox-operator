@@ -66,6 +66,10 @@ spec:
                   Only applied to Servers with server=true. A single entry without environment
                   or mountPath is mounted as the whole environments tree at environmentpath;
                   with more than one entry each must set a unique environment or a mountPath.
+                  Deliberately an atomic list: the entries have no stable key. Both
+                  environment and mountPath are optional and mutually exclusive, and a
+                  single entry may set neither, so a listMapKey would contradict the CEL
+                  validation above.
                 items:
                   description: |-
                     CodeSpec defines one source of Puppet code to mount into Server pods.
@@ -129,6 +133,7 @@ spec:
                     rule: '!has(self.mountPath) || size(self.mountPath) == 0 || self.mountPath.startsWith(''/etc/puppetlabs/code'')'
                 maxItems: 64
                 type: array
+                x-kubernetes-list-type: atomic
                 x-kubernetes-validations:
                 - message: with more than one code entry, each entry must set either
                     environment or mountPath
@@ -314,18 +319,25 @@ spec:
                   Mutually exclusive with DatabaseRef.
                 properties:
                   serverUrls:
-                    description: ServerURLs is a list of OpenVox DB server URLs.
+                    description: |-
+                      ServerURLs is a list of OpenVox DB server URLs.
+
+                      Deliberately an ordered (atomic) list: the values are joined in order into
+                      puppetdb.conf, where Puppet treats the order as failover priority.
                     items:
                       type: string
                     type: array
+                    x-kubernetes-list-type: atomic
                 type: object
               puppetserver:
                 description: PuppetServer defines puppetserver.conf, webserver.conf
                   and auth.conf settings.
                 properties:
                   authorizationRules:
-                    description: AuthorizationRules defines custom authorization rules
-                      inserted before the deny-all rule.
+                    description: |-
+                      AuthorizationRules defines custom authorization rules inserted before the deny-all rule.
+                      Rules are keyed by name; evaluation order comes from sortOrder, not from
+                      the position in this list.
                     items:
                       description: AuthorizationRule defines a custom auth.conf rule.
                       properties:
@@ -349,6 +361,7 @@ spec:
                               items:
                                 type: string
                               type: array
+                              x-kubernetes-list-type: set
                             path:
                               description: Path is the URL path or pattern to match.
                               type: string
@@ -376,6 +389,9 @@ spec:
                       - name
                       type: object
                     type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
                   borrowTimeout:
                     default: 1200000
                     description: BorrowTimeout is the timeout in milliseconds for
@@ -490,6 +506,9 @@ spec:
                   - type
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               observedGeneration:
                 description: |-
                   ObservedGeneration is the .metadata.generation that was last processed by

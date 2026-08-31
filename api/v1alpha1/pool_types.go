@@ -102,6 +102,7 @@ type PoolServiceSpec struct {
 
 	// ExternalIPs is a list of IP addresses for which nodes in the cluster
 	// will also accept traffic for this service.
+	// +listType=set
 	// +optional
 	ExternalIPs []string `json:"externalIPs,omitempty"`
 }
@@ -123,6 +124,8 @@ type PoolStatus struct {
 	Endpoints int32 `json:"endpoints,omitempty"`
 
 	// Conditions represent the latest available observations.
+	// +listType=map
+	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }

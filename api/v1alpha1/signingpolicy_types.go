@@ -53,12 +53,15 @@ type SigningPolicySpec struct {
 	// CSRAttributes defines CSR extension attributes that must all match (AND logic).
 	// Each entry specifies an attribute name and the expected value (inline or from a Secret).
 	// +optional
+	// +listType=map
+	// +listMapKey=name
 	CSRAttributes []CSRAttributeMatch `json:"csrAttributes,omitempty"`
 }
 
 // PatternSpec defines certname glob matching.
 type PatternSpec struct {
 	// Allow is a list of glob patterns. The certname must match at least one.
+	// +listType=set
 	Allow []string `json:"allow"`
 }
 
@@ -119,6 +122,8 @@ type SigningPolicyStatus struct {
 	Phase SigningPolicyPhase `json:"phase,omitempty"`
 
 	// Conditions represent the latest available observations.
+	// +listType=map
+	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }

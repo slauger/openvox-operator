@@ -105,6 +105,9 @@ spec:
                   - message: value and valueFrom are mutually exclusive
                     rule: '!(has(self.value) && size(self.value) > 0 && has(self.valueFrom))'
                 type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               dnsAltNames:
                 description: |-
                   DNSAltNames defines allowed DNS subject alternative name patterns.
@@ -116,6 +119,7 @@ spec:
                     items:
                       type: string
                     type: array
+                    x-kubernetes-list-type: set
                 required:
                 - allow
                 type: object
@@ -128,6 +132,7 @@ spec:
                     items:
                       type: string
                     type: array
+                    x-kubernetes-list-type: set
                 required:
                 - allow
                 type: object
@@ -194,6 +199,9 @@ spec:
                   - type
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               observedGeneration:
                 description: |-
                   ObservedGeneration is the .metadata.generation that was last processed by

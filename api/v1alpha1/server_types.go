@@ -47,6 +47,7 @@ type ServerSpec struct {
 	// PoolRefs lists the Pools this Server joins.
 	// The Server controller adds a pool label for each entry, making the pod
 	// selectable by the corresponding Pool's Service.
+	// +listType=set
 	// +optional
 	PoolRefs []string `json:"poolRefs,omitempty"`
 
@@ -96,6 +97,11 @@ type ServerSpec struct {
 	// or a mountPath.
 	// +kubebuilder:validation:MaxItems=64
 	// +kubebuilder:validation:XValidation:rule="size(self) <= 1 || self.all(e, (has(e.environment) && e.environment != '') || (has(e.mountPath) && e.mountPath != ''))",message="with more than one code entry, each entry must set either environment or mountPath"
+	// Deliberately an atomic list: the entries have no stable key. Both
+	// environment and mountPath are optional and mutually exclusive, and a
+	// single entry may set neither, so a listMapKey would contradict the CEL
+	// validation above.
+	// +listType=atomic
 	// +optional
 	Code []CodeSpec `json:"code,omitempty"`
 
@@ -231,6 +237,8 @@ type ServerStatus struct {
 	Desired int32 `json:"desired,omitempty"`
 
 	// Conditions represent the latest available observations.
+	// +listType=map
+	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }

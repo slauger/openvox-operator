@@ -98,11 +98,13 @@ spec:
                     type: string
                 type: object
               dnsAltNames:
-                description: DNSAltNames is a list of DNS subject alternative names
-                  for the certificate.
+                description: |-
+                  DNSAltNames is a list of DNS subject alternative names for the certificate.
+                  Order is irrelevant and duplicates are rejected.
                 items:
                   type: string
                 type: array
+                x-kubernetes-list-type: set
               renewBefore:
                 default: 60d
                 description: |-
@@ -173,6 +175,9 @@ spec:
                   - type
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               notAfter:
                 description: NotAfter is the expiration time of the signed certificate.
                 format: date-time

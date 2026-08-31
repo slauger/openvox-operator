@@ -333,6 +333,9 @@ spec:
                   - type
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               notAfter:
                 description: NotAfter is the expiration time of the CA certificate.
                 format: date-time

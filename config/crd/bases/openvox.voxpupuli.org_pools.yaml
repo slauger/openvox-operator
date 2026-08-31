@@ -103,6 +103,7 @@ spec:
                     items:
                       type: string
                     type: array
+                    x-kubernetes-list-type: set
                   labels:
                     additionalProperties:
                       type: string
@@ -186,6 +187,9 @@ spec:
                   - type
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               endpoints:
                 description: Endpoints is the number of Pods behind the Service.
                 format: int32

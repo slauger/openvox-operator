@@ -1013,6 +1013,10 @@ spec:
                   A single entry without environment or mountPath is mounted as the whole
                   environments tree; with more than one entry each must set a unique environment
                   or a mountPath.
+                  Deliberately an atomic list: the entries have no stable key. Both
+                  environment and mountPath are optional and mutually exclusive, and a
+                  single entry may set neither, so a listMapKey would contradict the CEL
+                  validation above.
                 items:
                   description: |-
                     CodeSpec defines one source of Puppet code to mount into Server pods.
@@ -1076,6 +1080,7 @@ spec:
                     rule: '!has(self.mountPath) || size(self.mountPath) == 0 || self.mountPath.startsWith(''/etc/puppetlabs/code'')'
                 maxItems: 64
                 type: array
+                x-kubernetes-list-type: atomic
                 x-kubernetes-validations:
                 - message: with more than one code entry, each entry must set either
                     environment or mountPath
@@ -3655,6 +3660,7 @@ spec:
                 items:
                   type: string
                 type: array
+                x-kubernetes-list-type: set
               priorityClassName:
                 description: PriorityClassName is the name of the PriorityClass for
                   the Server pods.
@@ -4003,6 +4009,9 @@ spec:
                   - type
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               desired:
                 description: Desired is the desired number of replicas.
                 format: int32

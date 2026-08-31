@@ -72,6 +72,15 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, fmt.Errorf("getting Server %s: %w", req.NamespacedName, err)
 	}
 
+	// Pausing comes after the deletion path: a paused resource must still be
+	// deletable, otherwise the annotation turns into a trap.
+	if paused, err := reconcilePauseState(ctx, r.Client, server, &server.Status.Conditions); err != nil {
+		return ctrl.Result{}, err
+	} else if paused {
+		logger.Info("reconciliation paused by annotation", "name", server.Name)
+		return ctrl.Result{}, nil
+	}
+
 	// Set initial phase
 	if server.Status.Phase == "" {
 		if err := updateStatusWithRetry(ctx, r.Client, server, func() {

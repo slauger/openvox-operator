@@ -40,12 +40,23 @@ type ReportProcessorReconciler struct {
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 func (r *ReportProcessorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
 	rp := &openvoxv1alpha1.ReportProcessor{}
 	if err := r.Get(ctx, req.NamespacedName, rp); err != nil {
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("getting ReportProcessor %s: %w", req.NamespacedName, err)
+	}
+
+	// Pausing comes after the deletion path: a paused resource must still be
+	// deletable, otherwise the annotation turns into a trap.
+	if paused, err := reconcilePauseState(ctx, r.Client, rp, &rp.Status.Conditions); err != nil {
+		return ctrl.Result{}, err
+	} else if paused {
+		logger.Info("reconciliation paused by annotation", "name", rp.Name)
+		return ctrl.Result{}, nil
 	}
 
 	phase, reason, message := r.observe(ctx, rp)

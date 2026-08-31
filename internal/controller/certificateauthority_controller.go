@@ -85,6 +85,15 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 	}
 
+	// Pausing comes after the deletion path: a paused resource must still be
+	// deletable, otherwise the annotation turns into a trap.
+	if paused, err := reconcilePauseState(ctx, r.Client, ca, &ca.Status.Conditions); err != nil {
+		return ctrl.Result{}, err
+	} else if paused {
+		logger.Info("reconciliation paused by annotation", "name", ca.Name)
+		return ctrl.Result{}, nil
+	}
+
 	// Set initial phase
 	if ca.Status.Phase == "" {
 		if err := updateStatusWithRetry(ctx, r.Client, ca, func() {

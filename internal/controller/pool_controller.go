@@ -63,6 +63,15 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, fmt.Errorf("getting Pool %s: %w", req.NamespacedName, err)
 	}
 
+	// Pausing comes after the deletion path: a paused resource must still be
+	// deletable, otherwise the annotation turns into a trap.
+	if paused, err := reconcilePauseState(ctx, r.Client, pool, &pool.Status.Conditions); err != nil {
+		return ctrl.Result{}, err
+	} else if paused {
+		logger.Info("reconciliation paused by annotation", "name", pool.Name)
+		return ctrl.Result{}, nil
+	}
+
 	// Reconcile Service
 	if err := r.reconcileService(ctx, pool); err != nil {
 		r.Recorder.Eventf(pool, nil, corev1.EventTypeWarning, EventReasonPoolError, "Reconcile", "Failed to reconcile Service: %v", err)

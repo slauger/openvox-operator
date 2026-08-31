@@ -57,6 +57,15 @@ func (r *ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
+	// Pausing comes after the deletion path: a paused resource must still be
+	// deletable, otherwise the annotation turns into a trap.
+	if paused, err := reconcilePauseState(ctx, r.Client, cfg, &cfg.Status.Conditions); err != nil {
+		return ctrl.Result{}, err
+	} else if paused {
+		logger.Info("reconciliation paused by annotation", "name", cfg.Name)
+		return ctrl.Result{}, nil
+	}
+
 	// Set initial phase
 	if cfg.Status.Phase == "" {
 		if err := updateStatusWithRetry(ctx, r.Client, cfg, func() {

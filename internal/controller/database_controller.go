@@ -68,6 +68,15 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("getting Database %s: %w", req.NamespacedName, err)
 	}
 
+	// Pausing comes after the deletion path: a paused resource must still be
+	// deletable, otherwise the annotation turns into a trap.
+	if paused, err := reconcilePauseState(ctx, r.Client, db, &db.Status.Conditions); err != nil {
+		return ctrl.Result{}, err
+	} else if paused {
+		logger.Info("reconciliation paused by annotation", "name", db.Name)
+		return ctrl.Result{}, nil
+	}
+
 	// Set initial phase
 	if db.Status.Phase == "" {
 		if err := updateStatusWithRetry(ctx, r.Client, db, func() {

@@ -11,6 +11,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -296,4 +297,50 @@ func ownerKind(owner metav1.Object) string {
 	default:
 		return "owner"
 	}
+}
+
+// isPaused reports whether reconciliation is suspended for this object.
+func isPaused(obj client.Object) bool {
+	return obj.GetAnnotations()[openvoxv1alpha1.AnnotationPaused] == "true"
+}
+
+// reconcilePauseState reports whether reconciliation is suspended and keeps the
+// Paused condition in sync with the annotation. Callers return early -- without
+// requeueing -- when it reports true; removing the annotation produces an event
+// that starts a fresh reconcile.
+//
+// The status is only written when the condition actually has to change, so a
+// paused resource does not generate traffic while it sits there.
+func reconcilePauseState(ctx context.Context, c client.Client, obj client.Object, conditions *[]metav1.Condition) (bool, error) {
+	paused := isPaused(obj)
+	generation := obj.GetGeneration()
+
+	if paused {
+		if meta.IsStatusConditionTrue(*conditions, openvoxv1alpha1.ConditionPaused) {
+			return true, nil
+		}
+		err := updateStatusWithRetry(ctx, c, obj, func() {
+			meta.SetStatusCondition(conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionPaused,
+				Status:             metav1.ConditionTrue,
+				Reason:             "Paused",
+				Message:            "Reconciliation is suspended by the " + openvoxv1alpha1.AnnotationPaused + " annotation",
+				ObservedGeneration: generation,
+			})
+		})
+		if err != nil {
+			return true, fmt.Errorf("recording the paused condition: %w", err)
+		}
+		return true, nil
+	}
+
+	if meta.FindStatusCondition(*conditions, openvoxv1alpha1.ConditionPaused) == nil {
+		return false, nil
+	}
+	if err := updateStatusWithRetry(ctx, c, obj, func() {
+		meta.RemoveStatusCondition(conditions, openvoxv1alpha1.ConditionPaused)
+	}); err != nil {
+		return false, fmt.Errorf("clearing the paused condition: %w", err)
+	}
+	return false, nil
 }

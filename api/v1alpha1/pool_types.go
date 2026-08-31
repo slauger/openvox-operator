@@ -121,6 +121,10 @@ type PoolStatus struct {
 	// Endpoints is the number of Pods behind the Service.
 	// +optional
 	Endpoints int32 `json:"endpoints,omitempty"`
+
+	// Conditions represent the latest available observations.
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 func init() {

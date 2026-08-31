@@ -13,3 +13,13 @@ func BoolValue(p *bool, def bool) bool {
 	}
 	return *p
 }
+
+// AnnotationPaused suspends reconciliation for a single resource.
+//
+// It is an annotation rather than a spec field on purpose: pausing is a
+// temporary operational measure, not a declared desired state, and it has no
+// business being committed to a GitOps repository.
+const AnnotationPaused = "openvox.voxpupuli.org/paused"
+
+// ConditionPaused reports that reconciliation is suspended by AnnotationPaused.
+const ConditionPaused = "Paused"

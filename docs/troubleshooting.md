@@ -4,6 +4,21 @@ This guide covers common issues and their solutions when running the OpenVox Ope
 
 ## Resource Status Issues
 
+### Nothing happens when I change a resource
+
+Check whether reconciliation is paused for it:
+
+```console
+$ kubectl get <kind> <name> -o jsonpath='{.metadata.annotations.openvox\.voxpupuli\.org/paused}'
+```
+
+A value of `true` means the operator is deliberately leaving the resource
+alone. Remove the annotation to resume -- see
+[Pausing Reconciliation](guides/pausing-reconciliation.md).
+
+If it is not paused, the resource may be waiting on a dependency; the `Ready`
+condition names it.
+
 ### Config stuck in Pending phase
 
 **Symptoms:** Config resource remains in `Pending` phase and never transitions to `Running`.

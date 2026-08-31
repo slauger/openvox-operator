@@ -125,7 +125,7 @@ By default the operator sets a matching `fsGroup` so managed pods can write to f
 Every resource reports both a `phase` and a list of `conditions`. They serve
 different purposes and are not interchangeable.
 
-**`status.phase`** is a coarse, human-readable summary — the thing you want in
+**`status.phase`** is a coarse, human-readable summary -- the thing you want in
 a `kubectl get` column. It is derived on every reconcile and is never read back
 as controller input, so editing or losing it does not change what the operator
 does.
@@ -158,5 +158,5 @@ of the status has not caught up with the current spec yet.
 | `Pool` | `Ready` | At least one ready endpoint is behind the Service |
 | `SigningPolicy`, `NodeClassifier`, `ReportProcessor` | `Ready` | The resource was rendered into the configuration the servers mount |
 
-Any resource can additionally carry `Paused` — see
+Any resource can additionally carry `Paused` -- see
 [Pausing Reconciliation](../guides/pausing-reconciliation.md).

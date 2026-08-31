@@ -32,7 +32,7 @@ $ kubectl annotate server web openvox.voxpupuli.org/paused-
 | | |
 |---|---|
 | Reconciliation of the annotated resource | **suspended** |
-| Child resources (Deployments, Services, Secrets, …) | left as they are, not reverted |
+| Child resources (Deployments, Services, Secrets, ...) | left as they are, not reverted |
 | Other resources of the same kind | unaffected |
 | Deletion | **still works** -- finalizers run as usual |
 | Running workloads | untouched; pods keep serving |

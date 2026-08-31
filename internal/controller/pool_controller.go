@@ -183,70 +183,6 @@ func (r *PoolReconciler) reconcileService(ctx context.Context, pool *openvoxv1al
 	logger := log.FromContext(ctx)
 	svcName := pool.Name
 
-	svc := &corev1.Service{}
-	err := r.Get(ctx, types.NamespacedName{Name: svcName, Namespace: pool.Namespace}, svc)
-	if errors.IsNotFound(err) {
-		logger.Info("creating Pool Service", "name", svcName)
-
-		port := int32(8140)
-		if pool.Spec.Service.Port > 0 {
-			port = pool.Spec.Service.Port
-		}
-
-		svcType := corev1.ServiceTypeClusterIP
-		if pool.Spec.Service.Type != "" {
-			svcType = pool.Spec.Service.Type
-		}
-
-		labels := map[string]string{
-			"app.kubernetes.io/name":       "openvox",
-			"app.kubernetes.io/managed-by": "openvox-operator",
-			poolLabel(pool.Name):           "true",
-		}
-
-		// Merge additional labels
-		for k, v := range pool.Spec.Service.Labels {
-			labels[k] = v
-		}
-
-		svcPort := corev1.ServicePort{
-			Name:       "https",
-			Port:       port,
-			TargetPort: intstr.FromInt32(8140),
-			Protocol:   corev1.ProtocolTCP,
-		}
-		if pool.Spec.Service.NodePort > 0 {
-			svcPort.NodePort = pool.Spec.Service.NodePort
-		}
-
-		svc = &corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        svcName,
-				Namespace:   pool.Namespace,
-				Labels:      labels,
-				Annotations: pool.Spec.Service.Annotations,
-			},
-			Spec: corev1.ServiceSpec{
-				Type:        svcType,
-				Selector:    poolServiceSelector(pool),
-				Ports:       []corev1.ServicePort{svcPort},
-				ExternalIPs: pool.Spec.Service.ExternalIPs,
-			},
-		}
-
-		if err := controllerutil.SetControllerReference(pool, svc, r.Scheme); err != nil {
-			return fmt.Errorf("setting owner reference on Service %s: %w", svcName, err)
-		}
-		if err := r.Create(ctx, svc); err != nil {
-			return fmt.Errorf("creating Service %s: %w", svcName, err)
-		}
-		r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonServiceSynced, "Reconcile", "Service %s created", svcName)
-		return nil
-	} else if err != nil {
-		return fmt.Errorf("getting Service %s: %w", svcName, err)
-	}
-
-	// Update existing service
 	port := int32(8140)
 	if pool.Spec.Service.Port > 0 {
 		port = pool.Spec.Service.Port
@@ -256,7 +192,6 @@ func (r *PoolReconciler) reconcileService(ctx context.Context, pool *openvoxv1al
 		svcType = pool.Spec.Service.Type
 	}
 
-	// Update labels
 	labels := map[string]string{
 		"app.kubernetes.io/name":       "openvox",
 		"app.kubernetes.io/managed-by": "openvox-operator",
@@ -265,26 +200,47 @@ func (r *PoolReconciler) reconcileService(ctx context.Context, pool *openvoxv1al
 	for k, v := range pool.Spec.Service.Labels {
 		labels[k] = v
 	}
-	svc.Labels = labels
-	svc.Annotations = pool.Spec.Service.Annotations
 
-	svc.Spec.Type = svcType
-	svc.Spec.Selector = poolServiceSelector(pool)
-	if len(svc.Spec.Ports) == 0 {
-		svc.Spec.Ports = []corev1.ServicePort{{}}
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: svcName, Namespace: pool.Namespace},
 	}
-	svc.Spec.Ports[0].Name = "https"
-	svc.Spec.Ports[0].Port = port
-	svc.Spec.Ports[0].TargetPort = intstr.FromInt32(8140)
-	svc.Spec.Ports[0].Protocol = corev1.ProtocolTCP
-	if pool.Spec.Service.NodePort > 0 {
-		svc.Spec.Ports[0].NodePort = pool.Spec.Service.NodePort
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, svc, func() error {
+		if err := assertControlledBy(svc, pool, "Service"); err != nil {
+			return err
+		}
+		svc.Labels = labels
+		svc.Annotations = pool.Spec.Service.Annotations
+
+		// Only the fields the Pool owns are written. clusterIP in particular is
+		// assigned by Kubernetes and immutable, so the surrounding spec is left
+		// untouched.
+		svc.Spec.Type = svcType
+		svc.Spec.Selector = poolServiceSelector(pool)
+		if len(svc.Spec.Ports) == 0 {
+			svc.Spec.Ports = []corev1.ServicePort{{}}
+		}
+		svc.Spec.Ports[0].Name = "https"
+		svc.Spec.Ports[0].Port = port
+		svc.Spec.Ports[0].TargetPort = intstr.FromInt32(8140)
+		svc.Spec.Ports[0].Protocol = corev1.ProtocolTCP
+		// An unset nodePort keeps whatever Kubernetes assigned; clearing it here
+		// would hand out a new port and break every client using the old one.
+		if pool.Spec.Service.NodePort > 0 {
+			svc.Spec.Ports[0].NodePort = pool.Spec.Service.NodePort
+		}
+		svc.Spec.ExternalIPs = pool.Spec.Service.ExternalIPs
+		return controllerutil.SetControllerReference(pool, svc, r.Scheme)
+	})
+	if err != nil {
+		return fmt.Errorf("reconciling Service %s: %w", svcName, err)
 	}
-	svc.Spec.ExternalIPs = pool.Spec.Service.ExternalIPs
-	if err := r.Update(ctx, svc); err != nil {
-		return fmt.Errorf("updating Service %s: %w", svcName, err)
+	switch op {
+	case controllerutil.OperationResultCreated:
+		logger.Info("created Pool Service", "name", svcName)
+		r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonServiceSynced, "Reconcile", "Service %s created", svcName)
+	case controllerutil.OperationResultUpdated:
+		r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonServiceSynced, "Reconcile", "Service %s updated", svcName)
 	}
-	r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonServiceSynced, "Reconcile", "Service %s updated", svcName)
 	return nil
 }
 
@@ -313,8 +269,6 @@ func (r *PoolReconciler) reconcileTLSRoute(ctx context.Context, pool *openvoxv1a
 		port = gwapiv1.PortNumber(pool.Spec.Service.Port)
 	}
 
-	hostname := gwapiv1.Hostname(pool.Spec.Route.Hostname)
-
 	parentRef := gwapiv1.ParentReference{
 		Name: gwapiv1.ObjectName(pool.Spec.Route.GatewayRef.Name),
 	}
@@ -323,16 +277,18 @@ func (r *PoolReconciler) reconcileTLSRoute(ctx context.Context, pool *openvoxv1a
 		parentRef.SectionName = &sectionName
 	}
 
-	desired := &gwapiv1.TLSRoute{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      pool.Name,
-			Namespace: pool.Namespace,
-		},
-		Spec: gwapiv1.TLSRouteSpec{
+	route := &gwapiv1.TLSRoute{
+		ObjectMeta: metav1.ObjectMeta{Name: pool.Name, Namespace: pool.Namespace},
+	}
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, route, func() error {
+		if err := assertControlledBy(route, pool, "TLSRoute"); err != nil {
+			return err
+		}
+		route.Spec = gwapiv1.TLSRouteSpec{
 			CommonRouteSpec: gwapiv1.CommonRouteSpec{
 				ParentRefs: []gwapiv1.ParentReference{parentRef},
 			},
-			Hostnames: []gwapiv1.Hostname{hostname},
+			Hostnames: []gwapiv1.Hostname{gwapiv1.Hostname(pool.Spec.Route.Hostname)},
 			Rules: []gwapiv1.TLSRouteRule{
 				{
 					BackendRefs: []gwapiv1.BackendRef{
@@ -345,31 +301,19 @@ func (r *PoolReconciler) reconcileTLSRoute(ctx context.Context, pool *openvoxv1a
 					},
 				},
 			},
-		},
+		}
+		return controllerutil.SetControllerReference(pool, route, r.Scheme)
+	})
+	if err != nil {
+		return fmt.Errorf("reconciling TLSRoute %s: %w", pool.Name, err)
 	}
-
-	existing := &gwapiv1.TLSRoute{}
-	err := r.Get(ctx, types.NamespacedName{Name: pool.Name, Namespace: pool.Namespace}, existing)
-	if errors.IsNotFound(err) {
-		logger.Info("creating TLSRoute", "name", pool.Name, "hostname", pool.Spec.Route.Hostname)
-		if err := controllerutil.SetControllerReference(pool, desired, r.Scheme); err != nil {
-			return fmt.Errorf("setting owner reference on TLSRoute %s: %w", pool.Name, err)
-		}
-		if err := r.Create(ctx, desired); err != nil {
-			return fmt.Errorf("creating TLSRoute %s: %w", pool.Name, err)
-		}
+	switch op {
+	case controllerutil.OperationResultCreated:
+		logger.Info("created TLSRoute", "name", pool.Name, "hostname", pool.Spec.Route.Hostname)
 		r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonTLSRouteCreated, "Reconcile", "TLSRoute %s created for hostname %s", pool.Name, pool.Spec.Route.Hostname)
-		return nil
-	} else if err != nil {
-		return fmt.Errorf("getting TLSRoute %s: %w", pool.Name, err)
+	case controllerutil.OperationResultUpdated:
+		r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonTLSRouteUpdated, "Reconcile", "TLSRoute %s updated", pool.Name)
 	}
-
-	// Update existing TLSRoute
-	existing.Spec = desired.Spec
-	if err := r.Update(ctx, existing); err != nil {
-		return fmt.Errorf("updating TLSRoute %s: %w", pool.Name, err)
-	}
-	r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonTLSRouteUpdated, "Reconcile", "TLSRoute %s updated", pool.Name)
 	return nil
 }
 

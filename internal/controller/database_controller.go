@@ -188,7 +188,6 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 func (r *DatabaseReconciler) reconcileConfigMap(ctx context.Context, db *openvoxv1alpha1.Database, cert *openvoxv1alpha1.Certificate) error {
 	logger := log.FromContext(ctx)
 	cmName := fmt.Sprintf("%s-config", db.Name)
-	labels := databaseLabels(db.Name)
 
 	data := map[string]string{
 		"jetty.ini":  renderJettyIni(cert.Spec.Certname),
@@ -196,28 +195,24 @@ func (r *DatabaseReconciler) reconcileConfigMap(ctx context.Context, db *openvox
 		"auth.conf":  renderAuthConf(),
 	}
 
-	existing := &corev1.ConfigMap{}
-	err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: db.Namespace}, existing)
-	if errors.IsNotFound(err) {
-		logger.Info("creating Database ConfigMap", "name", cmName)
-		cm := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      cmName,
-				Namespace: db.Namespace,
-				Labels:    labels,
-			},
-			Data: data,
-		}
-		if err := controllerutil.SetControllerReference(db, cm, r.Scheme); err != nil {
-			return fmt.Errorf("setting owner reference on ConfigMap %s: %w", cmName, err)
-		}
-		return r.Create(ctx, cm)
-	} else if err != nil {
-		return fmt.Errorf("getting ConfigMap %s: %w", cmName, err)
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: cmName, Namespace: db.Namespace},
 	}
-
-	existing.Data = data
-	return r.Update(ctx, existing)
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, cm, func() error {
+		if err := assertControlledBy(cm, db, "ConfigMap"); err != nil {
+			return err
+		}
+		cm.Labels = databaseLabels(db.Name)
+		cm.Data = data
+		return controllerutil.SetControllerReference(db, cm, r.Scheme)
+	})
+	if err != nil {
+		return fmt.Errorf("reconciling ConfigMap %s: %w", cmName, err)
+	}
+	if op == controllerutil.OperationResultCreated {
+		logger.Info("created Database ConfigMap", "name", cmName)
+	}
+	return nil
 }
 
 func (r *DatabaseReconciler) reconcileDatabaseSecret(ctx context.Context, db *openvoxv1alpha1.Database) error {
@@ -238,66 +233,50 @@ func (r *DatabaseReconciler) reconcileDatabaseSecret(ctx context.Context, db *op
 func (r *DatabaseReconciler) reconcileService(ctx context.Context, db *openvoxv1alpha1.Database) error {
 	logger := log.FromContext(ctx)
 	svcName := db.Name
-	labels := databaseLabels(db.Name)
 
 	port := db.Spec.Service.Port
 	if port == 0 {
 		port = DatabaseHTTPSPort
 	}
-
 	svcType := db.Spec.Service.Type
 	if svcType == "" {
 		svcType = corev1.ServiceTypeClusterIP
 	}
 
-	svcAnnotations := db.Spec.Service.Annotations
-
-	existing := &corev1.Service{}
-	err := r.Get(ctx, types.NamespacedName{Name: svcName, Namespace: db.Namespace}, existing)
-	if errors.IsNotFound(err) {
-		logger.Info("creating Database Service", "name", svcName)
-		svc := &corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        svcName,
-				Namespace:   db.Namespace,
-				Labels:      labels,
-				Annotations: svcAnnotations,
-			},
-			Spec: corev1.ServiceSpec{
-				Type: svcType,
-				Selector: map[string]string{
-					LabelDatabase: db.Name,
-				},
-				Ports: []corev1.ServicePort{
-					{
-						Name:       "https",
-						Port:       port,
-						TargetPort: intstr.FromInt32(DatabaseHTTPSPort),
-						Protocol:   corev1.ProtocolTCP,
-					},
-				},
-			},
-		}
-		if err := controllerutil.SetControllerReference(db, svc, r.Scheme); err != nil {
-			return fmt.Errorf("setting owner reference on Service %s: %w", svcName, err)
-		}
-		return r.Create(ctx, svc)
-	} else if err != nil {
-		return fmt.Errorf("getting Service %s: %w", svcName, err)
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: svcName, Namespace: db.Namespace},
 	}
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, svc, func() error {
+		if err := assertControlledBy(svc, db, "Service"); err != nil {
+			return err
+		}
+		svc.Labels = databaseLabels(db.Name)
+		svc.Annotations = db.Spec.Service.Annotations
 
-	// Update existing
-	existing.Spec.Type = svcType
-	existing.Spec.Ports = []corev1.ServicePort{
-		{
-			Name:       "https",
-			Port:       port,
-			TargetPort: intstr.FromInt32(DatabaseHTTPSPort),
-			Protocol:   corev1.ProtocolTCP,
-		},
+		// clusterIP and any assigned nodePort are Kubernetes' to manage, so only
+		// the fields the Database owns are written.
+		svc.Spec.Type = svcType
+		svc.Spec.Selector = map[string]string{LabelDatabase: db.Name}
+		if len(svc.Spec.Ports) == 0 {
+			svc.Spec.Ports = []corev1.ServicePort{{}}
+		}
+		svc.Spec.Ports[0].Name = "https"
+		svc.Spec.Ports[0].Port = port
+		svc.Spec.Ports[0].TargetPort = intstr.FromInt32(DatabaseHTTPSPort)
+		svc.Spec.Ports[0].Protocol = corev1.ProtocolTCP
+		return controllerutil.SetControllerReference(db, svc, r.Scheme)
+	})
+	if err != nil {
+		return fmt.Errorf("reconciling Service %s: %w", svcName, err)
 	}
-	existing.Annotations = svcAnnotations
-	return r.Update(ctx, existing)
+	switch op {
+	case controllerutil.OperationResultCreated:
+		logger.Info("created Database Service", "name", svcName)
+		r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabaseServiceSync, "Reconcile", "Service %s created", svcName)
+	case controllerutil.OperationResultUpdated:
+		r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabaseServiceSync, "Reconcile", "Service %s updated", svcName)
+	}
+	return nil
 }
 
 func (r *DatabaseReconciler) getReadyReplicas(ctx context.Context, db *openvoxv1alpha1.Database) int32 {
@@ -311,17 +290,21 @@ func (r *DatabaseReconciler) getReadyReplicas(ctx context.Context, db *openvoxv1
 func (r *DatabaseReconciler) reconcilePDB(ctx context.Context, db *openvoxv1alpha1.Database) error {
 	logger := log.FromContext(ctx)
 	pdbName := db.Name
-	existing := &policyv1.PodDisruptionBudget{}
-	err := r.Get(ctx, types.NamespacedName{Name: pdbName, Namespace: db.Namespace}, existing)
 
-	// If PDB is disabled or not configured, delete if exists
 	if db.Spec.PDB == nil || !db.Spec.PDB.Enabled {
+		existing := &policyv1.PodDisruptionBudget{}
+		err := r.Get(ctx, types.NamespacedName{Name: pdbName, Namespace: db.Namespace}, existing)
 		if err == nil {
-			logger.Info("deleting PDB (disabled)", "name", pdbName)
+			if guardErr := assertControlledBy(existing, db, "PodDisruptionBudget"); guardErr != nil {
+				return guardErr
+			}
+			logger.Info("deleting Database PDB (disabled)", "name", pdbName)
 			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
 				return fmt.Errorf("deleting PodDisruptionBudget %s: %w", pdbName, err)
 			}
 			r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabasePDBDeleted, "Reconcile", "PodDisruptionBudget %s deleted", pdbName)
+		} else if !errors.IsNotFound(err) {
+			return fmt.Errorf("getting PodDisruptionBudget %s: %w", pdbName, err)
 		}
 		return nil
 	}
@@ -330,24 +313,28 @@ func (r *DatabaseReconciler) reconcilePDB(ctx context.Context, db *openvoxv1alph
 	if buildErr != nil {
 		return buildErr
 	}
-	if errors.IsNotFound(err) {
-		logger.Info("creating PDB", "name", pdbName)
-		if err := r.Create(ctx, desired); err != nil {
-			return fmt.Errorf("creating PodDisruptionBudget %s: %w", pdbName, err)
-		}
-		r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabasePDBCreated, "Reconcile", "PodDisruptionBudget %s created", pdbName)
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("getting PodDisruptionBudget %s: %w", pdbName, err)
-	}
 
-	// Update existing
-	existing.Spec = desired.Spec
-	if err := r.Update(ctx, existing); err != nil {
-		return fmt.Errorf("updating PodDisruptionBudget %s: %w", pdbName, err)
+	pdb := &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{Name: pdbName, Namespace: db.Namespace},
 	}
-	r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabasePDBUpdated, "Reconcile", "PodDisruptionBudget %s updated", pdbName)
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, pdb, func() error {
+		if err := assertControlledBy(pdb, db, "PodDisruptionBudget"); err != nil {
+			return err
+		}
+		pdb.Labels = desired.Labels
+		pdb.Spec = desired.Spec
+		return controllerutil.SetControllerReference(db, pdb, r.Scheme)
+	})
+	if err != nil {
+		return fmt.Errorf("reconciling PodDisruptionBudget %s: %w", pdbName, err)
+	}
+	switch op {
+	case controllerutil.OperationResultCreated:
+		logger.Info("created Database PDB", "name", pdbName)
+		r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabasePDBCreated, "Reconcile", "PodDisruptionBudget %s created", pdbName)
+	case controllerutil.OperationResultUpdated:
+		r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabasePDBUpdated, "Reconcile", "PodDisruptionBudget %s updated", pdbName)
+	}
 	return nil
 }
 
@@ -383,16 +370,21 @@ func (r *DatabaseReconciler) buildPDB(db *openvoxv1alpha1.Database) (*policyv1.P
 func (r *DatabaseReconciler) reconcileNetworkPolicy(ctx context.Context, db *openvoxv1alpha1.Database) error {
 	logger := log.FromContext(ctx)
 	npName := db.Name + "-netpol"
-	existing := &networkingv1.NetworkPolicy{}
-	err := r.Get(ctx, types.NamespacedName{Name: npName, Namespace: db.Namespace}, existing)
 
 	if db.Spec.NetworkPolicy == nil || !db.Spec.NetworkPolicy.Enabled {
+		existing := &networkingv1.NetworkPolicy{}
+		err := r.Get(ctx, types.NamespacedName{Name: npName, Namespace: db.Namespace}, existing)
 		if err == nil {
-			logger.Info("deleting NetworkPolicy (disabled)", "name", npName)
+			if guardErr := assertControlledBy(existing, db, "NetworkPolicy"); guardErr != nil {
+				return guardErr
+			}
+			logger.Info("deleting Database NetworkPolicy (disabled)", "name", npName)
 			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
 				return fmt.Errorf("deleting NetworkPolicy %s: %w", npName, err)
 			}
 			r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabaseNetworkPolicyDeleted, "Reconcile", "NetworkPolicy %s deleted", npName)
+		} else if !errors.IsNotFound(err) {
+			return fmt.Errorf("getting NetworkPolicy %s: %w", npName, err)
 		}
 		return nil
 	}
@@ -401,23 +393,28 @@ func (r *DatabaseReconciler) reconcileNetworkPolicy(ctx context.Context, db *ope
 	if buildErr != nil {
 		return buildErr
 	}
-	if errors.IsNotFound(err) {
-		logger.Info("creating NetworkPolicy", "name", npName)
-		if err := r.Create(ctx, desired); err != nil {
-			return fmt.Errorf("creating NetworkPolicy %s: %w", npName, err)
-		}
-		r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabaseNetworkPolicyCreated, "Reconcile", "NetworkPolicy %s created", npName)
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("getting NetworkPolicy %s: %w", npName, err)
-	}
 
-	existing.Spec = desired.Spec
-	if err := r.Update(ctx, existing); err != nil {
-		return fmt.Errorf("updating NetworkPolicy %s: %w", npName, err)
+	np := &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: npName, Namespace: db.Namespace},
 	}
-	r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabaseNetworkPolicyUpdated, "Reconcile", "NetworkPolicy %s updated", npName)
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, np, func() error {
+		if err := assertControlledBy(np, db, "NetworkPolicy"); err != nil {
+			return err
+		}
+		np.Labels = desired.Labels
+		np.Spec = desired.Spec
+		return controllerutil.SetControllerReference(db, np, r.Scheme)
+	})
+	if err != nil {
+		return fmt.Errorf("reconciling NetworkPolicy %s: %w", npName, err)
+	}
+	switch op {
+	case controllerutil.OperationResultCreated:
+		logger.Info("created Database NetworkPolicy", "name", npName)
+		r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabaseNetworkPolicyCreated, "Reconcile", "NetworkPolicy %s created", npName)
+	case controllerutil.OperationResultUpdated:
+		r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabaseNetworkPolicyUpdated, "Reconcile", "NetworkPolicy %s updated", npName)
+	}
 	return nil
 }
 

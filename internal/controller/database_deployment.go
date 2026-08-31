@@ -103,6 +103,10 @@ func (r *DatabaseReconciler) reconcileDeployment(ctx context.Context, db *openvo
 		return fmt.Errorf("getting Deployment %s: %w", deployName, err)
 	}
 
+	if err := assertControlledBy(deploy, db, "Deployment"); err != nil {
+		return err
+	}
+
 	// Update existing Deployment
 	deploy.Spec.Replicas = &replicas
 	deploy.Spec.Template.Labels = labels

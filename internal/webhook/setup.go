@@ -47,7 +47,7 @@ func SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	if err := ctrl.NewWebhookManagedBy(mgr, &openvoxv1alpha1.CertificateAuthority{}).
-		WithValidator(&CertificateAuthorityValidator{}).
+		WithValidator(&CertificateAuthorityValidator{Client: c}).
 		Complete(); err != nil {
 		return err
 	}

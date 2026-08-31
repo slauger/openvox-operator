@@ -3,6 +3,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -38,7 +40,13 @@ const (
 	EventReasonCRLRefreshFailed       = "CRLRefreshFailed"
 	EventReasonOperatorSigningCreated = "OperatorSigningCreated"
 	EventReasonOperatorSigningReady   = "OperatorSigningReady"
+	EventReasonCADeletionBlocked      = "CADeletionBlocked"
 )
+
+// certificateAuthorityFinalizer guards the CA private key and the CA data PVC,
+// both of which are garbage-collected through their owner reference the moment
+// the CertificateAuthority is gone.
+const certificateAuthorityFinalizer = "openvox.voxpupuli.org/ca-protection"
 
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificateauthorities,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificateauthorities/status,verbs=get;update;patch
@@ -60,6 +68,20 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("getting CertificateAuthority %s: %w", req.NamespacedName, err)
+	}
+
+	// Deletion destroys the CA private key and the CA data PVC through their
+	// owner references. Hold it back while Certificates still depend on them.
+	if !ca.DeletionTimestamp.IsZero() {
+		return r.handleDeletion(ctx, ca)
+	}
+
+	if !controllerutil.ContainsFinalizer(ca, certificateAuthorityFinalizer) {
+		patch := client.MergeFrom(ca.DeepCopy())
+		controllerutil.AddFinalizer(ca, certificateAuthorityFinalizer)
+		if err := r.Patch(ctx, ca, patch); err != nil {
+			return ctrl.Result{}, fmt.Errorf("adding finalizer to CertificateAuthority %s: %w", ca.Name, err)
+		}
 	}
 
 	// Set initial phase
@@ -186,6 +208,56 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{RequeueAfter: RequeueIntervalCRL}, nil
 	}
 	return crlResult, nil
+}
+
+// handleDeletion releases the finalizer once no Certificate references this CA
+// any more. Until then it reports the blocking certificates and waits, so a
+// stray delete cannot take the PKI down while servers and agents are still
+// using it.
+func (r *CertificateAuthorityReconciler) handleDeletion(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
+	if !controllerutil.ContainsFinalizer(ca, certificateAuthorityFinalizer) {
+		return ctrl.Result{}, nil
+	}
+
+	certs, err := r.findCertificatesForCA(ctx, ca)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("checking Certificates before deleting CertificateAuthority %s: %w", ca.Name, err)
+	}
+
+	if len(certs) > 0 {
+		blocking := make([]string, 0, len(certs))
+		for i := range certs {
+			blocking = append(blocking, certs[i].Name)
+		}
+		sort.Strings(blocking)
+		msg := fmt.Sprintf("%d Certificate(s) still reference this CA: %s", len(blocking), strings.Join(blocking, ", "))
+		logger.Info("CertificateAuthority deletion blocked", "certificates", blocking)
+
+		if statusErr := updateStatusWithRetry(ctx, r.Client, ca, func() {
+			meta.SetStatusCondition(&ca.Status.Conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionCADeletionBlocked,
+				Status:             metav1.ConditionTrue,
+				Reason:             "CertificatesExist",
+				Message:            msg,
+				ObservedGeneration: ca.Generation,
+			})
+		}); statusErr != nil {
+			logger.Error(statusErr, "failed to record the deletion-blocked condition", "name", ca.Name)
+		}
+		r.Recorder.Eventf(ca, nil, corev1.EventTypeWarning, EventReasonCADeletionBlocked, "Delete",
+			"Deletion blocked: %s", msg)
+		return ctrl.Result{RequeueAfter: RequeueIntervalLong}, nil
+	}
+
+	logger.Info("no Certificates left, releasing CertificateAuthority finalizer", "name", ca.Name)
+	patch := client.MergeFrom(ca.DeepCopy())
+	controllerutil.RemoveFinalizer(ca, certificateAuthorityFinalizer)
+	if err := r.Patch(ctx, ca, patch); err != nil {
+		return ctrl.Result{}, fmt.Errorf("removing finalizer from CertificateAuthority %s: %w", ca.Name, err)
+	}
+	return ctrl.Result{}, nil
 }
 
 // findConfigForCA returns the first Config in the same namespace whose authorityRef matches this CA.

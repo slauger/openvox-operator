@@ -2,16 +2,22 @@ package webhook
 
 import (
 	"context"
+	"fmt"
+	"sort"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
 
 // CertificateAuthorityValidator validates CertificateAuthority resources.
-type CertificateAuthorityValidator struct{}
+type CertificateAuthorityValidator struct {
+	Client client.Reader
+}
 
 func (v *CertificateAuthorityValidator) ValidateCreate(_ context.Context, ca *openvoxv1alpha1.CertificateAuthority) (admission.Warnings, error) {
 	return v.validate(ca)
@@ -21,8 +27,38 @@ func (v *CertificateAuthorityValidator) ValidateUpdate(_ context.Context, _, ca 
 	return v.validate(ca)
 }
 
-func (v *CertificateAuthorityValidator) ValidateDelete(_ context.Context, _ *openvoxv1alpha1.CertificateAuthority) (admission.Warnings, error) {
-	return nil, nil
+// ValidateDelete refuses to delete a CertificateAuthority while Certificates
+// still reference it, and warns about the consequences otherwise.
+//
+// The controller's finalizer is the actual safeguard -- it also holds when the
+// webhooks are disabled. This check exists so the user is told immediately
+// instead of watching the resource sit in Terminating.
+func (v *CertificateAuthorityValidator) ValidateDelete(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority) (admission.Warnings, error) {
+	if v.Client == nil {
+		return nil, nil
+	}
+
+	certList := &openvoxv1alpha1.CertificateList{}
+	if err := v.Client.List(ctx, certList, client.InNamespace(ca.Namespace)); err != nil {
+		return nil, fmt.Errorf("listing Certificates for CertificateAuthority %s: %w", ca.Name, err)
+	}
+
+	var blocking []string
+	for i := range certList.Items {
+		if certList.Items[i].Spec.AuthorityRef == ca.Name {
+			blocking = append(blocking, certList.Items[i].Name)
+		}
+	}
+	if len(blocking) > 0 {
+		sort.Strings(blocking)
+		return nil, fmt.Errorf(
+			"cannot delete CertificateAuthority %s: %d Certificate(s) still reference it (%s); delete those first",
+			ca.Name, len(blocking), strings.Join(blocking, ", "))
+	}
+
+	return admission.Warnings{
+		"deleting this CertificateAuthority destroys the CA private key and the CA data PVC; this cannot be undone",
+	}, nil
 }
 
 func (v *CertificateAuthorityValidator) validate(ca *openvoxv1alpha1.CertificateAuthority) (admission.Warnings, error) {

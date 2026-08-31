@@ -179,7 +179,11 @@ type CertificateAuthorityStatus struct {
 
 // Condition types for CertificateAuthority.
 const (
-	ConditionCAReady              = "CAReady"
+	ConditionCAReady = "CAReady"
+
+	// ConditionCADeletionBlocked reports that deletion is being held back
+	// because Certificates still reference this CertificateAuthority.
+	ConditionCADeletionBlocked    = "DeletionBlocked"
 	ConditionOperatorSigningReady = "OperatorSigningReady"
 )
 

@@ -94,6 +94,39 @@ spec:
 |---|---|
 | `CAReady` | CA Secrets are present (`{name}-ca`, `{name}-ca-key`, `{name}-ca-crl`) and the CA can sign certificates. Set when the setup Job completes successfully or when an external CA is reachable. |
 | `OperatorSigningReady` | The auto-managed `{name}-operator-signing` Certificate is signed and its TLS Secret is available for mTLS-authenticated CSR signing. Not set for external CAs (which manage their own signing credentials). |
+| `DeletionBlocked` | Deletion is being held back because Certificates still reference this CertificateAuthority. The message lists them. |
+
+## Deletion
+
+The CA private key (`{name}-ca-key`) and the CA data PVC are owned by the
+CertificateAuthority, so deleting it garbage-collects both. That is
+irreversible: every agent certificate signed by this CA becomes unverifiable,
+and there is no way to rebuild the key.
+
+The operator therefore holds a finalizer
+(`openvox.voxpupuli.org/ca-protection`) and refuses to release it while any
+Certificate still references the CA. A `kubectl delete` on such a CA leaves the
+resource in `Terminating` with a `DeletionBlocked` condition naming the
+certificates that are in the way. With the admission webhooks enabled the
+delete is rejected outright instead, so you get the answer immediately.
+
+To delete a CertificateAuthority on purpose, remove the Certificates first:
+
+```console
+$ kubectl delete certificate --all -n <namespace>
+$ kubectl delete certificateauthority <name> -n <namespace>
+```
+
+If you have to force it -- for example while cleaning up a namespace whose
+Certificates are themselves stuck -- drop the finalizer by hand:
+
+```console
+$ kubectl patch certificateauthority <name> -n <namespace> \
+    --type=merge -p '{"metadata":{"finalizers":[]}}'
+```
+
+This destroys the CA key. Take a backup of the `{name}-ca-key` Secret first if
+there is any chance you will need it again.
 
 ## Phases
 

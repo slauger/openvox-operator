@@ -34,7 +34,7 @@ func testScheme() *runtime.Scheme {
 // setupTestClient creates a fake client pre-loaded with the given objects.
 // StatusSubresource is enabled for all CRD types that use status updates.
 func setupTestClient(objs ...client.Object) client.Client {
-	return fake.NewClientBuilder().
+	b := fake.NewClientBuilder().
 		WithScheme(testScheme()).
 		WithObjects(objs...).
 		WithStatusSubresource(
@@ -47,8 +47,13 @@ func setupTestClient(objs ...client.Object) client.Client {
 			&openvoxv1alpha1.SigningPolicy{},
 			&openvoxv1alpha1.NodeClassifier{},
 			&openvoxv1alpha1.ReportProcessor{},
-		).
-		Build()
+		)
+	// Register the same field indexes the manager sets up, so watch map
+	// functions behave in tests the way they do in a cluster.
+	for _, idx := range fieldIndexes() {
+		b = b.WithIndex(idx.obj, idx.field, idx.extract)
+	}
+	return b.Build()
 }
 
 // testRecorder returns a fake event recorder.

@@ -238,9 +238,18 @@ spec:
                   wrongly accepted a storage block that happened to match that default.
                 properties:
                   size:
+                    anyOf:
+                    - type: integer
+                    - type: string
                     default: 1Gi
-                    description: Size is the requested storage size.
-                    type: string
+                    description: |-
+                      Size is the requested storage size.
+
+                      A pointer, because omitempty has no effect on resource.Quantity: the value
+                      type always marshals (as "0" when unset), so the field would never be
+                      absent and the default below would never be applied.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
                   storageClass:
                     description: StorageClass is the storage class name. Empty means
                       default.

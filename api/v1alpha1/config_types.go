@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -391,9 +392,13 @@ type IntermediateCASpec struct {
 // StorageSpec defines PVC settings.
 type StorageSpec struct {
 	// Size is the requested storage size.
+	//
+	// A pointer, because omitempty has no effect on resource.Quantity: the value
+	// type always marshals (as "0" when unset), so the field would never be
+	// absent and the default below would never be applied.
 	// +kubebuilder:default="1Gi"
 	// +optional
-	Size string `json:"size,omitempty"`
+	Size *resource.Quantity `json:"size,omitempty"`
 
 	// StorageClass is the storage class name. Empty means default.
 	// +optional

@@ -14,6 +14,11 @@ import (
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
 
+// defaultCAStorageQuantity is the parsed form of DefaultCAStorageGi. Parsing it
+// once at startup keeps the panic-prone MustParse away from the reconcile path;
+// the input is our own constant, so a failure here is a build-time mistake.
+var defaultCAStorageQuantity = resource.MustParse(DefaultCAStorageGi)
+
 func (r *CertificateAuthorityReconciler) reconcileCAPVC(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority) error {
 	pvcName := fmt.Sprintf("%s-data", ca.Name)
 
@@ -21,9 +26,9 @@ func (r *CertificateAuthorityReconciler) reconcileCAPVC(ctx context.Context, ca 
 	err := r.Get(ctx, types.NamespacedName{Name: pvcName, Namespace: ca.Namespace}, pvc)
 	if errors.IsNotFound(err) {
 		storage := resolveCAStorage(ca)
-		storageSize := DefaultCAStorageGi
-		if storage.Size != "" {
-			storageSize = storage.Size
+		storageSize := defaultCAStorageQuantity
+		if storage.Size != nil {
+			storageSize = *storage.Size
 		}
 
 		pvc = &corev1.PersistentVolumeClaim{
@@ -36,7 +41,7 @@ func (r *CertificateAuthorityReconciler) reconcileCAPVC(ctx context.Context, ca 
 				AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 				Resources: corev1.VolumeResourceRequirements{
 					Requests: corev1.ResourceList{
-						corev1.ResourceStorage: resource.MustParse(storageSize),
+						corev1.ResourceStorage: storageSize,
 					},
 				},
 			},

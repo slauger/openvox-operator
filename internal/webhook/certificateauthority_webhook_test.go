@@ -4,7 +4,9 @@ import (
 	"context"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
@@ -37,7 +39,7 @@ func TestCertificateAuthorityValidator(t *testing.T) {
 				TTL:                "5y",
 				AutoRenewalCertTTL: "90d",
 				CRLRefreshInterval: "5m",
-				Storage:            &openvoxv1alpha1.StorageSpec{Size: "1Gi"},
+				Storage:            &openvoxv1alpha1.StorageSpec{Size: ptr.To(resource.MustParse("1Gi"))},
 			},
 		}
 		_, err := v.ValidateCreate(context.Background(), ca)
@@ -87,21 +89,6 @@ func TestCertificateAuthorityValidator(t *testing.T) {
 		_, err := v.ValidateCreate(context.Background(), ca)
 		if err == nil {
 			t.Error("expected error for invalid crlRefreshInterval")
-		}
-	})
-
-	t.Run("invalid storage size", func(t *testing.T) {
-		v := &CertificateAuthorityValidator{}
-		ca := &openvoxv1alpha1.CertificateAuthority{
-			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-			Spec: openvoxv1alpha1.CertificateAuthoritySpec{
-				TTL:     "5y",
-				Storage: &openvoxv1alpha1.StorageSpec{Size: "not-a-quantity"},
-			},
-		}
-		_, err := v.ValidateCreate(context.Background(), ca)
-		if err == nil {
-			t.Error("expected error for invalid storage size")
 		}
 	})
 

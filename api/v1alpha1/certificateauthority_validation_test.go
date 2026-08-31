@@ -6,7 +6,10 @@ import (
 	"testing"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/utils/ptr"
 )
 
 func validCA() *CertificateAuthority {
@@ -41,7 +44,7 @@ func TestCertificateAuthorityStorageExclusivity(t *testing.T) {
 		{
 			name: "storage without external accepted",
 			mutate: func(ca *CertificateAuthority) {
-				ca.Spec.Storage = &StorageSpec{Size: "10Gi"}
+				ca.Spec.Storage = &StorageSpec{Size: ptr.To(resource.MustParse("10Gi"))}
 			},
 		},
 		{
@@ -54,7 +57,7 @@ func TestCertificateAuthorityStorageExclusivity(t *testing.T) {
 			name: "external with custom storage rejected",
 			mutate: func(ca *CertificateAuthority) {
 				ca.Spec.External = external
-				ca.Spec.Storage = &StorageSpec{Size: "10Gi"}
+				ca.Spec.Storage = &StorageSpec{Size: ptr.To(resource.MustParse("10Gi"))}
 			},
 			wantErr: "external and storage are mutually exclusive",
 		},
@@ -62,7 +65,7 @@ func TestCertificateAuthorityStorageExclusivity(t *testing.T) {
 			name: "external with storage at the default size rejected",
 			mutate: func(ca *CertificateAuthority) {
 				ca.Spec.External = external
-				ca.Spec.Storage = &StorageSpec{Size: "1Gi"}
+				ca.Spec.Storage = &StorageSpec{Size: ptr.To(resource.MustParse("1Gi"))}
 			},
 			wantErr: "external and storage are mutually exclusive",
 		},
@@ -117,4 +120,64 @@ func TestCertificateAuthorityStorageDefault(t *testing.T) {
 	if ca.Spec.Storage != nil {
 		t.Errorf("an omitted storage block should stay nil, got %+v", ca.Spec.Storage)
 	}
+}
+
+// TestCertificateAuthorityStorageSizeValidation checks the storage size at the
+// place that now owns it.
+//
+// Typing the field as resource.Quantity makes an invalid value unrepresentable
+// in Go, so it can no longer be caught -- or tested -- in the webhook. The API
+// server rejects it at admission instead, which also covers clients that never
+// go through the Go types.
+func TestCertificateAuthorityStorageSizeValidation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping envtest validation tests in short mode")
+	}
+	ctx := context.Background()
+
+	t.Run("invalid quantity rejected", func(t *testing.T) {
+		raw := &unstructured.Unstructured{Object: map[string]interface{}{
+			"apiVersion": GroupVersion.String(),
+			"kind":       "CertificateAuthority",
+			"metadata": map[string]interface{}{
+				"generateName": "test-ca-",
+				"namespace":    "default",
+			},
+			"spec": map[string]interface{}{
+				"storage": map[string]interface{}{"size": "1Gib"},
+			},
+		}}
+		err := k8sClient.Create(ctx, raw)
+		if err == nil {
+			_ = k8sClient.Delete(ctx, raw)
+			t.Fatal("expected an invalid storage size to be rejected")
+		}
+		if !apierrors.IsInvalid(err) && !apierrors.IsBadRequest(err) {
+			t.Errorf("expected an invalid/bad-request error, got: %v", err)
+		}
+	})
+
+	t.Run("valid quantity accepted", func(t *testing.T) {
+		ca := validCA()
+		ca.Spec.Storage = &StorageSpec{Size: ptr.To(resource.MustParse("500Mi"))}
+		if err := k8sClient.Create(ctx, ca); err != nil {
+			t.Fatalf("a valid quantity must be accepted, got: %v", err)
+		}
+		t.Cleanup(func() { _ = k8sClient.Delete(ctx, ca) })
+		if ca.Spec.Storage.Size.String() != "500Mi" {
+			t.Errorf("size round-tripped as %q, want 500Mi", ca.Spec.Storage.Size.String())
+		}
+	})
+
+	t.Run("omitted size defaults to 1Gi", func(t *testing.T) {
+		ca := validCA()
+		ca.Spec.Storage = &StorageSpec{StorageClass: "fast-ssd"}
+		if err := k8sClient.Create(ctx, ca); err != nil {
+			t.Fatalf("creating CertificateAuthority: %v", err)
+		}
+		t.Cleanup(func() { _ = k8sClient.Delete(ctx, ca) })
+		if ca.Spec.Storage.Size.String() != "1Gi" {
+			t.Errorf("expected the nested default to apply, got %q", ca.Spec.Storage.Size.String())
+		}
+	})
 }

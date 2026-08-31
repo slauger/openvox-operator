@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
+	"k8s.io/utils/ptr"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
@@ -105,7 +106,7 @@ func TestCAReconcile_PVCCreation(t *testing.T) {
 func TestCAReconcile_PVCCustomStorageClass(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
 	ca.Status.Phase = ""
-	ca.Spec.Storage = &openvoxv1alpha1.StorageSpec{StorageClass: "fast-ssd", Size: "10Gi"}
+	ca.Spec.Storage = &openvoxv1alpha1.StorageSpec{StorageClass: "fast-ssd", Size: ptr.To(resource.MustParse("10Gi"))}
 	cfg := caPrereqs("test-ca")
 	c := setupTestClient(ca, cfg)
 	r := newCertificateAuthorityReconciler(c)

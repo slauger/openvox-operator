@@ -58,8 +58,13 @@ type CertificateSpec struct {
 	// AuthorityRef references the CertificateAuthority that signs this certificate.
 	AuthorityRef string `json:"authorityRef"`
 
-	// Certname is the certificate common name.
+	// Certname is the certificate common name. Immutable after creation.
+	//
+	// The name is baked into the issued certificate and into the entry the CA
+	// keeps for it. Changing it would leave that entry behind under the old
+	// name, so the finalizer could no longer clean it up on deletion.
 	// +kubebuilder:default="puppet"
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="certname is immutable"
 	// +optional
 	Certname string `json:"certname,omitempty"`
 

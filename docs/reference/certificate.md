@@ -52,6 +52,16 @@ reads them back as input: whether a certificate needs renewing is recomputed on
 every reconcile from `status.notAfter` and `spec.renewBefore`, so editing or
 losing the phase does not change what the operator does.
 
+### Immutable fields
+
+`certname` cannot be changed after creation. The name is baked into the issued
+certificate and into the entry the CA keeps for it; changing it would orphan
+that entry under the old name, so the finalizer could no longer revoke it on
+deletion.
+
+To use a different certname, delete the Certificate and create a new one -- the
+finalizer cleans up the old entry on the CA on the way out.
+
 ### Re-signing on spec changes
 
 `status.signedSpecHash` records the spec fields the current certificate was

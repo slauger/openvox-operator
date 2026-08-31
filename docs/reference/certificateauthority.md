@@ -96,6 +96,17 @@ spec:
 | `OperatorSigningReady` | The auto-managed `{name}-operator-signing` Certificate is signed and its TLS Secret is available for mTLS-authenticated CSR signing. Not set for external CAs (which manage their own signing credentials). |
 | `DeletionBlocked` | Deletion is being held back because Certificates still reference this CertificateAuthority. The message lists them. |
 
+## Storage changes
+
+`spec.storage.size` can be increased if the storage class supports volume
+expansion, but never decreased -- a PersistentVolumeClaim rejects a shrink, and
+accepting the edit would only leave the reconcile failing on every attempt.
+`spec.storage.storageClass` cannot be changed at all once the claim exists.
+
+Both are checked by the admission webhook. To move the CA to different storage,
+back up the `{name}-ca-key` Secret, delete the CertificateAuthority together
+with its Certificates, and recreate it with the new settings.
+
 ## Relationship to Config
 
 A CertificateAuthority belongs to exactly one Config. The Config supplies the

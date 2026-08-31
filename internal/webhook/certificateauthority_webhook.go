@@ -22,8 +22,39 @@ func (v *CertificateAuthorityValidator) ValidateCreate(_ context.Context, ca *op
 	return v.validate(ca)
 }
 
-func (v *CertificateAuthorityValidator) ValidateUpdate(_ context.Context, _, ca *openvoxv1alpha1.CertificateAuthority) (admission.Warnings, error) {
+func (v *CertificateAuthorityValidator) ValidateUpdate(_ context.Context, old, ca *openvoxv1alpha1.CertificateAuthority) (admission.Warnings, error) {
+	if err := validateStorageTransition(old, ca); err != nil {
+		return nil, err
+	}
 	return v.validate(ca)
+}
+
+// validateStorageTransition rejects storage changes a PersistentVolumeClaim
+// cannot follow.
+//
+// A PVC can grow if the storage class allows it, but it can never shrink and
+// its class cannot change. Accepting such an edit would leave the reconcile
+// failing against the API server on every attempt, with the cause several
+// layers away from the field that caused it.
+func validateStorageTransition(old, updated *openvoxv1alpha1.CertificateAuthority) error {
+	if old.Spec.Storage == nil || updated.Spec.Storage == nil {
+		return nil
+	}
+	sizePath := field.NewPath("spec", "storage", "size")
+
+	if old.Spec.Storage.Size != nil && updated.Spec.Storage.Size != nil {
+		if updated.Spec.Storage.Size.Cmp(*old.Spec.Storage.Size) < 0 {
+			return field.Invalid(sizePath, updated.Spec.Storage.Size.String(),
+				"storage size cannot be decreased, the PersistentVolumeClaim would reject it")
+		}
+	}
+
+	if old.Spec.Storage.StorageClass != updated.Spec.Storage.StorageClass {
+		return field.Invalid(field.NewPath("spec", "storage", "storageClass"),
+			updated.Spec.Storage.StorageClass,
+			"storageClass is immutable on an existing PersistentVolumeClaim")
+	}
+	return nil
 }
 
 // ValidateDelete refuses to delete a CertificateAuthority while Certificates

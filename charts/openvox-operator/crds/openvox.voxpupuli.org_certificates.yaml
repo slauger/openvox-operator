@@ -65,8 +65,16 @@ spec:
                 type: string
               certname:
                 default: puppet
-                description: Certname is the certificate common name.
+                description: |-
+                  Certname is the certificate common name. Immutable after creation.
+
+                  The name is baked into the issued certificate and into the entry the CA
+                  keeps for it. Changing it would leave that entry behind under the old
+                  name, so the finalizer could no longer clean it up on deletion.
                 type: string
+                x-kubernetes-validations:
+                - message: certname is immutable
+                  rule: self == oldSelf
               csrExtensions:
                 description: CSRExtensions defines Puppet CSR extension attributes
                   to embed in the CSR.

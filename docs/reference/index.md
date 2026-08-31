@@ -57,6 +57,13 @@ These types are reused across multiple CRDs.
 | `pullPolicy` | string | `IfNotPresent` | Image pull policy |
 | `pullSecrets` | []LocalObjectReference | - | Image pull secrets |
 
+`repository` and `tag` carry no API-level default. They are required on `Config`
+and `Database`; on `Server` both are optional and fall back to the referenced
+`Config`, which is what lets one Config drive a whole set of Servers.
+
+The defaults live in the Helm charts (`config.image.*`, `database.image.*`),
+where changing the registry is a values change rather than a CRD update.
+
 ### StorageSpec
 
 | Field | Type | Default | Description |

@@ -35,6 +35,7 @@ type ConfigList struct {
 }
 
 // ConfigSpec defines the desired state of Config.
+// +kubebuilder:validation:XValidation:rule="has(self.image.repository) && size(self.image.repository) > 0 && has(self.image.tag) && size(self.image.tag) > 0",message="spec.image.repository and spec.image.tag are required"
 type ConfigSpec struct {
 	// Image defines the default container image for all Servers in this Config.
 	Image ImageSpec `json:"image"`
@@ -375,13 +376,24 @@ type PodSecurityContextSpec struct {
 }
 
 // ImageSpec defines the container image reference.
+//
+// Neither field carries a default. A default here would be applied to every
+// embedding resource, which had two consequences: a Database without an
+// explicit image inherited the *server* image, and a Server always came back
+// with the defaulted values, so spec.image on its Config was never reached by
+// the override logic. Where a default belongs is the Helm chart -- moving the
+// registry there also keeps a distribution detail out of the API contract.
 type ImageSpec struct {
 	// Repository is the container image repository.
-	// +kubebuilder:default="ghcr.io/slauger/openvox-server-8"
+	// Required on Config and Database; on Server it is optional and falls back
+	// to the Config's repository.
+	// +optional
 	Repository string `json:"repository,omitempty"`
 
 	// Tag is the container image tag.
-	// +kubebuilder:default="latest"
+	// Required on Config and Database; on Server it is optional and falls back
+	// to the Config's tag.
+	// +optional
 	Tag string `json:"tag,omitempty"`
 
 	// PullPolicy defines the image pull policy.

@@ -35,6 +35,7 @@ type DatabaseList struct {
 }
 
 // DatabaseSpec defines the desired state of Database.
+// +kubebuilder:validation:XValidation:rule="has(self.image.repository) && size(self.image.repository) > 0 && has(self.image.tag) && size(self.image.tag) > 0",message="spec.image.repository and spec.image.tag are required"
 type DatabaseSpec struct {
 	// CertificateRef references the Certificate whose SSL Secret is mounted into the Database pods.
 	CertificateRef string `json:"certificateRef"`

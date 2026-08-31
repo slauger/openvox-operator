@@ -41,6 +41,7 @@ const (
 	EventReasonOperatorSigningCreated = "OperatorSigningCreated"
 	EventReasonOperatorSigningReady   = "OperatorSigningReady"
 	EventReasonCADeletionBlocked      = "CADeletionBlocked"
+	EventReasonMultipleConfigs        = "MultipleConfigs"
 )
 
 // certificateAuthorityFinalizer guards the CA private key and the CA data PVC,
@@ -99,7 +100,10 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	// Resolve Config referencing this CA
-	cfg := r.findConfigForCA(ctx, ca)
+	cfg, err := r.findConfigForCA(ctx, ca)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 	if cfg == nil {
 		logger.Info("waiting for a Config with authorityRef pointing to this CA", "ca", ca.Name)
 		r.Recorder.Eventf(ca, nil, corev1.EventTypeNormal, EventReasonCAWaitingForConfig, "Reconcile",
@@ -260,19 +264,43 @@ func (r *CertificateAuthorityReconciler) handleDeletion(ctx context.Context, ca 
 	return ctrl.Result{}, nil
 }
 
-// findConfigForCA returns the first Config in the same namespace whose authorityRef matches this CA.
-func (r *CertificateAuthorityReconciler) findConfigForCA(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority) *openvoxv1alpha1.Config {
+// findConfigForCA returns the Config whose authorityRef points at this CA.
+//
+// A CertificateAuthority belongs to exactly one Config -- the Config supplies
+// the image for the CA setup Job, among other things. The Config webhook
+// enforces that, but the webhooks can be disabled, so the ambiguity is resolved
+// here as well: the alphabetically first name wins, which at least makes the
+// choice stable across reconciles instead of depending on listing order.
+//
+// Returns (nil, nil) when no Config references the CA yet, which is a normal
+// state during bring-up.
+func (r *CertificateAuthorityReconciler) findConfigForCA(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority) (*openvoxv1alpha1.Config, error) {
 	cfgList := &openvoxv1alpha1.ConfigList{}
-	if err := r.List(ctx, cfgList, client.InNamespace(ca.Namespace)); err != nil {
-		log.FromContext(ctx).Error(err, "failed to list Configs", "namespace", ca.Namespace)
-		return nil
+	if err := r.List(ctx, cfgList,
+		client.InNamespace(ca.Namespace),
+		client.MatchingFields{IndexAuthorityRef: ca.Name}); err != nil {
+		return nil, fmt.Errorf("listing Configs for CertificateAuthority %s: %w", ca.Name, err)
 	}
-	for i := range cfgList.Items {
-		if cfgList.Items[i].Spec.AuthorityRef == ca.Name {
-			return &cfgList.Items[i]
+	if len(cfgList.Items) == 0 {
+		return nil, nil
+	}
+
+	sort.Slice(cfgList.Items, func(i, j int) bool {
+		return cfgList.Items[i].Name < cfgList.Items[j].Name
+	})
+
+	if len(cfgList.Items) > 1 {
+		names := make([]string, 0, len(cfgList.Items))
+		for i := range cfgList.Items {
+			names = append(names, cfgList.Items[i].Name)
 		}
+		log.FromContext(ctx).Info("several Configs reference this CA, using the first by name",
+			"configs", names, "using", names[0])
+		r.Recorder.Eventf(ca, nil, corev1.EventTypeWarning, EventReasonMultipleConfigs, "Reconcile",
+			"%d Configs reference this CA (%s); using %s", len(names), strings.Join(names, ", "), names[0])
 	}
-	return nil
+
+	return &cfgList.Items[0], nil
 }
 
 func (r *CertificateAuthorityReconciler) SetupWithManager(mgr ctrl.Manager) error {

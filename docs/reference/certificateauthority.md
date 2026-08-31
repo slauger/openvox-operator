@@ -96,6 +96,18 @@ spec:
 | `OperatorSigningReady` | The auto-managed `{name}-operator-signing` Certificate is signed and its TLS Secret is available for mTLS-authenticated CSR signing. Not set for external CAs (which manage their own signing credentials). |
 | `DeletionBlocked` | Deletion is being held back because Certificates still reference this CertificateAuthority. The message lists them. |
 
+## Relationship to Config
+
+A CertificateAuthority belongs to exactly one Config. The Config supplies the
+container image for the CA setup Job and the settings rendered into `ca.conf`,
+so a second Config claiming the same CA would make the outcome depend on which
+one the controller happened to list first.
+
+The Config webhook rejects a second Config with the same `authorityRef`. With
+the webhooks disabled the controller still resolves the ambiguity
+deterministically -- the alphabetically first Config wins -- and emits a
+`MultipleConfigs` warning event naming all claimants.
+
 ## Deletion
 
 The CA private key (`{name}-ca-key`) and the CA data PVC are owned by the

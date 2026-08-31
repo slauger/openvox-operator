@@ -260,3 +260,43 @@ func resolveImage(server *openvoxv1alpha1.Server, cfg *openvoxv1alpha1.Config) s
 func serverRoleEnabled(server *openvoxv1alpha1.Server) bool {
 	return openvoxv1alpha1.BoolValue(server.Spec.Server, true)
 }
+
+// assertControlledBy fails when obj already exists and is not controlled by the
+// expected owner.
+//
+// Managed child resources are addressed by a name derived from the owner, so a
+// pre-existing resource that happens to share that name would otherwise be
+// silently taken over and overwritten. Refusing is the safer answer: the
+// operator does not own it, and the reconcile error makes that visible instead
+// of destroying someone else's object.
+func assertControlledBy(obj, owner metav1.Object, kind string) error {
+	created := obj.GetCreationTimestamp()
+	if created.IsZero() {
+		return nil
+	}
+	if !metav1.IsControlledBy(obj, owner) {
+		return fmt.Errorf("%s %s already exists and is not controlled by %s %s",
+			kind, obj.GetName(), ownerKind(owner), owner.GetName())
+	}
+	return nil
+}
+
+// ownerKind renders a readable type name for the error above.
+func ownerKind(owner metav1.Object) string {
+	switch owner.(type) {
+	case *openvoxv1alpha1.Server:
+		return "Server"
+	case *openvoxv1alpha1.Pool:
+		return "Pool"
+	case *openvoxv1alpha1.Database:
+		return "Database"
+	case *openvoxv1alpha1.Config:
+		return "Config"
+	case *openvoxv1alpha1.CertificateAuthority:
+		return "CertificateAuthority"
+	case *openvoxv1alpha1.Certificate:
+		return "Certificate"
+	default:
+		return "owner"
+	}
+}

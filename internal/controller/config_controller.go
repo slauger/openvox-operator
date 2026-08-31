@@ -141,7 +141,10 @@ func (r *ConfigReconciler) reconcileConfigMap(ctx context.Context, cfg *openvoxv
 		return fmt.Errorf("rendering puppetdb.conf: %w", err)
 	}
 
-	ca := r.findCertificateAuthority(ctx, cfg)
+	ca, err := r.findCertificateAuthority(ctx, cfg)
+	if err != nil {
+		return err
+	}
 
 	data := map[string]string{
 		"puppet.conf":       puppetConf,
@@ -241,13 +244,22 @@ func (r *ConfigReconciler) enqueueConfigsForDatabase(c client.Reader) handler.Ma
 	}
 }
 
-func (r *ConfigReconciler) findCertificateAuthority(ctx context.Context, cfg *openvoxv1alpha1.Config) *openvoxv1alpha1.CertificateAuthority {
+// findCertificateAuthority resolves the Config's authorityRef.
+//
+// It returns (nil, nil) when no authorityRef is set or the referenced
+// CertificateAuthority does not exist -- both are legitimate states the caller
+// renders around. Any other error is returned so the reconcile aborts instead
+// of writing a configuration that silently omits the CA settings.
+func (r *ConfigReconciler) findCertificateAuthority(ctx context.Context, cfg *openvoxv1alpha1.Config) (*openvoxv1alpha1.CertificateAuthority, error) {
 	if cfg.Spec.AuthorityRef == "" {
-		return nil
+		return nil, nil
 	}
 	ca := &openvoxv1alpha1.CertificateAuthority{}
 	if err := r.Get(ctx, types.NamespacedName{Name: cfg.Spec.AuthorityRef, Namespace: cfg.Namespace}, ca); err != nil {
-		return nil
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("getting CertificateAuthority %s: %w", cfg.Spec.AuthorityRef, err)
 	}
-	return ca
+	return ca, nil
 }

@@ -60,7 +60,11 @@ func (r *ConfigReconciler) renderPuppetConf(ctx context.Context, cfg *openvoxv1a
 	}
 
 	// CA settings from CertificateAuthority (if one exists for this Config)
-	if ca := r.findCertificateAuthority(ctx, cfg); ca != nil {
+	ca, err := r.findCertificateAuthority(ctx, cfg)
+	if err != nil {
+		return "", err
+	}
+	if ca != nil {
 		if ca.Spec.TTL != "" {
 			ttlSeconds, err := openvoxv1alpha1.ParseDurationToSeconds(ca.Spec.TTL)
 			if err != nil {

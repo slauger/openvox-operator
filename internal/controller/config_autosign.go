@@ -21,10 +21,14 @@ import (
 const autosignBinaryPath = "/usr/local/bin/openvox-autosign"
 
 // findSigningPolicies returns all SigningPolicies referencing the given CA.
-func (r *ConfigReconciler) findSigningPolicies(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority) []openvoxv1alpha1.SigningPolicy {
+//
+// A list error is returned rather than swallowed: an empty policy set renders
+// as a deny-all policy, so treating a transient failure as "no policies" would
+// overwrite a valid policy Secret and lock every agent out.
+func (r *ConfigReconciler) findSigningPolicies(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority) ([]openvoxv1alpha1.SigningPolicy, error) {
 	list := &openvoxv1alpha1.SigningPolicyList{}
 	if err := r.List(ctx, list, client.InNamespace(ca.Namespace)); err != nil {
-		return nil
+		return nil, fmt.Errorf("listing SigningPolicies in namespace %s: %w", ca.Namespace, err)
 	}
 	var result []openvoxv1alpha1.SigningPolicy
 	for _, sp := range list.Items {
@@ -32,7 +36,7 @@ func (r *ConfigReconciler) findSigningPolicies(ctx context.Context, ca *openvoxv
 			result = append(result, sp)
 		}
 	}
-	return result
+	return result, nil
 }
 
 // reconcileAutosignSecrets reconciles the autosign policy Secret for the CA referenced by this Config.
@@ -66,7 +70,10 @@ func (r *ConfigReconciler) reconcileAutosignSecrets(ctx context.Context, cfg *op
 func (r *ConfigReconciler) reconcileAutosignSecret(ctx context.Context, cfg *openvoxv1alpha1.Config, ca *openvoxv1alpha1.CertificateAuthority) error {
 	secretName := fmt.Sprintf("%s-autosign-policy", ca.Name)
 
-	policies := r.findSigningPolicies(ctx, ca)
+	policies, err := r.findSigningPolicies(ctx, ca)
+	if err != nil {
+		return err
+	}
 
 	// Render policy config YAML
 	policyYAML, renderErr := r.renderAutosignPolicyConfig(ctx, cfg.Namespace, policies)

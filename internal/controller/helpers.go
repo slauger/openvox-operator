@@ -123,30 +123,25 @@ func isSecretReady(ctx context.Context, reader client.Reader, name, namespace, r
 	return true
 }
 
-// createOrUpdateSecret creates or updates a Secret with the given data and owner reference.
+// createOrUpdateSecret creates or updates a Secret with the given data, owned by
+// the given object.
 func createOrUpdateSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, owner client.Object,
 	name, namespace string, labels map[string]string, data map[string][]byte) error {
-	secret := &corev1.Secret{}
-	err := c.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, secret)
-	if errors.IsNotFound(err) {
-		secret = &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: namespace,
-				Labels:    labels,
-			},
-			Data: data,
-		}
-		if err := controllerutil.SetControllerReference(owner, secret, scheme); err != nil {
-			return fmt.Errorf("setting owner reference on Secret %s: %w", name, err)
-		}
-		return c.Create(ctx, secret)
-	} else if err != nil {
-		return fmt.Errorf("getting Secret %s: %w", name, err)
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}
-
-	secret.Data = data
-	return c.Update(ctx, secret)
+	_, err := controllerutil.CreateOrUpdate(ctx, c, secret, func() error {
+		if err := assertControlledBy(secret, owner, "Secret"); err != nil {
+			return err
+		}
+		secret.Labels = labels
+		secret.Data = data
+		return controllerutil.SetControllerReference(owner, secret, scheme)
+	})
+	if err != nil {
+		return fmt.Errorf("reconciling Secret %s: %w", name, err)
+	}
+	return nil
 }
 
 // getCAPublicCert reads the CA public certificate from the CA Secret.
@@ -270,8 +265,10 @@ func serverRoleEnabled(server *openvoxv1alpha1.Server) bool {
 // operator does not own it, and the reconcile error makes that visible instead
 // of destroying someone else's object.
 func assertControlledBy(obj, owner metav1.Object, kind string) error {
-	created := obj.GetCreationTimestamp()
-	if created.IsZero() {
+	// An empty resourceVersion means the object was constructed locally and does
+	// not exist yet, so there is nothing to conflict with. It is the one field
+	// the API server always populates on read.
+	if obj.GetResourceVersion() == "" {
 		return nil
 	}
 	if !metav1.IsControlledBy(obj, owner) {

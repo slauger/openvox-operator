@@ -173,55 +173,48 @@ func (r *ConfigReconciler) reconcileConfigMap(ctx context.Context, cfg *openvoxv
 		data["routes.yaml"] = routes
 	}
 
-	cm := &corev1.ConfigMap{}
-	err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: cfg.Namespace}, cm)
-	if errors.IsNotFound(err) {
-		logger.Info("creating ConfigMap", "name", configMapName)
-		cm = &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      configMapName,
-				Namespace: cfg.Namespace,
-				Labels:    configLabels(cfg.Name),
-			},
-			Data: data,
-		}
-		if err := controllerutil.SetControllerReference(cfg, cm, r.Scheme); err != nil {
-			return fmt.Errorf("setting owner reference on ConfigMap %s: %w", configMapName, err)
-		}
-		return r.Create(ctx, cm)
-	} else if err != nil {
-		return fmt.Errorf("getting ConfigMap %s: %w", configMapName, err)
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: configMapName, Namespace: cfg.Namespace},
 	}
-
-	cm.Data = data
-	return r.Update(ctx, cm)
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, cm, func() error {
+		if err := assertControlledBy(cm, cfg, "ConfigMap"); err != nil {
+			return err
+		}
+		cm.Labels = configLabels(cfg.Name)
+		cm.Data = data
+		return controllerutil.SetControllerReference(cfg, cm, r.Scheme)
+	})
+	if err != nil {
+		return fmt.Errorf("reconciling ConfigMap %s: %w", configMapName, err)
+	}
+	if op == controllerutil.OperationResultCreated {
+		logger.Info("created ConfigMap", "name", configMapName)
+	}
+	return nil
 }
 
 // reconcileSecret creates or updates a Secret owned by the given Config.
 func (r *ConfigReconciler) reconcileSecret(ctx context.Context, cfg *openvoxv1alpha1.Config, name string, data map[string][]byte) error {
 	logger := log.FromContext(ctx)
-	existing := &corev1.Secret{}
-	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: cfg.Namespace}, existing)
-	if errors.IsNotFound(err) {
-		logger.Info("creating Secret", "name", name)
-		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: cfg.Namespace,
-				Labels:    configLabels(cfg.Name),
-			},
-			Data: data,
-		}
-		if err := controllerutil.SetControllerReference(cfg, secret, r.Scheme); err != nil {
-			return fmt.Errorf("setting owner reference on Secret %s: %w", name, err)
-		}
-		return r.Create(ctx, secret)
-	} else if err != nil {
-		return fmt.Errorf("getting Secret %s: %w", name, err)
-	}
 
-	existing.Data = data
-	return r.Update(ctx, existing)
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: cfg.Namespace},
+	}
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, secret, func() error {
+		if err := assertControlledBy(secret, cfg, "Secret"); err != nil {
+			return err
+		}
+		secret.Labels = configLabels(cfg.Name)
+		secret.Data = data
+		return controllerutil.SetControllerReference(cfg, secret, r.Scheme)
+	})
+	if err != nil {
+		return fmt.Errorf("reconciling Secret %s: %w", name, err)
+	}
+	if op == controllerutil.OperationResultCreated {
+		logger.Info("created Secret", "name", name)
+	}
+	return nil
 }
 
 func (r *ConfigReconciler) enqueueConfigsForDatabase(c client.Reader) handler.MapFunc {

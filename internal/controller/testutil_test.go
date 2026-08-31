@@ -15,6 +15,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
@@ -609,4 +610,14 @@ func newDatabaseReconciler(c client.Client) *DatabaseReconciler {
 		Scheme:   testScheme(),
 		Recorder: testRecorder(),
 	}
+}
+
+// ownedBy stamps a controller reference on a fixture so it looks like a
+// resource the operator created earlier. Managed child resources carry one in
+// a cluster, and the reconcilers refuse to touch objects that do not.
+func ownedBy(owner, obj client.Object) client.Object {
+	if err := controllerutil.SetControllerReference(owner, obj, testScheme()); err != nil {
+		panic("setting controller reference on test fixture: " + err.Error())
+	}
+	return obj
 }

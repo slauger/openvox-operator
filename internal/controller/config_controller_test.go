@@ -733,7 +733,7 @@ func TestConfigReconcile_UpdateExistingConfigMap(t *testing.T) {
 		"puppet.conf": "old content",
 	})
 
-	c := setupTestClient(cfg, existingCM)
+	c := setupTestClient(cfg, ownedBy(cfg, existingCM))
 	r := newConfigReconciler(c)
 
 	if _, err := r.Reconcile(testCtx(), testRequest("production")); err != nil {

@@ -217,7 +217,7 @@ func TestPoolReconcile_UpdateExistingService(t *testing.T) {
 		{Name: "https", Port: 8140},
 	}
 
-	c := setupTestClient(pool, existingSvc)
+	c := setupTestClient(pool, ownedBy(pool, existingSvc))
 	r := newPoolReconciler(c, false)
 
 	if _, err := r.Reconcile(testCtx(), testRequest("puppet")); err != nil {

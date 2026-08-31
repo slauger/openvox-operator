@@ -251,7 +251,8 @@ func TestServerReconcile_PDBDeletion(t *testing.T) {
 	existingPDB.Name = "test-server"
 	existingPDB.Namespace = testNamespace
 
-	objs := append(serverPrereqs(), newServer("test-server"), existingPDB)
+	srv := newServer("test-server")
+	objs := append(serverPrereqs(), srv, ownedBy(srv, existingPDB))
 	c := setupTestClient(objs...)
 	r := newServerReconciler(c)
 
@@ -348,7 +349,8 @@ func TestServerReconcile_HPADeletion(t *testing.T) {
 	existingHPA.Name = "test-server"
 	existingHPA.Namespace = testNamespace
 
-	objs := append(serverPrereqs(), newServer("test-server"), existingHPA)
+	srv := newServer("test-server")
+	objs := append(serverPrereqs(), srv, ownedBy(srv, existingHPA))
 	c := setupTestClient(objs...)
 	r := newServerReconciler(c)
 
@@ -473,7 +475,8 @@ func TestServerReconcile_NetworkPolicyDeletion(t *testing.T) {
 	existingNP.Name = "test-server-netpol"
 	existingNP.Namespace = testNamespace
 
-	objs := append(serverPrereqs(), newServer("test-server"), existingNP)
+	srv := newServer("test-server")
+	objs := append(serverPrereqs(), srv, ownedBy(srv, existingNP))
 	c := setupTestClient(objs...)
 	r := newServerReconciler(c)
 

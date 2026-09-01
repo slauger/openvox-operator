@@ -13,6 +13,15 @@ spec:
     {{- if ne $serverName "puppet" }}
     {{- $autoNames = append $autoNames "puppet" }}
     {{- end }}
+    {{- /* Agents reach a server through the Services of the Pools it joins, so
+           those names have to be in the certificate or the TLS handshake fails. */}}
+    {{- range $poolRef := ($entry.poolRefs | default list) }}
+    {{- range $pool := ($.Values.pools | default list) }}
+    {{- if eq $pool.name $poolRef }}
+    {{- $autoNames = append $autoNames (include "openvox-stack.poolName" (dict "root" $ "entry" $pool)) }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
     {{- $allNames := concat $autoNames ($entry.certificate.dnsAltNames | default list) | uniq }}
     {{- toYaml $allNames | nindent 4 }}
 {{- end }}

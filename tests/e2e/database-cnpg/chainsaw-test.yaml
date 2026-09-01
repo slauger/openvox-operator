@@ -223,7 +223,9 @@ spec:
               echo "No error-level log entries found."
       finally:
         - script:
-            timeout: 2m
+            # CNPG shuts PostgreSQL down gracefully, which alone takes several
+            # minutes; the default budget is not enough for this namespace.
+            timeout: 10m
             content: |
               kubectl logs -n e2e-database-cnpg job/puppet-agent-facts || true
               helm uninstall openvox-stack-db --namespace e2e-database-cnpg --wait 2>/dev/null || true

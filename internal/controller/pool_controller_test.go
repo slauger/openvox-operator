@@ -201,10 +201,16 @@ func TestPoolReconcile_TLSRouteHostnameConflict(t *testing.T) {
 		t.Fatalf("failed to create pool-b: %v", err)
 	}
 
-	// Reconcile pool-b should fail with hostname conflict
-	_, err := r.Reconcile(testCtx(), testRequest("puppet-b"))
-	if err == nil {
-		t.Fatal("expected hostname conflict error")
+	// The conflict is reported, not retried: nothing about a duplicate
+	// hostname improves by waiting, so returning an error would only produce
+	// an endless backoff loop.
+	if _, err := r.Reconcile(testCtx(), testRequest("puppet-b")); err != nil {
+		t.Fatalf("a hostname conflict must not fail the reconcile: %v", err)
+	}
+
+	route := &gwapiv1.TLSRoute{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "puppet-b", Namespace: testNamespace}, route); err == nil {
+		t.Error("the losing Pool must not create a TLSRoute for a hostname it does not own")
 	}
 }
 

@@ -79,56 +79,46 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, fmt.Errorf("reconciling Service: %w", err)
 	}
 
-	// Reconcile TLSRoute
+	// Reconcile TLSRoute. conflictWith names the Pool that owns the requested
+	// hostname when it is not this one, so the single status update below can
+	// report it.
+	var conflictWith string
 	if pool.Spec.Route != nil && pool.Spec.Route.Enabled {
 		if !r.GatewayAPIAvailable {
 			logger.Info("TLSRoute requested but Gateway API CRDs not available, skipping")
 		} else {
-			// Check for hostname conflicts
-			allPools := &openvoxv1alpha1.PoolList{}
-			if err := r.List(ctx, allPools, client.InNamespace(pool.Namespace)); err != nil {
-				return ctrl.Result{}, fmt.Errorf("listing Pools for hostname conflict check: %w", err)
+			owner, err := r.hostnameOwner(ctx, pool)
+			if err != nil {
+				return ctrl.Result{}, err
 			}
-			hasConflict := false
-			for i := range allPools.Items {
-				other := &allPools.Items[i]
-				if other.Name == pool.Name {
-					continue
+
+			if owner.Name != pool.Name {
+				// Losing the hostname is a permanent condition: nothing about
+				// it improves by waiting, only a spec change resolves it. It is
+				// reported and left alone rather than retried, and the loser
+				// gives up any TLSRoute it may still hold from an earlier round.
+				conflictWith = owner.Name
+				logger.Info("hostname already claimed by another Pool, skipping TLSRoute",
+					"hostname", pool.Spec.Route.Hostname, "owner", owner.Name)
+				if err := r.deleteOwnedTLSRoute(ctx, pool); err != nil {
+					return ctrl.Result{}, err
 				}
-				if other.Spec.Route != nil && other.Spec.Route.Enabled && other.Spec.Route.Hostname == pool.Spec.Route.Hostname {
-					logger.Error(fmt.Errorf("hostname %q already used by Pool %q", pool.Spec.Route.Hostname, other.Name),
-						"hostname conflict detected, skipping TLSRoute reconciliation")
-					hasConflict = true
-					break
+			} else {
+				if err := r.reconcileTLSRoute(ctx, pool); err != nil {
+					return ctrl.Result{}, fmt.Errorf("reconciling TLSRoute: %w", err)
 				}
-			}
 
-			if hasConflict {
-				r.Recorder.Eventf(pool, nil, corev1.EventTypeWarning, EventReasonHostnameConflict, "Reconcile", "Hostname %q is already used by another Pool", pool.Spec.Route.Hostname)
-				return ctrl.Result{}, fmt.Errorf("hostname conflict: %q is already used by another Pool", pool.Spec.Route.Hostname)
-			}
-
-			if err := r.reconcileTLSRoute(ctx, pool); err != nil {
-				return ctrl.Result{}, fmt.Errorf("reconciling TLSRoute: %w", err)
-			}
-
-			if pool.Spec.Route.InjectDNSAltName {
-				if err := r.injectDNSAltNames(ctx, pool); err != nil {
-					return ctrl.Result{}, fmt.Errorf("injecting DNS alt names: %w", err)
+				if pool.Spec.Route.InjectDNSAltName {
+					if err := r.injectDNSAltNames(ctx, pool); err != nil {
+						return ctrl.Result{}, fmt.Errorf("injecting DNS alt names: %w", err)
+					}
 				}
 			}
 		}
 	} else if r.GatewayAPIAvailable {
 		// Cleanup: delete owned TLSRoute if route is disabled
-		existing := &gwapiv1.TLSRoute{}
-		if err := r.Get(ctx, types.NamespacedName{Name: pool.Name, Namespace: pool.Namespace}, existing); err == nil {
-			if metav1.IsControlledBy(existing, pool) {
-				logger.Info("deleting orphaned TLSRoute", "name", pool.Name)
-				if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
-					return ctrl.Result{}, fmt.Errorf("deleting orphaned TLSRoute: %w", err)
-				}
-				r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonTLSRouteDeleted, "Reconcile", "TLSRoute %s deleted", pool.Name)
-			}
+		if err := r.deleteOwnedTLSRoute(ctx, pool); err != nil {
+			return ctrl.Result{}, err
 		}
 	}
 
@@ -137,6 +127,7 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("counting endpoints for Pool %s: %w", pool.Name, err)
 	}
+	previousConditions := pool.Status.DeepCopy().Conditions
 	if err := updateStatusWithRetry(ctx, r.Client, pool, func() {
 		pool.Status.ObservedGeneration = pool.Generation
 		pool.Status.ServiceName = pool.Name
@@ -145,7 +136,16 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		// A Pool is only useful once something is behind its Service. Reporting
 		// that separately from "the Service exists" is what tells an operator
 		// whether traffic can actually reach a server.
-		if endpoints > 0 {
+		switch {
+		case conflictWith != "":
+			meta.SetStatusCondition(&pool.Status.Conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionPoolReady,
+				Status:             metav1.ConditionFalse,
+				Reason:             "HostnameConflict",
+				Message:            hostnameConflictMessage(pool.Spec.Route.Hostname, conflictWith),
+				ObservedGeneration: pool.Generation,
+			})
+		case endpoints > 0:
 			meta.SetStatusCondition(&pool.Status.Conditions, metav1.Condition{
 				Type:               openvoxv1alpha1.ConditionPoolReady,
 				Status:             metav1.ConditionTrue,
@@ -153,7 +153,7 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 				Message:            fmt.Sprintf("%d ready endpoint(s) behind Service %s", endpoints, pool.Name),
 				ObservedGeneration: pool.Generation,
 			})
-		} else {
+		default:
 			meta.SetStatusCondition(&pool.Status.Conditions, metav1.Condition{
 				Type:               openvoxv1alpha1.ConditionPoolReady,
 				Status:             metav1.ConditionFalse,
@@ -166,14 +166,107 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, fmt.Errorf("updating Pool status %s: %w", pool.Name, err)
 	}
 
+	// The event follows the condition so it fires once per transition rather
+	// than on every reconcile.
+	if conflictWith != "" && !wasConflictingWith(previousConditions, pool.Spec.Route.Hostname, conflictWith) {
+		r.Recorder.Eventf(pool, nil, corev1.EventTypeWarning, EventReasonHostnameConflict, "Reconcile",
+			"%s", hostnameConflictMessage(pool.Spec.Route.Hostname, conflictWith))
+	}
+
 	return ctrl.Result{}, nil
+}
+
+// hostnameConflictMessage is shared by the condition and the event so the two
+// cannot drift apart, which is what makes the transition check below reliable.
+func hostnameConflictMessage(hostname, owner string) string {
+	return fmt.Sprintf("Hostname %q is already claimed by Pool %s", hostname, owner)
+}
+
+// wasConflictingWith reports whether the Pool already carried this exact
+// conflict before the status update.
+func wasConflictingWith(conditions []metav1.Condition, hostname, owner string) bool {
+	cond := meta.FindStatusCondition(conditions, openvoxv1alpha1.ConditionPoolReady)
+	return cond != nil &&
+		cond.Status == metav1.ConditionFalse &&
+		cond.Reason == "HostnameConflict" &&
+		cond.Message == hostnameConflictMessage(hostname, owner)
+}
+
+// hostnameOwner returns the Pool entitled to the route hostname this Pool asks
+// for, which may be the Pool itself.
+//
+// Listing and comparing is inherently racy: two Pools reconciled concurrently
+// can both observe a free hostname and both create a TLSRoute for it. Deciding
+// the winner by a property every observer agrees on -- the oldest
+// creationTimestamp, with the name as tie-breaker, since the API server stores
+// timestamps at second granularity -- makes them converge on the same Pool
+// instead of fighting over the route.
+func (r *PoolReconciler) hostnameOwner(ctx context.Context, pool *openvoxv1alpha1.Pool) (*openvoxv1alpha1.Pool, error) {
+	all := &openvoxv1alpha1.PoolList{}
+	if err := r.List(ctx, all, client.InNamespace(pool.Namespace)); err != nil {
+		return nil, fmt.Errorf("listing Pools for the hostname conflict check: %w", err)
+	}
+
+	owner := pool
+	for i := range all.Items {
+		other := &all.Items[i]
+		switch {
+		case other.Name == pool.Name:
+			continue
+		// A Pool on its way out releases its claim, otherwise a stuck deletion
+		// would keep the hostname hostage.
+		case !other.DeletionTimestamp.IsZero():
+			continue
+		case other.Spec.Route == nil || !other.Spec.Route.Enabled:
+			continue
+		case other.Spec.Route.Hostname != pool.Spec.Route.Hostname:
+			continue
+		}
+		if claimPrecedes(other, owner) {
+			owner = other
+		}
+	}
+	return owner, nil
+}
+
+// claimPrecedes orders two competing claims on the same hostname.
+func claimPrecedes(a, b *openvoxv1alpha1.Pool) bool {
+	if !a.CreationTimestamp.Equal(&b.CreationTimestamp) {
+		return a.CreationTimestamp.Before(&b.CreationTimestamp)
+	}
+	return a.Name < b.Name
+}
+
+// deleteOwnedTLSRoute removes the TLSRoute this Pool created, if it still owns
+// one. A route it does not control is left alone.
+func (r *PoolReconciler) deleteOwnedTLSRoute(ctx context.Context, pool *openvoxv1alpha1.Pool) error {
+	logger := log.FromContext(ctx)
+
+	existing := &gwapiv1.TLSRoute{}
+	if err := r.Get(ctx, types.NamespacedName{Name: pool.Name, Namespace: pool.Namespace}, existing); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("getting TLSRoute %s: %w", pool.Name, err)
+	}
+	if !metav1.IsControlledBy(existing, pool) {
+		return nil
+	}
+
+	logger.Info("deleting orphaned TLSRoute", "name", pool.Name)
+	if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("deleting orphaned TLSRoute: %w", err)
+	}
+	r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonTLSRouteDeleted, "Reconcile", "TLSRoute %s deleted", pool.Name)
+	return nil
 }
 
 func (r *PoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&openvoxv1alpha1.Pool{}).
 		Owns(&corev1.Service{}).
-		Watches(&openvoxv1alpha1.Server{}, enqueuePoolsForServer(mgr.GetClient()))
+		Watches(&openvoxv1alpha1.Server{}, enqueuePoolsForServer(mgr.GetClient())).
+		Watches(&openvoxv1alpha1.Pool{}, handler.EnqueueRequestsFromMapFunc(poolsSharingHostname(mgr.GetClient())))
 
 	if r.GatewayAPIAvailable {
 		builder = builder.Owns(&gwapiv1.TLSRoute{})
@@ -203,6 +296,42 @@ func enqueuePoolsForServer(c client.Client) handler.EventHandler {
 		}
 		return requests
 	})
+}
+
+// enqueuePoolsSharingHostname returns a handler that enqueues the other Pools
+// competing for the same route hostname.
+//
+// Without it a Pool that lost the hostname would stay blocked forever: its own
+// spec never changes when the winner is deleted or gives up its route, and the
+// controller no longer retries the conflict on a backoff.
+func poolsSharingHostname(c client.Client) handler.MapFunc {
+	return func(ctx context.Context, obj client.Object) []ctrl.Request {
+		changed, ok := obj.(*openvoxv1alpha1.Pool)
+		if !ok || changed.Spec.Route == nil || changed.Spec.Route.Hostname == "" {
+			return nil
+		}
+
+		pools := &openvoxv1alpha1.PoolList{}
+		if err := c.List(ctx, pools, client.InNamespace(changed.Namespace)); err != nil {
+			log.FromContext(ctx).Error(err, "failed to list Pools in hostname watcher")
+			return nil
+		}
+
+		var requests []ctrl.Request
+		for i := range pools.Items {
+			other := &pools.Items[i]
+			if other.Name == changed.Name {
+				continue
+			}
+			if other.Spec.Route == nil || other.Spec.Route.Hostname != changed.Spec.Route.Hostname {
+				continue
+			}
+			requests = append(requests, ctrl.Request{
+				NamespacedName: types.NamespacedName{Name: other.Name, Namespace: other.Namespace},
+			})
+		}
+		return requests
+	}
 }
 
 // poolServiceSelector builds the label selector for a Pool's Service.

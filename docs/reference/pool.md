@@ -55,6 +55,23 @@ spec:
 |---|---|---|
 | `serviceName` | string | Name of the created Kubernetes Service |
 | `endpoints` | int32 | Number of pods behind the Service |
+| `observedGeneration` | int64 | The `.metadata.generation` the status was last derived from |
+| `conditions` | []Condition | See below |
+
+### Conditions
+
+The `Ready` condition reports whether the Pool can actually carry traffic:
+
+| Reason | Status | Meaning |
+|---|---|---|
+| `EndpointsAvailable` | True | At least one ready Server pod is behind the Service |
+| `NoEndpoints` | False | The Service exists but no ready Server pod selects it |
+| `HostnameConflict` | False | Another Pool holds `route.hostname`, so no TLSRoute is created |
+
+A hostname can only be claimed by one Pool. When several ask for the same one,
+the oldest Pool keeps it and the others report `HostnameConflict` naming the
+holder. This is not retried: it resolves when the holder gives up the hostname
+or is deleted, or when the losing Pool is given a different one.
 
 ## Created Resources
 

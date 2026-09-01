@@ -36,6 +36,19 @@ spec:
 | `notAfter` | time | Expiry time of the signed certificate |
 | `conditions` | []Condition | `CertSigned` |
 
+## Deletion
+
+Deleting a Certificate revokes it on the CA before the finalizer
+(`openvox.voxpupuli.org/certificate-cleanup`) is released, so the certificate
+cannot be used again. If the CA cannot be reached the controller retries a few
+times and then releases the finalizer anyway, rather than leaving the resource
+stuck in `Terminating`.
+
+Revocation is skipped when the CertificateAuthority is itself being deleted --
+there is nothing left to revoke against, and its Service is on its way out. This
+is what lets `kubectl delete namespace` finish promptly: every object is marked
+for deletion at the same moment.
+
 ## Phases
 
 | Phase | Description |

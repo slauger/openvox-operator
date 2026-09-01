@@ -133,6 +133,11 @@ resource in `Terminating` with a `DeletionBlocked` condition naming the
 certificates that are in the way. With the admission webhooks enabled the
 delete is rejected outright instead, so you get the answer immediately.
 
+A Certificate that is itself being deleted does not hold the CA back -- only one
+nobody asked to remove does. That is what lets `kubectl delete namespace` finish:
+everything is marked for deletion at once, and the CA would otherwise wait for
+Certificates whose own cleanup needs the CA service that is going away with it.
+
 To delete a CertificateAuthority on purpose, remove the Certificates first:
 
 ```console

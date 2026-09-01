@@ -133,7 +133,10 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	// Update status
-	endpoints := r.countEndpoints(ctx, pool)
+	endpoints, err := r.countEndpoints(ctx, pool)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("counting endpoints for Pool %s: %w", pool.Name, err)
+	}
 	if err := updateStatusWithRetry(ctx, r.Client, pool, func() {
 		pool.Status.ObservedGeneration = pool.Generation
 		pool.Status.ServiceName = pool.Name
@@ -275,11 +278,16 @@ func (r *PoolReconciler) reconcileService(ctx context.Context, pool *openvoxv1al
 	return nil
 }
 
-func (r *PoolReconciler) countEndpoints(ctx context.Context, pool *openvoxv1alpha1.Pool) int32 {
+// countEndpoints reports how many ready endpoints back the Pool Service.
+//
+// An empty list is a real answer: nothing is behind the Service yet. A failed
+// list is not, so it is returned rather than rounded down to zero, which would
+// flip ConditionPoolReady to False on every API hiccup.
+func (r *PoolReconciler) countEndpoints(ctx context.Context, pool *openvoxv1alpha1.Pool) (int32, error) {
 	sliceList := &discoveryv1.EndpointSliceList{}
 	if err := r.List(ctx, sliceList, client.InNamespace(pool.Namespace),
 		client.MatchingLabels{"kubernetes.io/service-name": pool.Name}); err != nil {
-		return 0
+		return 0, fmt.Errorf("listing EndpointSlices for Service %s: %w", pool.Name, err)
 	}
 	var count int32
 	for _, slice := range sliceList.Items {
@@ -289,7 +297,7 @@ func (r *PoolReconciler) countEndpoints(ctx context.Context, pool *openvoxv1alph
 			}
 		}
 	}
-	return count
+	return count, nil
 }
 
 func (r *PoolReconciler) reconcileTLSRoute(ctx context.Context, pool *openvoxv1alpha1.Pool) error {

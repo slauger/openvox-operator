@@ -152,7 +152,10 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	// Update status
-	ready := r.getReadyReplicas(ctx, server)
+	ready, err := r.getReadyReplicas(ctx, server)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("reading ready replicas for Server %s: %w", server.Name, err)
+	}
 	if err := updateStatusWithRetry(ctx, r.Client, server, func() {
 		replicas := int32(1)
 		if server.Spec.Replicas != nil {
@@ -493,10 +496,19 @@ func intstrInt(val int) intstr.IntOrString {
 	return intstr.FromInt32(int32(val))
 }
 
-func (r *ServerReconciler) getReadyReplicas(ctx context.Context, server *openvoxv1alpha1.Server) int32 {
+// getReadyReplicas reports how many replicas of the Server Deployment are ready.
+//
+// A missing Deployment genuinely means nothing is ready, so it counts as zero.
+// Any other error is returned: reporting zero for a failed lookup would be
+// indistinguishable from an idle workload and would flip the status to Pending
+// on every API hiccup.
+func (r *ServerReconciler) getReadyReplicas(ctx context.Context, server *openvoxv1alpha1.Server) (int32, error) {
 	deploy := &appsv1.Deployment{}
 	if err := r.Get(ctx, types.NamespacedName{Name: server.Name, Namespace: server.Namespace}, deploy); err != nil {
-		return 0
+		if errors.IsNotFound(err) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("getting Deployment %s: %w", server.Name, err)
 	}
-	return deploy.Status.ReadyReplicas
+	return deploy.Status.ReadyReplicas, nil
 }

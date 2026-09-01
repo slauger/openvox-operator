@@ -81,8 +81,11 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	// Reconcile TLSRoute. conflictWith names the Pool that owns the requested
 	// hostname when it is not this one, so the single status update below can
-	// report it.
-	var conflictWith string
+	// report it. The hostname is captured alongside it because
+	// updateStatusWithRetry re-reads the whole object on every attempt: a Pool
+	// whose route was removed concurrently comes back with a nil Spec.Route,
+	// and the report must not dereference it.
+	var conflictWith, claimedHostname string
 	if pool.Spec.Route != nil && pool.Spec.Route.Enabled {
 		if !r.GatewayAPIAvailable {
 			logger.Info("TLSRoute requested but Gateway API CRDs not available, skipping")
@@ -98,6 +101,7 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 				// reported and left alone rather than retried, and the loser
 				// gives up any TLSRoute it may still hold from an earlier round.
 				conflictWith = owner.Name
+				claimedHostname = pool.Spec.Route.Hostname
 				logger.Info("hostname already claimed by another Pool, skipping TLSRoute",
 					"hostname", pool.Spec.Route.Hostname, "owner", owner.Name)
 				if err := r.deleteOwnedTLSRoute(ctx, pool); err != nil {
@@ -142,7 +146,7 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 				Type:               openvoxv1alpha1.ConditionPoolReady,
 				Status:             metav1.ConditionFalse,
 				Reason:             "HostnameConflict",
-				Message:            hostnameConflictMessage(pool.Spec.Route.Hostname, conflictWith),
+				Message:            hostnameConflictMessage(claimedHostname, conflictWith),
 				ObservedGeneration: pool.Generation,
 			})
 		case endpoints > 0:
@@ -168,9 +172,9 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	// The event follows the condition so it fires once per transition rather
 	// than on every reconcile.
-	if conflictWith != "" && !wasConflictingWith(previousConditions, pool.Spec.Route.Hostname, conflictWith) {
+	if conflictWith != "" && !wasConflictingWith(previousConditions, claimedHostname, conflictWith) {
 		r.Recorder.Eventf(pool, nil, corev1.EventTypeWarning, EventReasonHostnameConflict, "Reconcile",
-			"%s", hostnameConflictMessage(pool.Spec.Route.Hostname, conflictWith))
+			"%s", hostnameConflictMessage(claimedHostname, conflictWith))
 	}
 
 	return ctrl.Result{}, nil

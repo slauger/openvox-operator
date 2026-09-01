@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +10,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
@@ -229,5 +233,43 @@ func TestPoolsSharingHostname(t *testing.T) {
 	got := poolsSharingHostname(c)(testCtx(), changed)
 	if !equalNames(got, "pool-b") {
 		t.Errorf("expected only the Pool competing for the same hostname, got %v", names(got))
+	}
+}
+
+// TestPoolConflict_SurvivesRouteRemovedMidReconcile guards a nil dereference
+// that is easy to reintroduce: updateStatusWithRetry re-reads the whole object
+// on every attempt, so a Pool whose route is removed while the reconcile is in
+// flight comes back with a nil Spec.Route. Reporting the conflict must not
+// reach into it.
+func TestPoolConflict_SurvivesRouteRemovedMidReconcile(t *testing.T) {
+	winner := newPool("pool-a", withRoute(true, conflictHostname, "gw"))
+	loser := newPool("pool-b", withRoute(true, conflictHostname, "gw"))
+
+	gets := 0
+	c := fake.NewClientBuilder().
+		WithScheme(testScheme()).
+		WithObjects(winner, loser).
+		WithStatusSubresource(&openvoxv1alpha1.Pool{}).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if err := cl.Get(ctx, key, obj, opts...); err != nil {
+					return err
+				}
+				// The first read is the one the reconcile starts from; every
+				// later read models the spec having changed in the meantime.
+				if p, ok := obj.(*openvoxv1alpha1.Pool); ok {
+					gets++
+					if gets > 1 {
+						p.Spec.Route = nil
+					}
+				}
+				return nil
+			},
+		}).
+		Build()
+
+	r := newPoolReconciler(c, true)
+	if _, err := r.Reconcile(testCtx(), testRequest("pool-b")); err != nil {
+		t.Fatalf("reconcile: %v", err)
 	}
 }

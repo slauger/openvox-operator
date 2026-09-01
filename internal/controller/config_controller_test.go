@@ -82,7 +82,7 @@ func TestConfigReconcile_PuppetConfRendering(t *testing.T) {
 		{
 			name: "storeconfigs enabled",
 			opts: []configOption{withPuppetSpec(openvoxv1alpha1.PuppetSpec{
-				Storeconfigs: true,
+				Storeconfigs: boolPtr(true),
 				StoreBackend: "puppetdb",
 				Reports:      "puppetdb",
 			})},
@@ -91,7 +91,7 @@ func TestConfigReconcile_PuppetConfRendering(t *testing.T) {
 		{
 			name: "storeconfigs disabled",
 			opts: []configOption{withPuppetSpec(openvoxv1alpha1.PuppetSpec{
-				Storeconfigs: false,
+				Storeconfigs: boolPtr(false),
 				Reports:      "puppetdb",
 			})},
 			excludes: []string{"storeconfigs = true"},
@@ -733,7 +733,7 @@ func TestConfigReconcile_UpdateExistingConfigMap(t *testing.T) {
 		"puppet.conf": "old content",
 	})
 
-	c := setupTestClient(cfg, existingCM)
+	c := setupTestClient(cfg, ownedBy(cfg, existingCM))
 	r := newConfigReconciler(c)
 
 	if _, err := r.Reconcile(testCtx(), testRequest("production")); err != nil {

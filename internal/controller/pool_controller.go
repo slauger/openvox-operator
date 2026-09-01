@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -61,6 +62,15 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("getting Pool %s: %w", req.NamespacedName, err)
+	}
+
+	// Pausing comes after the deletion path: a paused resource must still be
+	// deletable, otherwise the annotation turns into a trap.
+	if paused, err := reconcilePauseState(ctx, r.Client, pool, &pool.Status.Conditions); err != nil {
+		return ctrl.Result{}, err
+	} else if paused {
+		logger.Info("reconciliation paused by annotation", "name", pool.Name)
+		return ctrl.Result{}, nil
 	}
 
 	// Reconcile Service
@@ -125,8 +135,30 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	// Update status
 	endpoints := r.countEndpoints(ctx, pool)
 	if err := updateStatusWithRetry(ctx, r.Client, pool, func() {
+		pool.Status.ObservedGeneration = pool.Generation
 		pool.Status.ServiceName = pool.Name
 		pool.Status.Endpoints = endpoints
+
+		// A Pool is only useful once something is behind its Service. Reporting
+		// that separately from "the Service exists" is what tells an operator
+		// whether traffic can actually reach a server.
+		if endpoints > 0 {
+			meta.SetStatusCondition(&pool.Status.Conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionPoolReady,
+				Status:             metav1.ConditionTrue,
+				Reason:             "EndpointsAvailable",
+				Message:            fmt.Sprintf("%d ready endpoint(s) behind Service %s", endpoints, pool.Name),
+				ObservedGeneration: pool.Generation,
+			})
+		} else {
+			meta.SetStatusCondition(&pool.Status.Conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionPoolReady,
+				Status:             metav1.ConditionFalse,
+				Reason:             "NoEndpoints",
+				Message:            fmt.Sprintf("No ready Server pods select Service %s", pool.Name),
+				ObservedGeneration: pool.Generation,
+			})
+		}
 	}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("updating Pool status %s: %w", pool.Name, err)
 	}
@@ -182,70 +214,6 @@ func (r *PoolReconciler) reconcileService(ctx context.Context, pool *openvoxv1al
 	logger := log.FromContext(ctx)
 	svcName := pool.Name
 
-	svc := &corev1.Service{}
-	err := r.Get(ctx, types.NamespacedName{Name: svcName, Namespace: pool.Namespace}, svc)
-	if errors.IsNotFound(err) {
-		logger.Info("creating Pool Service", "name", svcName)
-
-		port := int32(8140)
-		if pool.Spec.Service.Port > 0 {
-			port = pool.Spec.Service.Port
-		}
-
-		svcType := corev1.ServiceTypeClusterIP
-		if pool.Spec.Service.Type != "" {
-			svcType = pool.Spec.Service.Type
-		}
-
-		labels := map[string]string{
-			"app.kubernetes.io/name":       "openvox",
-			"app.kubernetes.io/managed-by": "openvox-operator",
-			poolLabel(pool.Name):           "true",
-		}
-
-		// Merge additional labels
-		for k, v := range pool.Spec.Service.Labels {
-			labels[k] = v
-		}
-
-		svcPort := corev1.ServicePort{
-			Name:       "https",
-			Port:       port,
-			TargetPort: intstr.FromInt32(8140),
-			Protocol:   corev1.ProtocolTCP,
-		}
-		if pool.Spec.Service.NodePort > 0 {
-			svcPort.NodePort = pool.Spec.Service.NodePort
-		}
-
-		svc = &corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        svcName,
-				Namespace:   pool.Namespace,
-				Labels:      labels,
-				Annotations: pool.Spec.Service.Annotations,
-			},
-			Spec: corev1.ServiceSpec{
-				Type:        svcType,
-				Selector:    poolServiceSelector(pool),
-				Ports:       []corev1.ServicePort{svcPort},
-				ExternalIPs: pool.Spec.Service.ExternalIPs,
-			},
-		}
-
-		if err := controllerutil.SetControllerReference(pool, svc, r.Scheme); err != nil {
-			return fmt.Errorf("setting owner reference on Service %s: %w", svcName, err)
-		}
-		if err := r.Create(ctx, svc); err != nil {
-			return fmt.Errorf("creating Service %s: %w", svcName, err)
-		}
-		r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonServiceSynced, "Reconcile", "Service %s created", svcName)
-		return nil
-	} else if err != nil {
-		return fmt.Errorf("getting Service %s: %w", svcName, err)
-	}
-
-	// Update existing service
 	port := int32(8140)
 	if pool.Spec.Service.Port > 0 {
 		port = pool.Spec.Service.Port
@@ -255,7 +223,6 @@ func (r *PoolReconciler) reconcileService(ctx context.Context, pool *openvoxv1al
 		svcType = pool.Spec.Service.Type
 	}
 
-	// Update labels
 	labels := map[string]string{
 		"app.kubernetes.io/name":       "openvox",
 		"app.kubernetes.io/managed-by": "openvox-operator",
@@ -264,26 +231,47 @@ func (r *PoolReconciler) reconcileService(ctx context.Context, pool *openvoxv1al
 	for k, v := range pool.Spec.Service.Labels {
 		labels[k] = v
 	}
-	svc.Labels = labels
-	svc.Annotations = pool.Spec.Service.Annotations
 
-	svc.Spec.Type = svcType
-	svc.Spec.Selector = poolServiceSelector(pool)
-	if len(svc.Spec.Ports) == 0 {
-		svc.Spec.Ports = []corev1.ServicePort{{}}
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: svcName, Namespace: pool.Namespace},
 	}
-	svc.Spec.Ports[0].Name = "https"
-	svc.Spec.Ports[0].Port = port
-	svc.Spec.Ports[0].TargetPort = intstr.FromInt32(8140)
-	svc.Spec.Ports[0].Protocol = corev1.ProtocolTCP
-	if pool.Spec.Service.NodePort > 0 {
-		svc.Spec.Ports[0].NodePort = pool.Spec.Service.NodePort
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, svc, func() error {
+		if err := assertControlledBy(svc, pool, "Service"); err != nil {
+			return err
+		}
+		svc.Labels = labels
+		svc.Annotations = pool.Spec.Service.Annotations
+
+		// Only the fields the Pool owns are written. clusterIP in particular is
+		// assigned by Kubernetes and immutable, so the surrounding spec is left
+		// untouched.
+		svc.Spec.Type = svcType
+		svc.Spec.Selector = poolServiceSelector(pool)
+		if len(svc.Spec.Ports) == 0 {
+			svc.Spec.Ports = []corev1.ServicePort{{}}
+		}
+		svc.Spec.Ports[0].Name = "https"
+		svc.Spec.Ports[0].Port = port
+		svc.Spec.Ports[0].TargetPort = intstr.FromInt32(8140)
+		svc.Spec.Ports[0].Protocol = corev1.ProtocolTCP
+		// An unset nodePort keeps whatever Kubernetes assigned; clearing it here
+		// would hand out a new port and break every client using the old one.
+		if pool.Spec.Service.NodePort > 0 {
+			svc.Spec.Ports[0].NodePort = pool.Spec.Service.NodePort
+		}
+		svc.Spec.ExternalIPs = pool.Spec.Service.ExternalIPs
+		return controllerutil.SetControllerReference(pool, svc, r.Scheme)
+	})
+	if err != nil {
+		return fmt.Errorf("reconciling Service %s: %w", svcName, err)
 	}
-	svc.Spec.ExternalIPs = pool.Spec.Service.ExternalIPs
-	if err := r.Update(ctx, svc); err != nil {
-		return fmt.Errorf("updating Service %s: %w", svcName, err)
+	switch op {
+	case controllerutil.OperationResultCreated:
+		logger.Info("created Pool Service", "name", svcName)
+		r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonServiceSynced, "Reconcile", "Service %s created", svcName)
+	case controllerutil.OperationResultUpdated:
+		r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonServiceSynced, "Reconcile", "Service %s updated", svcName)
 	}
-	r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonServiceSynced, "Reconcile", "Service %s updated", svcName)
 	return nil
 }
 
@@ -312,8 +300,6 @@ func (r *PoolReconciler) reconcileTLSRoute(ctx context.Context, pool *openvoxv1a
 		port = gwapiv1.PortNumber(pool.Spec.Service.Port)
 	}
 
-	hostname := gwapiv1.Hostname(pool.Spec.Route.Hostname)
-
 	parentRef := gwapiv1.ParentReference{
 		Name: gwapiv1.ObjectName(pool.Spec.Route.GatewayRef.Name),
 	}
@@ -322,16 +308,18 @@ func (r *PoolReconciler) reconcileTLSRoute(ctx context.Context, pool *openvoxv1a
 		parentRef.SectionName = &sectionName
 	}
 
-	desired := &gwapiv1.TLSRoute{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      pool.Name,
-			Namespace: pool.Namespace,
-		},
-		Spec: gwapiv1.TLSRouteSpec{
+	route := &gwapiv1.TLSRoute{
+		ObjectMeta: metav1.ObjectMeta{Name: pool.Name, Namespace: pool.Namespace},
+	}
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, route, func() error {
+		if err := assertControlledBy(route, pool, "TLSRoute"); err != nil {
+			return err
+		}
+		route.Spec = gwapiv1.TLSRouteSpec{
 			CommonRouteSpec: gwapiv1.CommonRouteSpec{
 				ParentRefs: []gwapiv1.ParentReference{parentRef},
 			},
-			Hostnames: []gwapiv1.Hostname{hostname},
+			Hostnames: []gwapiv1.Hostname{gwapiv1.Hostname(pool.Spec.Route.Hostname)},
 			Rules: []gwapiv1.TLSRouteRule{
 				{
 					BackendRefs: []gwapiv1.BackendRef{
@@ -344,31 +332,19 @@ func (r *PoolReconciler) reconcileTLSRoute(ctx context.Context, pool *openvoxv1a
 					},
 				},
 			},
-		},
+		}
+		return controllerutil.SetControllerReference(pool, route, r.Scheme)
+	})
+	if err != nil {
+		return fmt.Errorf("reconciling TLSRoute %s: %w", pool.Name, err)
 	}
-
-	existing := &gwapiv1.TLSRoute{}
-	err := r.Get(ctx, types.NamespacedName{Name: pool.Name, Namespace: pool.Namespace}, existing)
-	if errors.IsNotFound(err) {
-		logger.Info("creating TLSRoute", "name", pool.Name, "hostname", pool.Spec.Route.Hostname)
-		if err := controllerutil.SetControllerReference(pool, desired, r.Scheme); err != nil {
-			return fmt.Errorf("setting owner reference on TLSRoute %s: %w", pool.Name, err)
-		}
-		if err := r.Create(ctx, desired); err != nil {
-			return fmt.Errorf("creating TLSRoute %s: %w", pool.Name, err)
-		}
+	switch op {
+	case controllerutil.OperationResultCreated:
+		logger.Info("created TLSRoute", "name", pool.Name, "hostname", pool.Spec.Route.Hostname)
 		r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonTLSRouteCreated, "Reconcile", "TLSRoute %s created for hostname %s", pool.Name, pool.Spec.Route.Hostname)
-		return nil
-	} else if err != nil {
-		return fmt.Errorf("getting TLSRoute %s: %w", pool.Name, err)
+	case controllerutil.OperationResultUpdated:
+		r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonTLSRouteUpdated, "Reconcile", "TLSRoute %s updated", pool.Name)
 	}
-
-	// Update existing TLSRoute
-	existing.Spec = desired.Spec
-	if err := r.Update(ctx, existing); err != nil {
-		return fmt.Errorf("updating TLSRoute %s: %w", pool.Name, err)
-	}
-	r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonTLSRouteUpdated, "Reconcile", "TLSRoute %s updated", pool.Name)
 	return nil
 }
 
@@ -415,17 +391,9 @@ func (r *PoolReconciler) injectDNSAltNames(ctx context.Context, pool *openvoxv1a
 		if err := r.Update(ctx, cert); err != nil {
 			return fmt.Errorf("updating Certificate %s: %w", cert.Name, err)
 		}
-
-		// Reset certificate phase to trigger re-signing with the new alt name
-		if cert.Status.Phase == openvoxv1alpha1.CertificatePhaseSigned {
-			if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
-				cert.Status.Phase = openvoxv1alpha1.CertificatePhasePending
-			}); err != nil {
-				return fmt.Errorf("resetting Certificate %s phase: %w", cert.Name, err)
-			}
-			logger.Info("reset Certificate phase to Pending for re-signing",
-				"certificate", cert.Name)
-		}
+		// The Certificate controller notices the changed alt names through its
+		// signed-spec hash and re-signs on its own. Resetting its phase from
+		// here would race the controller that owns that status.
 	}
 
 	return nil

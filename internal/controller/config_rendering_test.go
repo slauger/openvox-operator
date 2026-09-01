@@ -35,7 +35,7 @@ func TestRenderRoutesYAML(t *testing.T) {
 		{
 			name: "wired up but backend is not puppetdb",
 			cfg: newConfig("c", withDatabaseRef("db"), withPuppetSpec(openvoxv1alpha1.PuppetSpec{
-				Storeconfigs: false,
+				Storeconfigs: boolPtr(false),
 				StoreBackend: "",
 				Reports:      "store",
 			})),
@@ -44,7 +44,7 @@ func TestRenderRoutesYAML(t *testing.T) {
 		{
 			name: "wired up via reports=puppetdb only",
 			cfg: newConfig("c", withDatabaseRef("db"), withPuppetSpec(openvoxv1alpha1.PuppetSpec{
-				Storeconfigs: false,
+				Storeconfigs: boolPtr(false),
 				Reports:      "puppetdb",
 			})),
 			want: true,
@@ -280,10 +280,10 @@ func TestRenderCAConf(t *testing.T) {
 			name: "custom values",
 			ca: &openvoxv1alpha1.CertificateAuthority{
 				Spec: openvoxv1alpha1.CertificateAuthoritySpec{
-					AllowSubjectAltNames:         false,
-					AllowAuthorizationExtensions: false,
-					EnableInfraCRL:               false,
-					AllowAutoRenewal:             false,
+					AllowSubjectAltNames:         boolPtr(false),
+					AllowAuthorizationExtensions: boolPtr(false),
+					EnableInfraCRL:               boolPtr(false),
+					AllowAutoRenewal:             boolPtr(false),
 					AutoRenewalCertTTL:           "30d",
 				},
 			},
@@ -299,10 +299,10 @@ func TestRenderCAConf(t *testing.T) {
 			name: "empty autoRenewalCertTTL uses default",
 			ca: &openvoxv1alpha1.CertificateAuthority{
 				Spec: openvoxv1alpha1.CertificateAuthoritySpec{
-					AllowSubjectAltNames:         true,
-					AllowAuthorizationExtensions: true,
-					EnableInfraCRL:               true,
-					AllowAutoRenewal:             true,
+					AllowSubjectAltNames:         boolPtr(true),
+					AllowAuthorizationExtensions: boolPtr(true),
+					EnableInfraCRL:               boolPtr(true),
+					AllowAutoRenewal:             boolPtr(true),
 					AutoRenewalCertTTL:           "",
 				},
 			},

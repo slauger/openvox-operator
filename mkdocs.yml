@@ -68,6 +68,7 @@ nav:
   - Guides:
       - CA Import & External CA: guides/ca-import.md
       - Monitoring: guides/monitoring.md
+      - Pausing Reconciliation: guides/pausing-reconciliation.md
       - Supply Chain Security: guides/supply-chain-security.md
       - Troubleshooting: troubleshooting.md
   - Examples:

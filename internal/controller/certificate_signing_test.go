@@ -557,7 +557,7 @@ func TestReconcileCertRenewal_Success(t *testing.T) {
 	cert := newCertificate("my-cert", "ext-ca", openvoxv1alpha1.CertificatePhaseRenewing)
 	cert.Spec.Certname = "test-certname"
 
-	c := setupTestClient(ca, cert, caSecret, tlsSecret)
+	c := setupTestClient(ca, cert, caSecret, ownedBy(cert, tlsSecret))
 	r := newCertificateReconciler(c)
 
 	res, err := r.reconcileCertRenewal(testCtx(), cert, ca)
@@ -655,7 +655,7 @@ func TestRenewCertificate_Success(t *testing.T) {
 	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseRenewing)
 	cert.Spec.Certname = "test-certname"
 
-	c := setupTestClient(ca, cert, caSecret, tlsSecret)
+	c := setupTestClient(ca, cert, caSecret, ownedBy(cert, tlsSecret))
 	r := newCertificateReconciler(c)
 
 	err := r.renewCertificate(testCtx(), cert, ca, server.URL, testNamespace)
@@ -686,7 +686,7 @@ func TestRenewCertificate_CADown(t *testing.T) {
 	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseRenewing)
 	cert.Spec.Certname = "test-certname"
 
-	c := setupTestClient(ca, cert, caSecret, tlsSecret)
+	c := setupTestClient(ca, cert, caSecret, ownedBy(cert, tlsSecret))
 	r := newCertificateReconciler(c)
 
 	err := r.renewCertificate(testCtx(), cert, ca, server.URL, testNamespace)
@@ -731,7 +731,7 @@ func TestRenewCertificate_mTLSAuth(t *testing.T) {
 	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseRenewing)
 	cert.Spec.Certname = "test-certname"
 
-	c := setupTestClient(ca, cert, caSecret, tlsSecret)
+	c := setupTestClient(ca, cert, caSecret, ownedBy(cert, tlsSecret))
 	r := newCertificateReconciler(c)
 
 	err := r.renewCertificate(testCtx(), cert, ca, server.URL, testNamespace)

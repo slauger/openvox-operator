@@ -228,12 +228,28 @@ spec:
                     type: integer
                 type: object
               storage:
-                description: Storage defines the PVC settings for CA data.
+                description: |-
+                  Storage defines the PVC settings for CA data. An external CA keeps no
+                  state in the cluster, so the two are mutually exclusive.
+
+                  Declared as a pointer so has(self.storage) means "the user set it" rather
+                  than "the struct exists"; with a value type the exclusivity rule could
+                  only be expressed by comparing against the default size, which then
+                  wrongly accepted a storage block that happened to match that default.
                 properties:
                   size:
+                    anyOf:
+                    - type: integer
+                    - type: string
                     default: 1Gi
-                    description: Size is the requested storage size.
-                    type: string
+                    description: |-
+                      Size is the requested storage size.
+
+                      A pointer, because omitempty has no effect on resource.Quantity: the value
+                      type always marshals (as "0" when unset), so the field would never be
+                      absent and the default below would never be applied.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
                   storageClass:
                     description: StorageClass is the storage class name. Empty means
                       default.
@@ -249,9 +265,8 @@ spec:
                 type: string
             type: object
             x-kubernetes-validations:
-            - message: external and custom storage are mutually exclusive
-              rule: '!(has(self.external) && has(self.storage) && size(self.storage.size)
-                > 0 && self.storage.size != ''1Gi'')'
+            - message: external and storage are mutually exclusive
+              rule: '!(has(self.external) && has(self.storage))'
           status:
             description: CertificateAuthorityStatus defines the observed state of
               CertificateAuthority.
@@ -318,12 +333,27 @@ spec:
                   - type
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               notAfter:
                 description: NotAfter is the expiration time of the CA certificate.
                 format: date-time
                 type: string
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the .metadata.generation that was last processed by
+                  the controller. A value below .metadata.generation means the rest of this
+                  status has not caught up with the current spec yet.
+                format: int64
+                type: integer
               phase:
-                description: Phase is the current lifecycle phase.
+                description: |-
+                  Phase is a coarse, human-readable summary of the observed state.
+
+                  It is derived on every reconcile and is never read back as controller
+                  input: use Conditions for anything machine-readable. Editing or losing
+                  the phase does not change what the operator does.
                 enum:
                 - Pending
                 - Initializing

@@ -65,8 +65,16 @@ spec:
                 type: string
               certname:
                 default: puppet
-                description: Certname is the certificate common name.
+                description: |-
+                  Certname is the certificate common name. Immutable after creation.
+
+                  The name is baked into the issued certificate and into the entry the CA
+                  keeps for it. Changing it would leave that entry behind under the old
+                  name, so the finalizer could no longer clean it up on deletion.
                 type: string
+                x-kubernetes-validations:
+                - message: certname is immutable
+                  rule: self == oldSelf
               csrExtensions:
                 description: CSRExtensions defines Puppet CSR extension attributes
                   to embed in the CSR.
@@ -90,11 +98,13 @@ spec:
                     type: string
                 type: object
               dnsAltNames:
-                description: DNSAltNames is a list of DNS subject alternative names
-                  for the certificate.
+                description: |-
+                  DNSAltNames is a list of DNS subject alternative names for the certificate.
+                  Order is irrelevant and duplicates are rejected.
                 items:
                   type: string
                 type: array
+                x-kubernetes-list-type: set
               renewBefore:
                 default: 60d
                 description: |-
@@ -165,12 +175,27 @@ spec:
                   - type
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               notAfter:
                 description: NotAfter is the expiration time of the signed certificate.
                 format: date-time
                 type: string
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the .metadata.generation that was last processed by
+                  the controller. A value below .metadata.generation means the rest of this
+                  status has not caught up with the current spec yet.
+                format: int64
+                type: integer
               phase:
-                description: Phase is the current lifecycle phase.
+                description: |-
+                  Phase is a coarse, human-readable summary of the observed state.
+
+                  It is derived on every reconcile and is never read back as controller
+                  input: use Conditions for anything machine-readable. Editing or losing
+                  the phase does not change what the operator does.
                 enum:
                 - Pending
                 - Requesting
@@ -182,6 +207,14 @@ spec:
               secretName:
                 description: SecretName is the name of the Secret containing cert.pem
                   and key.pem.
+                type: string
+              signedSpecHash:
+                description: |-
+                  SignedSpecHash digests the spec fields the current certificate was issued
+                  for: certname, dnsAltNames and csrExtensions. When it no longer matches
+                  the spec, the certificate is re-signed. An empty value means the hash was
+                  never recorded (certificates issued before this field existed) and is
+                  adopted on the next reconcile rather than triggering a re-sign.
                 type: string
             type: object
         type: object

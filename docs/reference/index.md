@@ -57,6 +57,13 @@ These types are reused across multiple CRDs.
 | `pullPolicy` | string | `IfNotPresent` | Image pull policy |
 | `pullSecrets` | []LocalObjectReference | - | Image pull secrets |
 
+`repository` and `tag` carry no API-level default. They are required on `Config`
+and `Database`; on `Server` both are optional and fall back to the referenced
+`Config`, which is what lets one Config drive a whole set of Servers.
+
+The defaults live in the Helm charts (`config.image.*`, `database.image.*`),
+where changing the registry is a values change rather than a CRD update.
+
 ### StorageSpec
 
 | Field | Type | Default | Description |
@@ -112,3 +119,44 @@ Used by [CertificateAuthority](certificateauthority.md), [Server](server.md) and
 | `fsGroupChangePolicy` | string | `OnRootMismatch` | When volume ownership is changed to match `fsGroup` (`OnRootMismatch` or `Always`) |
 
 By default the operator sets a matching `fsGroup` so managed pods can write to freshly provisioned CSI volumes (e.g. Ceph RBD/CephFS), which are typically owned by `root:root`. Override these fields on OpenShift or PodSecurity-restricted namespaces that assign their own UID/GID ranges.
+
+## Status: phases and conditions
+
+Every resource reports both a `phase` and a list of `conditions`. They serve
+different purposes and are not interchangeable.
+
+**`status.phase`** is a coarse, human-readable summary -- the thing you want in
+a `kubectl get` column. It is derived on every reconcile and is never read back
+as controller input, so editing or losing it does not change what the operator
+does.
+
+**`status.conditions`** is the machine-readable contract. Automation, scripts
+and the controllers themselves check conditions, not phases. Each condition
+carries `observedGeneration`, so you can tell whether it refers to the spec you
+are looking at:
+
+```console
+$ kubectl get certificate web -o jsonpath='{.status.conditions[?(@.type=="CertSigned")].status}'
+True
+```
+
+**`status.observedGeneration`** records the `metadata.generation` the controller
+last processed successfully. When it lags behind `metadata.generation`, the rest
+of the status has not caught up with the current spec yet.
+
+### Readiness conditions
+
+| Resource | Condition | True when |
+|---|---|---|
+| `Config` | `ConfigReady` | Configuration ConfigMaps and Secrets are rendered |
+| `CertificateAuthority` | `CAReady` | CA Secrets exist and certificates can be signed; also set for an external CA |
+| `CertificateAuthority` | `OperatorSigningReady` | The operator's own signing certificate is available |
+| `CertificateAuthority` | `DeletionBlocked` | Deletion is held back by referencing Certificates |
+| `Certificate` | `CertSigned` | The certificate is signed and its Secret is available |
+| `Server` | `Ready` | At least one replica is ready |
+| `Database` | `Ready` | At least one replica is ready |
+| `Pool` | `Ready` | At least one ready endpoint is behind the Service |
+| `SigningPolicy`, `NodeClassifier`, `ReportProcessor` | `Ready` | The resource was rendered into the configuration the servers mount |
+
+Any resource can additionally carry `Paused` -- see
+[Pausing Reconciliation](../guides/pausing-reconciliation.md).

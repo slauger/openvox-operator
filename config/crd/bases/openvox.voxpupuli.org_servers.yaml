@@ -1013,6 +1013,10 @@ spec:
                   A single entry without environment or mountPath is mounted as the whole
                   environments tree; with more than one entry each must set a unique environment
                   or a mountPath.
+                  Deliberately an atomic list: the entries have no stable key. Both
+                  environment and mountPath are optional and mutually exclusive, and a
+                  single entry may set neither, so a listMapKey would contradict the CEL
+                  validation above.
                 items:
                   description: |-
                     CodeSpec defines one source of Puppet code to mount into Server pods.
@@ -1076,6 +1080,7 @@ spec:
                     rule: '!has(self.mountPath) || size(self.mountPath) == 0 || self.mountPath.startsWith(''/etc/puppetlabs/code'')'
                 maxItems: 64
                 type: array
+                x-kubernetes-list-type: atomic
                 x-kubernetes-validations:
                 - message: with more than one code entry, each entry must set either
                     environment or mountPath
@@ -3403,12 +3408,16 @@ spec:
                       x-kubernetes-map-type: atomic
                     type: array
                   repository:
-                    default: ghcr.io/slauger/openvox-server-8
-                    description: Repository is the container image repository.
+                    description: |-
+                      Repository is the container image repository.
+                      Required on Config and Database; on Server it is optional and falls back
+                      to the Config's repository.
                     type: string
                   tag:
-                    default: latest
-                    description: Tag is the container image tag.
+                    description: |-
+                      Tag is the container image tag.
+                      Required on Config and Database; on Server it is optional and falls back
+                      to the Config's tag.
                     type: string
                 type: object
               javaArgs:
@@ -3655,6 +3664,7 @@ spec:
                 items:
                   type: string
                 type: array
+                x-kubernetes-list-type: set
               priorityClassName:
                 description: PriorityClassName is the name of the PriorityClass for
                   the Server pods.
@@ -3762,6 +3772,7 @@ spec:
                 description: |-
                   Server enables the server role (catalog compilation, file serving).
                   A Server with both CA and Server serves as a combined CA+server.
+                  Set this to false for a CA-only instance.
                 type: boolean
               topologySpreadConstraints:
                 description: TopologySpreadConstraints controls how pods are spread
@@ -4002,12 +4013,27 @@ spec:
                   - type
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               desired:
                 description: Desired is the desired number of replicas.
                 format: int32
                 type: integer
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the .metadata.generation that was last processed by
+                  the controller. A value below .metadata.generation means the rest of this
+                  status has not caught up with the current spec yet.
+                format: int64
+                type: integer
               phase:
-                description: Phase is the current lifecycle phase.
+                description: |-
+                  Phase is a coarse, human-readable summary of the observed state.
+
+                  It is derived on every reconcile and is never read back as controller
+                  input: use Conditions for anything machine-readable. Editing or losing
+                  the phase does not change what the operator does.
                 enum:
                 - Pending
                 - WaitingForCert

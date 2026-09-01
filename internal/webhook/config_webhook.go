@@ -2,6 +2,7 @@ package webhook
 
 import (
 	"context"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,6 +35,11 @@ func (v *ConfigValidator) validate(ctx context.Context, c *openvoxv1alpha1.Confi
 	if c.Spec.AuthorityRef != "" {
 		if err := refExists(ctx, v.Client, c.Namespace, c.Spec.AuthorityRef, &openvoxv1alpha1.CertificateAuthority{}); err != nil {
 			errs = append(errs, field.Invalid(specPath.Child("authorityRef"), c.Spec.AuthorityRef, err.Error()))
+		} else if other, err := v.otherConfigUsingAuthority(ctx, c); err != nil {
+			return nil, err
+		} else if other != "" {
+			errs = append(errs, field.Invalid(specPath.Child("authorityRef"), c.Spec.AuthorityRef,
+				"already referenced by Config "+other+"; a CertificateAuthority belongs to exactly one Config"))
 		}
 	}
 
@@ -59,4 +65,28 @@ func (v *ConfigValidator) validate(ctx context.Context, c *openvoxv1alpha1.Confi
 		return nil, errs.ToAggregate()
 	}
 	return nil, nil
+}
+
+// otherConfigUsingAuthority returns the name of another Config in the same
+// namespace that already references this Config's authorityRef, or "" when
+// there is none.
+//
+// The CertificateAuthority controller resolves its Config through this
+// reference and derives the CA setup Job from it, so a second claimant makes
+// the outcome depend on listing order rather than on intent.
+func (v *ConfigValidator) otherConfigUsingAuthority(ctx context.Context, c *openvoxv1alpha1.Config) (string, error) {
+	cfgList := &openvoxv1alpha1.ConfigList{}
+	if err := v.Client.List(ctx, cfgList, client.InNamespace(c.Namespace)); err != nil {
+		return "", fmt.Errorf("listing Configs in namespace %s: %w", c.Namespace, err)
+	}
+	for i := range cfgList.Items {
+		other := &cfgList.Items[i]
+		if other.Name == c.Name {
+			continue
+		}
+		if other.Spec.AuthorityRef == c.Spec.AuthorityRef {
+			return other.Name, nil
+		}
+	}
+	return "", nil
 }

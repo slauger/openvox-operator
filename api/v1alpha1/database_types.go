@@ -35,6 +35,7 @@ type DatabaseList struct {
 }
 
 // DatabaseSpec defines the desired state of Database.
+// +kubebuilder:validation:XValidation:rule="has(self.image.repository) && size(self.image.repository) > 0 && has(self.image.tag) && size(self.image.tag) > 0",message="spec.image.repository and spec.image.tag are required"
 type DatabaseSpec struct {
 	// CertificateRef references the Certificate whose SSL Secret is mounted into the Database pods.
 	CertificateRef string `json:"certificateRef"`
@@ -135,7 +136,17 @@ const (
 
 // DatabaseStatus defines the observed state of Database.
 type DatabaseStatus struct {
-	// Phase is the current lifecycle phase.
+	// ObservedGeneration is the .metadata.generation that was last processed by
+	// the controller. A value below .metadata.generation means the rest of this
+	// status has not caught up with the current spec yet.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Phase is a coarse, human-readable summary of the observed state.
+	//
+	// It is derived on every reconcile and is never read back as controller
+	// input: use Conditions for anything machine-readable. Editing or losing
+	// the phase does not change what the operator does.
 	// +optional
 	Phase DatabasePhase `json:"phase,omitempty"`
 
@@ -152,6 +163,8 @@ type DatabaseStatus struct {
 	Desired int32 `json:"desired,omitempty"`
 
 	// Conditions represent the latest available observations.
+	// +listType=map
+	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }

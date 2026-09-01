@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"strings"
 	"testing"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -134,5 +135,89 @@ func TestCAReconcile_DeletionDoesNotRunSetup(t *testing.T) {
 	}
 	if len(pvcList.Items) > 0 {
 		t.Errorf("a CA being deleted must not create the CA data PVC, found %d", len(pvcList.Items))
+	}
+}
+
+// TestCAReconcile_DeletionNotBlockedByTerminatingCertificates is the case that
+// broke namespace teardown.
+//
+// Deleting a namespace marks everything at once. The Certificate finalizers
+// then need the CA service to revoke against, while the CA waits for exactly
+// those Certificates to disappear -- so the CA has to treat a Certificate that
+// is already being deleted as no longer in use.
+func TestCAReconcile_DeletionNotBlockedByTerminatingCertificates(t *testing.T) {
+	now := metav1.Now()
+	ca := newCertificateAuthority("production-ca")
+	ca.DeletionTimestamp = &now
+	ca.Finalizers = []string{certificateAuthorityFinalizer}
+
+	terminating := newCertificate("web-cert", "production-ca", openvoxv1alpha1.CertificatePhaseSigned)
+	terminating.DeletionTimestamp = &now
+	terminating.Finalizers = []string{certificateFinalizer}
+
+	c := setupTestClient(ca, terminating)
+	r := newCertificateAuthorityReconciler(c)
+
+	res, err := r.Reconcile(testCtx(), testRequest("production-ca"))
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if res.RequeueAfter != 0 {
+		t.Errorf("a CA whose certificates are all terminating should not keep waiting, got %v", res.RequeueAfter)
+	}
+
+	got := &openvoxv1alpha1.CertificateAuthority{}
+	getErr := c.Get(testCtx(), types.NamespacedName{Name: "production-ca", Namespace: testNamespace}, got)
+	switch {
+	case apierrors.IsNotFound(getErr):
+	case getErr != nil:
+		t.Fatalf("reading CertificateAuthority: %v", getErr)
+	case controllerutil.ContainsFinalizer(got, certificateAuthorityFinalizer):
+		t.Error("the finalizer must be released when every referencing certificate is already terminating")
+	}
+}
+
+// TestCAReconcile_DeletionBlockedByLiveCertificateAmongTerminating keeps the
+// guarantee intact: one certificate nobody asked to delete is enough to hold
+// the CA.
+func TestCAReconcile_DeletionBlockedByLiveCertificateAmongTerminating(t *testing.T) {
+	now := metav1.Now()
+	ca := newCertificateAuthority("production-ca")
+	ca.DeletionTimestamp = &now
+	ca.Finalizers = []string{certificateAuthorityFinalizer}
+
+	terminating := newCertificate("old-cert", "production-ca", openvoxv1alpha1.CertificatePhaseSigned)
+	terminating.DeletionTimestamp = &now
+	terminating.Finalizers = []string{certificateFinalizer}
+	live := newCertificate("web-cert", "production-ca", openvoxv1alpha1.CertificatePhaseSigned)
+
+	c := setupTestClient(ca, terminating, live)
+	r := newCertificateAuthorityReconciler(c)
+
+	res, err := r.Reconcile(testCtx(), testRequest("production-ca"))
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if res.RequeueAfter == 0 {
+		t.Error("expected the controller to keep waiting while a live certificate references the CA")
+	}
+
+	got := &openvoxv1alpha1.CertificateAuthority{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "production-ca", Namespace: testNamespace}, got); err != nil {
+		t.Fatalf("the CertificateAuthority must still exist: %v", err)
+	}
+	if !controllerutil.ContainsFinalizer(got, certificateAuthorityFinalizer) {
+		t.Fatal("the finalizer must not be released while a live certificate exists")
+	}
+
+	cond := meta.FindStatusCondition(got.Status.Conditions, openvoxv1alpha1.ConditionCADeletionBlocked)
+	if cond == nil || cond.Status != metav1.ConditionTrue {
+		t.Fatalf("expected a DeletionBlocked condition, got %+v", got.Status.Conditions)
+	}
+	if strings.Contains(cond.Message, "old-cert") {
+		t.Errorf("a terminating certificate must not be listed as blocking: %q", cond.Message)
+	}
+	if !strings.Contains(cond.Message, "web-cert") {
+		t.Errorf("the live certificate should be named as blocking: %q", cond.Message)
 	}
 }

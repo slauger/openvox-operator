@@ -239,11 +239,19 @@ func (r *CertificateAuthorityReconciler) handleDeletion(ctx context.Context, ca 
 		return ctrl.Result{}, fmt.Errorf("checking Certificates before deleting CertificateAuthority %s: %w", ca.Name, err)
 	}
 
-	if len(certs) > 0 {
-		blocking := make([]string, 0, len(certs))
-		for i := range certs {
+	// A Certificate that is itself being deleted is not in use any more, so it
+	// must not hold the CA back. Counting those too deadlocks namespace
+	// deletion: everything is marked for deletion at once, the Certificate
+	// finalizers need the CA service to revoke on, and the CA waits for exactly
+	// those Certificates to disappear.
+	blocking := make([]string, 0, len(certs))
+	for i := range certs {
+		if certs[i].DeletionTimestamp.IsZero() {
 			blocking = append(blocking, certs[i].Name)
 		}
+	}
+
+	if len(blocking) > 0 {
 		sort.Strings(blocking)
 		msg := fmt.Sprintf("%d Certificate(s) still reference this CA: %s", len(blocking), strings.Join(blocking, ", "))
 		logger.Info("CertificateAuthority deletion blocked", "certificates", blocking)

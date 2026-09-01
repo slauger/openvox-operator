@@ -42,6 +42,7 @@ const (
 	EventReasonOperatorSigningReady   = "OperatorSigningReady"
 	EventReasonCADeletionBlocked      = "CADeletionBlocked"
 	EventReasonMultipleConfigs        = "MultipleConfigs"
+	EventReasonCASetupFailed          = "CASetupFailed"
 )
 
 // certificateAuthorityFinalizer guards the CA private key and the CA data PVC,

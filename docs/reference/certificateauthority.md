@@ -96,6 +96,10 @@ spec:
 | `OperatorSigningReady` | The auto-managed `{name}-operator-signing` Certificate is signed and its TLS Secret is available for mTLS-authenticated CSR signing. Not set for external CAs (which manage their own signing credentials). |
 | `DeletionBlocked` | Deletion is being held back because Certificates still reference this CertificateAuthority. The message lists them. |
 
+When the setup Job keeps failing, `CAReady` is set to `False` with reason
+`SetupFailed`, carrying the Job's own failure message. See
+[Setup failures](#setup-failures).
+
 ## Storage changes
 
 `spec.storage.size` can be increased if the storage class supports volume
@@ -165,6 +169,26 @@ there is any chance you will need it again.
 | `Ready` | CA Secrets created, Certificates can be signed |
 | `External` | External CA configured (no PVC, Job, or internal Service) |
 | `Error` | CA setup failed |
+
+## Setup failures
+
+A setup Job that cannot succeed -- a bad image reference, a broken PVC, an
+unschedulable pod -- is deleted and recreated by the controller. That retry is
+bounded: after five consecutive failures the controller stops, sets `CAReady` to
+`False` with reason `SetupFailed` and phase `Error`, and emits a
+`CASetupFailed` warning event.
+
+The failed Job is left in place; its logs are the only record of what went
+wrong:
+
+```bash
+kubectl logs -n <namespace> job/<ca-name>-setup
+```
+
+The attempt counter lives in the `openvox.voxpupuli.org/setup-attempts`
+annotation on the CertificateAuthority. It is cleared when the Job succeeds and
+when the image the Job runs changes, so correcting `spec.image` on the Config
+gives the setup another five attempts without any manual step.
 
 ## CA Secrets
 

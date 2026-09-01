@@ -518,6 +518,16 @@ func (r *CertificateReconciler) handleCertificateCleanup(ctx context.Context, ce
 		return fmt.Errorf("getting CertificateAuthority %s for cleanup: %w", cert.Spec.AuthorityRef, err)
 	}
 
+	// A CA that is itself being deleted has nothing left to revoke against, and
+	// its Service is on its way out. Trying anyway means running into the HTTP
+	// timeout on every attempt until the retry budget is spent, which is what
+	// makes namespace deletion crawl: every object is marked at once, so the
+	// certificates and their CA go away together.
+	if !ca.DeletionTimestamp.IsZero() {
+		logger.Info("skipping CA cleanup, the CertificateAuthority is being deleted", "ca", ca.Name)
+		return nil
+	}
+
 	// Skip cleanup for external CAs without a signing secret (no admin access)
 	if ca.Spec.External != nil || ca.Status.SigningSecretName == "" {
 		logger.Info("skipping CA cleanup (external CA or no signing secret)", "ca", ca.Name)

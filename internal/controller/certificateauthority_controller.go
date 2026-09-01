@@ -239,16 +239,24 @@ func (r *CertificateAuthorityReconciler) handleDeletion(ctx context.Context, ca 
 		return ctrl.Result{}, fmt.Errorf("checking Certificates before deleting CertificateAuthority %s: %w", ca.Name, err)
 	}
 
-	// A Certificate that is itself being deleted is not in use any more, so it
-	// must not hold the CA back. Counting those too deadlocks namespace
-	// deletion: everything is marked for deletion at once, the Certificate
-	// finalizers need the CA service to revoke on, and the CA waits for exactly
-	// those Certificates to disappear.
+	// Only Certificates that can outlive the CA may hold it back.
+	//
+	// One that is already being deleted is on its way out: counting it would
+	// stall namespace deletion, where everything is marked at once and the
+	// Certificate finalizers need the very CA service that is going away.
+	//
+	// One the CA owns cannot outlive it either -- garbage collection removes it
+	// together with its owner. The operator-signing Certificate is exactly that,
+	// and counting it deadlocks outright: the CA waits for a Certificate that
+	// only disappears once the CA is gone. That is what made `helm uninstall
+	// --wait` hang until its own timeout.
 	blocking := make([]string, 0, len(certs))
 	for i := range certs {
-		if certs[i].DeletionTimestamp.IsZero() {
-			blocking = append(blocking, certs[i].Name)
+		cert := &certs[i]
+		if !cert.DeletionTimestamp.IsZero() || metav1.IsControlledBy(cert, ca) {
+			continue
 		}
+		blocking = append(blocking, cert.Name)
 	}
 
 	if len(blocking) > 0 {

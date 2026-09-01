@@ -221,3 +221,87 @@ func TestCAReconcile_DeletionBlockedByLiveCertificateAmongTerminating(t *testing
 		t.Errorf("the live certificate should be named as blocking: %q", cond.Message)
 	}
 }
+
+// TestCAReconcile_DeletionNotBlockedByOwnedCertificate is the deadlock that
+// made `helm uninstall --wait` hang.
+//
+// The operator-signing Certificate is created by the CA controller and carries
+// a controller reference to the CA, so garbage collection removes it together
+// with its owner. Counting it as blocking means the CA waits for a Certificate
+// that can only disappear once the CA itself is gone -- and unlike during
+// namespace deletion, nothing else marks it for deletion to break the cycle.
+func TestCAReconcile_DeletionNotBlockedByOwnedCertificate(t *testing.T) {
+	now := metav1.Now()
+	ca := newCertificateAuthority("production-ca")
+	ca.UID = "ca-uid"
+	ca.DeletionTimestamp = &now
+	ca.Finalizers = []string{certificateAuthorityFinalizer}
+
+	owned := newCertificate("production-ca-operator-signing", "production-ca", openvoxv1alpha1.CertificatePhaseSigned)
+	ownedBy(ca, owned)
+
+	c := setupTestClient(ca, owned)
+	r := newCertificateAuthorityReconciler(c)
+
+	res, err := r.Reconcile(testCtx(), testRequest("production-ca"))
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if res.RequeueAfter != 0 {
+		t.Errorf("a CA must not wait for a Certificate it owns, got %v", res.RequeueAfter)
+	}
+
+	got := &openvoxv1alpha1.CertificateAuthority{}
+	getErr := c.Get(testCtx(), types.NamespacedName{Name: "production-ca", Namespace: testNamespace}, got)
+	switch {
+	case apierrors.IsNotFound(getErr):
+	case getErr != nil:
+		t.Fatalf("reading CertificateAuthority: %v", getErr)
+	case controllerutil.ContainsFinalizer(got, certificateAuthorityFinalizer):
+		t.Error("the finalizer must be released when the only certificate is owned by the CA")
+	}
+}
+
+// TestCAReconcile_DeletionStillBlockedByIndependentCertificate keeps the
+// protection: a Certificate the user created stands on its own and does block.
+func TestCAReconcile_DeletionStillBlockedByIndependentCertificate(t *testing.T) {
+	now := metav1.Now()
+	ca := newCertificateAuthority("production-ca")
+	ca.UID = "ca-uid"
+	ca.DeletionTimestamp = &now
+	ca.Finalizers = []string{certificateAuthorityFinalizer}
+
+	owned := newCertificate("production-ca-operator-signing", "production-ca", openvoxv1alpha1.CertificatePhaseSigned)
+	ownedBy(ca, owned)
+	independent := newCertificate("web-cert", "production-ca", openvoxv1alpha1.CertificatePhaseSigned)
+
+	c := setupTestClient(ca, owned, independent)
+	r := newCertificateAuthorityReconciler(c)
+
+	res, err := r.Reconcile(testCtx(), testRequest("production-ca"))
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if res.RequeueAfter == 0 {
+		t.Error("expected the controller to keep waiting for the independent certificate")
+	}
+
+	got := &openvoxv1alpha1.CertificateAuthority{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "production-ca", Namespace: testNamespace}, got); err != nil {
+		t.Fatalf("the CertificateAuthority must still exist: %v", err)
+	}
+	if !controllerutil.ContainsFinalizer(got, certificateAuthorityFinalizer) {
+		t.Fatal("the finalizer must not be released while an independent certificate exists")
+	}
+
+	cond := meta.FindStatusCondition(got.Status.Conditions, openvoxv1alpha1.ConditionCADeletionBlocked)
+	if cond == nil {
+		t.Fatal("expected a DeletionBlocked condition")
+	}
+	if strings.Contains(cond.Message, "operator-signing") {
+		t.Errorf("a certificate owned by the CA must not be listed as blocking: %q", cond.Message)
+	}
+	if !strings.Contains(cond.Message, "web-cert") {
+		t.Errorf("the independent certificate should be named: %q", cond.Message)
+	}
+}

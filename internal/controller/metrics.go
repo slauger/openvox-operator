@@ -29,6 +29,17 @@ var (
 		},
 		[]string{"name", "namespace"},
 	)
+
+	// crlLastRefreshTimestamp makes a stalled CRL refresh alertable. A CRL that
+	// is no longer being updated means revoked agents keep being accepted, and
+	// nothing else in the status surfaces that.
+	crlLastRefreshTimestamp = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "openvox_crl_last_refresh_timestamp_seconds",
+			Help: "Unix timestamp of the last successful CRL refresh for a CertificateAuthority.",
+		},
+		[]string{"name", "namespace"},
+	)
 )
 
 func init() {
@@ -36,5 +47,33 @@ func init() {
 		serverReplicasDesired,
 		serverReplicasReady,
 		certificateExpiryTimestamp,
+		crlLastRefreshTimestamp,
 	)
+}
+
+// A gauge series outlives the resource it describes unless it is removed
+// explicitly: the client library keeps every label combination it has ever
+// seen. Without this an alert on a deleted Server keeps firing, expiry alerts
+// fire for certificates nobody holds any more, and a cluster with churn grows
+// its series count without bound.
+//
+// All of these are safe to call for a resource that never had a series.
+
+// forgetServerMetrics drops the replica gauges for a Server that is gone.
+func forgetServerMetrics(name, namespace string) {
+	serverReplicasDesired.DeleteLabelValues(name, namespace)
+	serverReplicasReady.DeleteLabelValues(name, namespace)
+}
+
+// forgetCertificateMetrics drops the expiry gauge for a Certificate that is
+// gone.
+func forgetCertificateMetrics(name, namespace string) {
+	certificateExpiryTimestamp.DeleteLabelValues(name, namespace)
+}
+
+// forgetCertificateAuthorityMetrics drops the gauges a CertificateAuthority
+// reports under its own name.
+func forgetCertificateAuthorityMetrics(name, namespace string) {
+	certificateExpiryTimestamp.DeleteLabelValues(name, namespace)
+	crlLastRefreshTimestamp.DeleteLabelValues(name, namespace)
 }

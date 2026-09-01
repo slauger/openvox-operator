@@ -67,6 +67,9 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	server := &openvoxv1alpha1.Server{}
 	if err := r.Get(ctx, req.NamespacedName, server); err != nil {
 		if errors.IsNotFound(err) {
+			// The Server carries no finalizer, so this is the only point at
+			// which its gauges can be retired.
+			forgetServerMetrics(req.Name, req.Namespace)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("getting Server %s: %w", req.NamespacedName, err)

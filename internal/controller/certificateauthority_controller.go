@@ -66,6 +66,7 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 	ca := &openvoxv1alpha1.CertificateAuthority{}
 	if err := r.Get(ctx, req.NamespacedName, ca); err != nil {
 		if errors.IsNotFound(err) {
+			forgetCertificateAuthorityMetrics(req.Name, req.Namespace)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("getting CertificateAuthority %s: %w", req.NamespacedName, err)
@@ -281,6 +282,7 @@ func (r *CertificateAuthorityReconciler) handleDeletion(ctx context.Context, ca 
 	}
 
 	logger.Info("no Certificates left, releasing CertificateAuthority finalizer", "name", ca.Name)
+	forgetCertificateAuthorityMetrics(ca.Name, ca.Namespace)
 	patch := client.MergeFrom(ca.DeepCopy())
 	controllerutil.RemoveFinalizer(ca, certificateAuthorityFinalizer)
 	if err := r.Patch(ctx, ca, patch); err != nil {

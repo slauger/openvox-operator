@@ -57,6 +57,42 @@ spec:
                 ready: 1
                 desired: 1
 
+    - name: Assert Server pods run the image under test
+      description: |
+        spec.image on the Config reached no Server until #549 removed the nested
+        default from ImageSpec, so the suite silently ran against
+        openvox-server-8:latest instead of the image built for this run. This
+        step makes that regression fail here instead of passing quietly.
+      try:
+        - script:
+            timeout: 1m
+            content: |
+              set -eu
+              IMAGE_TAG=${IMAGE_TAG:-$(git describe --always)}
+              IMAGE_REGISTRY=${IMAGE_REGISTRY:-ghcr.io/slauger}
+              EXPECTED="${IMAGE_REGISTRY}/openvox-server-${OPENVOX_MAJOR:-8}:${IMAGE_TAG}"
+
+              ACTUAL=$(kubectl get pods -n e2e-single-node \
+                -l openvox.voxpupuli.org/server=openvox-stack-single-ca \
+                -o jsonpath='{.items[*].spec.containers[?(@.name=="openvox-server")].image}')
+
+              if [ -z "${ACTUAL}" ]; then
+                echo "no Server pods found, cannot verify the image under test"
+                exit 1
+              fi
+
+              for image in ${ACTUAL}; do
+                if [ "${image}" != "${EXPECTED}" ]; then
+                  echo "Server pod runs ${image}, expected ${EXPECTED}"
+                  echo "spec.image on the Config is not reaching the Server."
+                  exit 1
+                fi
+              done
+
+              echo "Server pods run ${EXPECTED}"
+      catch:
+        - events: {}
+
     - name: Check operator logs for errors (warning only)
       try:
         - script:

@@ -172,29 +172,49 @@ spec:
     - name: Assert the agent's facts landed in PuppetDB
       try:
         - script:
-            timeout: 3m
+            timeout: 4m
             content: |
               set -eu
               NS=e2e-database-cnpg
               CERTNAME=agent-db-facts-test
+              QUERY=http://127.0.0.1:8080/pdb/query/v4
+
               # PuppetDB ingests commands asynchronously, so poll the query API (plain
               # HTTP on localhost inside the puppetdb pod) until the node's facts appear.
+              #
+              # The budget is a wall-clock deadline rather than an iteration count.
+              # Thirty iterations of sleep 5 plus the kubectl exec overhead ran past
+              # the step timeout, so the script was killed before it could print the
+              # diagnostic below -- the one output that tells a missing fact apart
+              # from a query API that never answered.
+              DEADLINE=$(( $(date +%s) + 150 ))
+              reachable=0
               found=0
-              for i in $(seq 1 30); do
-                OUT=$(kubectl exec deploy/openvox-stack-db-puppetdb -n "${NS}" -- \
-                  curl -sf "http://127.0.0.1:8080/pdb/query/v4/facts" 2>/dev/null || true)
-                if echo "${OUT}" | grep -q "\"${CERTNAME}\""; then
-                  found=1
-                  echo "OK: PuppetDB has facts for ${CERTNAME}"
-                  break
+              while [ "$(date +%s)" -lt "${DEADLINE}" ]; do
+                if OUT=$(kubectl exec deploy/openvox-stack-db-puppetdb -n "${NS}" -- \
+                     curl -sf --max-time 10 "${QUERY}/facts" 2>/dev/null); then
+                  reachable=1
+                  if echo "${OUT}" | grep -q "\"${CERTNAME}\""; then
+                    found=1
+                    echo "OK: PuppetDB has facts for ${CERTNAME}"
+                    break
+                  fi
                 fi
-                echo "waiting for facts to be ingested (${i})..."
+                echo "waiting for facts to be ingested ($(( DEADLINE - $(date +%s) ))s left)..."
                 sleep 5
               done
+
               if [ "${found}" -ne 1 ]; then
-                echo "ERROR: no facts for ${CERTNAME} in PuppetDB (routes.yaml facts terminus not effective)"
+                if [ "${reachable}" -ne 1 ]; then
+                  echo "ERROR: the PuppetDB query API never answered, so nothing can be concluded about the facts"
+                else
+                  echo "ERROR: no facts for ${CERTNAME} in PuppetDB (routes.yaml facts terminus not effective)"
+                fi
+                echo "--- nodes known to PuppetDB ---"
                 kubectl exec deploy/openvox-stack-db-puppetdb -n "${NS}" -- \
-                  curl -sf "http://127.0.0.1:8080/pdb/query/v4/nodes" 2>/dev/null || true
+                  curl -sf --max-time 10 "${QUERY}/nodes" 2>/dev/null || echo "(the nodes query failed as well)"
+                echo "--- pods in ${NS} ---"
+                kubectl get pods -n "${NS}" 2>&1 || true
                 exit 1
               fi
 

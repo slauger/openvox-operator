@@ -146,21 +146,32 @@ jobs:
                 {"role": "system", "content": $system},
                 {"role": "user", "content": $user}
               ],
-              "model": "gpt-4.1",
+              "model": "openai/gpt-4.1",
               "temperature": 0.7,
               "max_tokens": 4000
             }')
 
-          API_RESPONSE=$(echo "$REQUEST_JSON" | curl -s -X POST \
-            "https://models.inference.ai.azure.com/chat/completions" \
+          # The step runs under `bash -e`, so a failing curl aborts it outright
+          # and the fallback below never runs. Keep the exit code instead.
+          CURL_EXIT=0
+          API_RESPONSE=$(echo "$REQUEST_JSON" | curl -sS --max-time 120 -X POST \
+            "https://models.github.ai/inference/chat/completions" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ github.token }}" \
-            -d @-)
+            -d @- 2>/tmp/curl_err.txt) || CURL_EXIT=$?
 
-          ANALYSIS=$(echo "$API_RESPONSE" | jq -r '.choices[0].message.content // empty')
+          ANALYSIS=$(printf '%s' "$API_RESPONSE" | jq -r '.choices[0].message.content // empty' 2>/dev/null || true)
 
           if [ -z "$ANALYSIS" ]; then
             echo "::warning::AI analysis failed, using fallback description"
+            # Without this the next outage looks identical to a model that
+            # simply returned nothing.
+            echo "curl exit code: ${CURL_EXIT}"
+            if [ -s /tmp/curl_err.txt ]; then
+              sed 's/^/curl: /' /tmp/curl_err.txt
+            fi
+            printf '%s' "$API_RESPONSE" | head -c 500 | sed 's/^/response: /'
+            echo
             ANALYSIS="Release ${NEXT:-develop -> main}
 
           ## Changes

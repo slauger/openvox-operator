@@ -82,6 +82,7 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	cert := &openvoxv1alpha1.Certificate{}
 	if err := r.Get(ctx, req.NamespacedName, cert); err != nil {
 		if errors.IsNotFound(err) {
+			forgetCertificateMetrics(req.Name, req.Namespace)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("getting Certificate %s: %w", req.NamespacedName, err)
@@ -115,6 +116,7 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 					return ctrl.Result{RequeueAfter: RequeueIntervalLong}, nil
 				}
 			}
+			forgetCertificateMetrics(cert.Name, cert.Namespace)
 			patch := client.MergeFrom(cert.DeepCopy())
 			controllerutil.RemoveFinalizer(cert, certificateFinalizer)
 			if err := r.Patch(ctx, cert, patch); err != nil {

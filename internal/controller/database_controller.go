@@ -164,7 +164,10 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	// Update status
-	ready := r.getReadyReplicas(ctx, db)
+	ready, err := r.getReadyReplicas(ctx, db)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("reading ready replicas for Database %s: %w", db.Name, err)
+	}
 	if err := updateStatusWithRetry(ctx, r.Client, db, func() {
 		replicas := int32(1)
 		if db.Spec.Replicas != nil {
@@ -303,12 +306,18 @@ func (r *DatabaseReconciler) reconcileService(ctx context.Context, db *openvoxv1
 	return nil
 }
 
-func (r *DatabaseReconciler) getReadyReplicas(ctx context.Context, db *openvoxv1alpha1.Database) int32 {
+// getReadyReplicas reports how many replicas of the Database Deployment are
+// ready. A missing Deployment counts as zero; any other error is returned so a
+// transient lookup failure does not masquerade as an idle workload.
+func (r *DatabaseReconciler) getReadyReplicas(ctx context.Context, db *openvoxv1alpha1.Database) (int32, error) {
 	deploy := &appsv1.Deployment{}
 	if err := r.Get(ctx, types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, deploy); err != nil {
-		return 0
+		if errors.IsNotFound(err) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("getting Deployment %s: %w", db.Name, err)
 	}
-	return deploy.Status.ReadyReplicas
+	return deploy.Status.ReadyReplicas, nil
 }
 
 func (r *DatabaseReconciler) reconcilePDB(ctx context.Context, db *openvoxv1alpha1.Database) error {

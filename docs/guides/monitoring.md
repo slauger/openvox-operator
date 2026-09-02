@@ -24,6 +24,10 @@ This passes `--metrics-bind-address=0` to the operator and removes the metrics p
 | `openvox_server_replicas_desired` | Gauge | `name`, `namespace` | Desired number of replicas for a Server CR |
 | `openvox_server_replicas_ready` | Gauge | `name`, `namespace` | Number of ready replicas for a Server CR |
 | `openvox_certificate_expiry_timestamp_seconds` | Gauge | `name`, `namespace` | Unix timestamp when a certificate or CA expires |
+| `openvox_crl_last_refresh_timestamp_seconds` | Gauge | `name`, `namespace` | Unix timestamp of the last successful CRL refresh for a CertificateAuthority |
+
+All series are removed when the resource they describe is deleted, so alerts
+do not keep firing for objects that no longer exist.
 
 ### Controller-Runtime Metrics
 
@@ -108,6 +112,22 @@ Alert when a certificate expires within 30 days:
         annotations:
           summary: "OpenVox certificate {{ $labels.name }} expires soon"
           description: "{{ $labels.name }} in {{ $labels.namespace }} expires in {{ $value | humanizeDuration }}"
+```
+
+### Stale CRL
+
+A CRL that is no longer refreshed means revoked agents keep being accepted.
+Alert when the last successful refresh is more than a day old:
+
+```yaml
+      - alert: OpenVoxCRLStale
+        expr: time() - openvox_crl_last_refresh_timestamp_seconds > 24 * 3600
+        for: 1h
+        labels:
+          severity: critical
+        annotations:
+          summary: "OpenVox CRL for {{ $labels.name }} is stale"
+          description: "The CRL of {{ $labels.name }} in {{ $labels.namespace }} was last refreshed {{ $value | humanizeDuration }} ago, so revoked agents may still be accepted"
 ```
 
 ### CA Expiring

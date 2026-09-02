@@ -84,5 +84,5 @@ spec:
             timeout: 2m
             content: |
               kubectl delete config --all -n e2e-webhook-val-config --ignore-not-found 2>/dev/null || true
-              kubectl delete certificateauthority --all -n e2e-webhook-val-config --ignore-not-found 2>/dev/null || true
+              kubectl delete certificateauthority --all -n e2e-webhook-val-config --timeout=120s --ignore-not-found 2>/dev/null || true
               kubectl delete namespace e2e-webhook-val-config --ignore-not-found 2>/dev/null || true

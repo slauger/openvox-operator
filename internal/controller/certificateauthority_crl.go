@@ -46,6 +46,8 @@ func (r *CertificateAuthorityReconciler) reconcileCRLRefresh(ctx context.Context
 		return ctrl.Result{}, fmt.Errorf("updating CRL secret: %w", err)
 	}
 
+	crlLastRefreshTimestamp.WithLabelValues(ca.Name, ca.Namespace).Set(float64(time.Now().Unix()))
+
 	logger.Info("CRL secret refreshed", "secret", crlSecretName, "nextRefresh", interval)
 	r.Recorder.Eventf(ca, nil, corev1.EventTypeNormal, EventReasonCRLRefreshed, "Reconcile", "CRL refreshed successfully, next refresh in %s", interval)
 	return ctrl.Result{RequeueAfter: interval}, nil

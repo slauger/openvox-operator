@@ -19,10 +19,14 @@ metadata:
 spec:
   authorityRef: {{ include "openvox-stack.caName" . }}
   certname: {{ .Values.database.certificate.certname }}
-  {{- with .Values.database.certificate.dnsAltNames }}
   dnsAltNames:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+    {{- /* The server connects to the Database through its Service, using the FQDN
+           the operator publishes in status.url, so the certificate has to cover
+           those names. */}}
+    {{- $svc := .Values.database.name }}
+    {{- $autoNames := list $svc (printf "%s.%s.svc" $svc .Release.Namespace) (printf "%s.%s.svc.cluster.local" $svc .Release.Namespace) }}
+    {{- $allNames := concat $autoNames (.Values.database.certificate.dnsAltNames | default list) | uniq }}
+    {{- toYaml $allNames | nindent 4 }}
 ---
 apiVersion: openvox.voxpupuli.org/v1alpha1
 kind: Database

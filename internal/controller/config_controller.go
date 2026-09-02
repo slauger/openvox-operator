@@ -28,6 +28,11 @@ type ConfigReconciler struct {
 	Recorder events.EventRecorder
 }
 
+// Event reasons for Config.
+const (
+	EventReasonReportWebhookRenderFailed = "ReportWebhookRenderFailed"
+)
+
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=configs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=configs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=configs/finalizers,verbs=update
@@ -36,8 +41,8 @@ type ConfigReconciler struct {
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=nodeclassifiers,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=nodeclassifiers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=databases,verbs=get;list;watch
+// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificateauthorities,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=reportprocessors,verbs=get;list;watch
-// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=reportprocessors/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=configmaps;serviceaccounts;secrets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch;delete
 
@@ -50,6 +55,15 @@ func (r *ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
+	}
+
+	// Pausing comes after the deletion path: a paused resource must still be
+	// deletable, otherwise the annotation turns into a trap.
+	if paused, err := reconcilePauseState(ctx, r.Client, cfg, &cfg.Status.Conditions); err != nil {
+		return ctrl.Result{}, err
+	} else if paused {
+		logger.Info("reconciliation paused by annotation", "name", cfg.Name)
+		return ctrl.Result{}, nil
 	}
 
 	// Set initial phase
@@ -89,13 +103,14 @@ func (r *ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// Update status
 	if err := updateStatusWithRetry(ctx, r.Client, cfg, func() {
+		cfg.Status.ObservedGeneration = cfg.Generation
 		cfg.Status.Phase = openvoxv1alpha1.ConfigPhaseRunning
 		meta.SetStatusCondition(&cfg.Status.Conditions, metav1.Condition{
 			Type:               openvoxv1alpha1.ConditionConfigReady,
 			Status:             metav1.ConditionTrue,
 			Reason:             "ConfigMapsCreated",
 			Message:            "Configuration ConfigMaps are up to date",
-			LastTransitionTime: metav1.Now(),
+			ObservedGeneration: cfg.Generation,
 		})
 	}); err != nil {
 		return ctrl.Result{}, err
@@ -122,6 +137,9 @@ func (r *ConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&openvoxv1alpha1.Database{}, handler.EnqueueRequestsFromMapFunc(
 			r.enqueueConfigsForDatabase(mgr.GetClient()),
 		)).
+		Watches(&openvoxv1alpha1.CertificateAuthority{}, handler.EnqueueRequestsFromMapFunc(
+			r.enqueueConfigsForCertificateAuthority(mgr.GetClient()),
+		)).
 		Complete(r)
 }
 
@@ -141,7 +159,10 @@ func (r *ConfigReconciler) reconcileConfigMap(ctx context.Context, cfg *openvoxv
 		return fmt.Errorf("rendering puppetdb.conf: %w", err)
 	}
 
-	ca := r.findCertificateAuthority(ctx, cfg)
+	ca, err := r.findCertificateAuthority(ctx, cfg)
+	if err != nil {
+		return err
+	}
 
 	data := map[string]string{
 		"puppet.conf":       puppetConf,
@@ -165,55 +186,48 @@ func (r *ConfigReconciler) reconcileConfigMap(ctx context.Context, cfg *openvoxv
 		data["routes.yaml"] = routes
 	}
 
-	cm := &corev1.ConfigMap{}
-	err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: cfg.Namespace}, cm)
-	if errors.IsNotFound(err) {
-		logger.Info("creating ConfigMap", "name", configMapName)
-		cm = &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      configMapName,
-				Namespace: cfg.Namespace,
-				Labels:    configLabels(cfg.Name),
-			},
-			Data: data,
-		}
-		if err := controllerutil.SetControllerReference(cfg, cm, r.Scheme); err != nil {
-			return fmt.Errorf("setting owner reference on ConfigMap %s: %w", configMapName, err)
-		}
-		return r.Create(ctx, cm)
-	} else if err != nil {
-		return fmt.Errorf("getting ConfigMap %s: %w", configMapName, err)
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: configMapName, Namespace: cfg.Namespace},
 	}
-
-	cm.Data = data
-	return r.Update(ctx, cm)
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, cm, func() error {
+		if err := assertControlledBy(cm, cfg, "ConfigMap"); err != nil {
+			return err
+		}
+		cm.Labels = configLabels(cfg.Name)
+		cm.Data = data
+		return controllerutil.SetControllerReference(cfg, cm, r.Scheme)
+	})
+	if err != nil {
+		return fmt.Errorf("reconciling ConfigMap %s: %w", configMapName, err)
+	}
+	if op == controllerutil.OperationResultCreated {
+		logger.Info("created ConfigMap", "name", configMapName)
+	}
+	return nil
 }
 
 // reconcileSecret creates or updates a Secret owned by the given Config.
 func (r *ConfigReconciler) reconcileSecret(ctx context.Context, cfg *openvoxv1alpha1.Config, name string, data map[string][]byte) error {
 	logger := log.FromContext(ctx)
-	existing := &corev1.Secret{}
-	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: cfg.Namespace}, existing)
-	if errors.IsNotFound(err) {
-		logger.Info("creating Secret", "name", name)
-		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: cfg.Namespace,
-				Labels:    configLabels(cfg.Name),
-			},
-			Data: data,
-		}
-		if err := controllerutil.SetControllerReference(cfg, secret, r.Scheme); err != nil {
-			return fmt.Errorf("setting owner reference on Secret %s: %w", name, err)
-		}
-		return r.Create(ctx, secret)
-	} else if err != nil {
-		return fmt.Errorf("getting Secret %s: %w", name, err)
-	}
 
-	existing.Data = data
-	return r.Update(ctx, existing)
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: cfg.Namespace},
+	}
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, secret, func() error {
+		if err := assertControlledBy(secret, cfg, "Secret"); err != nil {
+			return err
+		}
+		secret.Labels = configLabels(cfg.Name)
+		secret.Data = data
+		return controllerutil.SetControllerReference(cfg, secret, r.Scheme)
+	})
+	if err != nil {
+		return fmt.Errorf("reconciling Secret %s: %w", name, err)
+	}
+	if op == controllerutil.OperationResultCreated {
+		logger.Info("created Secret", "name", name)
+	}
+	return nil
 }
 
 func (r *ConfigReconciler) enqueueConfigsForDatabase(c client.Reader) handler.MapFunc {
@@ -241,13 +255,46 @@ func (r *ConfigReconciler) enqueueConfigsForDatabase(c client.Reader) handler.Ma
 	}
 }
 
-func (r *ConfigReconciler) findCertificateAuthority(ctx context.Context, cfg *openvoxv1alpha1.Config) *openvoxv1alpha1.CertificateAuthority {
+// enqueueConfigsForCertificateAuthority maps a CertificateAuthority change to
+// every Config referencing it. puppet.conf, auth.conf and ca.conf are all
+// rendered from the CA spec, so the Config has to re-render when it changes --
+// including when the CA is created after the Config.
+func (r *ConfigReconciler) enqueueConfigsForCertificateAuthority(c client.Client) handler.MapFunc {
+	return func(ctx context.Context, obj client.Object) []reconcile.Request {
+		cfgList := &openvoxv1alpha1.ConfigList{}
+		if err := c.List(ctx, cfgList,
+			client.InNamespace(obj.GetNamespace()),
+			client.MatchingFields{IndexAuthorityRef: obj.GetName()}); err != nil {
+			log.FromContext(ctx).Error(err, "failed to list Configs in watcher", "ca", obj.GetName())
+			return nil
+		}
+
+		requests := make([]reconcile.Request, 0, len(cfgList.Items))
+		for _, cfg := range cfgList.Items {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: cfg.Name, Namespace: cfg.Namespace},
+			})
+		}
+		return requests
+	}
+}
+
+// findCertificateAuthority resolves the Config's authorityRef.
+//
+// It returns (nil, nil) when no authorityRef is set or the referenced
+// CertificateAuthority does not exist -- both are legitimate states the caller
+// renders around. Any other error is returned so the reconcile aborts instead
+// of writing a configuration that silently omits the CA settings.
+func (r *ConfigReconciler) findCertificateAuthority(ctx context.Context, cfg *openvoxv1alpha1.Config) (*openvoxv1alpha1.CertificateAuthority, error) {
 	if cfg.Spec.AuthorityRef == "" {
-		return nil
+		return nil, nil
 	}
 	ca := &openvoxv1alpha1.CertificateAuthority{}
 	if err := r.Get(ctx, types.NamespacedName{Name: cfg.Spec.AuthorityRef, Namespace: cfg.Namespace}, ca); err != nil {
-		return nil
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("getting CertificateAuthority %s: %w", cfg.Spec.AuthorityRef, err)
 	}
-	return ca
+	return ca, nil
 }

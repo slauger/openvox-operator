@@ -477,7 +477,8 @@ func TestDatabaseReconcile_NetworkPolicyDeletion(t *testing.T) {
 	existingNP.Name = "test-db-netpol"
 	existingNP.Namespace = testNamespace
 
-	objs := append(databasePrereqs(), newDatabase("test-db"), existingNP)
+	database := newDatabase("test-db")
+	objs := append(databasePrereqs(), database, ownedBy(database, existingNP))
 	c := setupTestClient(objs...)
 	r := newDatabaseReconciler(c)
 
@@ -589,7 +590,7 @@ func TestDatabaseReconcile_PDBDisabledDeletesExisting(t *testing.T) {
 	db := newDatabase("test-db")
 	// PDB disabled (nil)
 
-	objs := append(databasePrereqs(), db, existingPDB)
+	objs := append(databasePrereqs(), db, ownedBy(db, existingPDB))
 	c := setupTestClient(objs...)
 	r := newDatabaseReconciler(c)
 

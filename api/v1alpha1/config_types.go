@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -34,6 +35,7 @@ type ConfigList struct {
 }
 
 // ConfigSpec defines the desired state of Config.
+// +kubebuilder:validation:XValidation:rule="has(self.image.repository) && size(self.image.repository) > 0 && has(self.image.tag) && size(self.image.tag) > 0",message="spec.image.repository and spec.image.tag are required"
 type ConfigSpec struct {
 	// Image defines the default container image for all Servers in this Config.
 	Image ImageSpec `json:"image"`
@@ -78,6 +80,11 @@ type ConfigSpec struct {
 	// with more than one entry each must set a unique environment or a mountPath.
 	// +kubebuilder:validation:MaxItems=64
 	// +kubebuilder:validation:XValidation:rule="size(self) <= 1 || self.all(e, (has(e.environment) && e.environment != '') || (has(e.mountPath) && e.mountPath != ''))",message="with more than one code entry, each entry must set either environment or mountPath"
+	// Deliberately an atomic list: the entries have no stable key. Both
+	// environment and mountPath are optional and mutually exclusive, and a
+	// single entry may set neither, so a listMapKey would contradict the CEL
+	// validation above.
+	// +listType=atomic
 	// +optional
 	Code []CodeSpec `json:"code,omitempty"`
 
@@ -86,7 +93,7 @@ type ConfigSpec struct {
 	// server-var-dir is redirected to /run/puppetserver.
 	// +kubebuilder:default=true
 	// +optional
-	ReadOnlyRootFilesystem bool `json:"readOnlyRootFilesystem,omitempty"`
+	ReadOnlyRootFilesystem *bool `json:"readOnlyRootFilesystem,omitempty"`
 }
 
 // PuppetServerSpec defines puppetserver.conf, webserver.conf and auth.conf settings.
@@ -119,6 +126,10 @@ type PuppetServerSpec struct {
 	HTTPClient *HTTPClientSpec `json:"httpClient,omitempty"`
 
 	// AuthorizationRules defines custom authorization rules inserted before the deny-all rule.
+	// Rules are keyed by name; evaluation order comes from sortOrder, not from
+	// the position in this list.
+	// +listType=map
+	// +listMapKey=name
 	// +optional
 	AuthorizationRules []AuthorizationRule `json:"authorizationRules,omitempty"`
 }
@@ -172,6 +183,7 @@ type AuthorizationMatchRequest struct {
 	Type string `json:"type,omitempty"`
 
 	// Method is the list of HTTP methods to match.
+	// +listType=set
 	// +optional
 	Method []string `json:"method,omitempty"`
 }
@@ -301,11 +313,23 @@ const (
 
 // ConfigStatus defines the observed state of Config.
 type ConfigStatus struct {
-	// Phase is the current lifecycle phase.
+	// ObservedGeneration is the .metadata.generation that was last processed by
+	// the controller. A value below .metadata.generation means the rest of this
+	// status has not caught up with the current spec yet.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Phase is a coarse, human-readable summary of the observed state.
+	//
+	// It is derived on every reconcile and is never read back as controller
+	// input: use Conditions for anything machine-readable. Editing or losing
+	// the phase does not change what the operator does.
 	// +optional
 	Phase ConfigPhase `json:"phase,omitempty"`
 
 	// Conditions represent the latest available observations.
+	// +listType=map
+	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
@@ -352,13 +376,24 @@ type PodSecurityContextSpec struct {
 }
 
 // ImageSpec defines the container image reference.
+//
+// Neither field carries a default. A default here would be applied to every
+// embedding resource, which had two consequences: a Database without an
+// explicit image inherited the *server* image, and a Server always came back
+// with the defaulted values, so spec.image on its Config was never reached by
+// the override logic. Where a default belongs is the Helm chart -- moving the
+// registry there also keeps a distribution detail out of the API contract.
 type ImageSpec struct {
 	// Repository is the container image repository.
-	// +kubebuilder:default="ghcr.io/slauger/openvox-server-8"
+	// Required on Config and Database; on Server it is optional and falls back
+	// to the Config's repository.
+	// +optional
 	Repository string `json:"repository,omitempty"`
 
 	// Tag is the container image tag.
-	// +kubebuilder:default="latest"
+	// Required on Config and Database; on Server it is optional and falls back
+	// to the Config's tag.
+	// +optional
 	Tag string `json:"tag,omitempty"`
 
 	// PullPolicy defines the image pull policy.
@@ -385,9 +420,13 @@ type IntermediateCASpec struct {
 // StorageSpec defines PVC settings.
 type StorageSpec struct {
 	// Size is the requested storage size.
+	//
+	// A pointer, because omitempty has no effect on resource.Quantity: the value
+	// type always marshals (as "0" when unset), so the field would never be
+	// absent and the default below would never be applied.
 	// +kubebuilder:default="1Gi"
 	// +optional
-	Size string `json:"size,omitempty"`
+	Size *resource.Quantity `json:"size,omitempty"`
 
 	// StorageClass is the storage class name. Empty means default.
 	// +optional
@@ -414,7 +453,7 @@ type PuppetSpec struct {
 	// Storeconfigs enables storeconfigs.
 	// +kubebuilder:default=true
 	// +optional
-	Storeconfigs bool `json:"storeconfigs,omitempty"`
+	Storeconfigs *bool `json:"storeconfigs,omitempty"`
 
 	// StoreBackend is the storeconfigs backend.
 	// +kubebuilder:default="puppetdb"
@@ -468,6 +507,10 @@ type PuppetExtraConfig struct {
 // PuppetDBSpec defines the OpenVox DB connection.
 type PuppetDBSpec struct {
 	// ServerURLs is a list of OpenVox DB server URLs.
+	//
+	// Deliberately an ordered (atomic) list: the values are joined in order into
+	// puppetdb.conf, where Puppet treats the order as failover priority.
+	// +listType=atomic
 	// +optional
 	ServerURLs []string `json:"serverUrls,omitempty"`
 }

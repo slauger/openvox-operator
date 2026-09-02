@@ -358,7 +358,7 @@ func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openv
 					Status:             metav1.ConditionFalse,
 					Reason:             "CSRPollingTimeout",
 					Message:            timeoutMsg,
-					LastTransitionTime: metav1.Now(),
+					ObservedGeneration: cert.Generation,
 				})
 			}); statusErr != nil {
 				logger.Error(statusErr, "failed to update Certificate status to Error")
@@ -400,7 +400,7 @@ func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openv
 					Status:             metav1.ConditionFalse,
 					Reason:             "WaitingForManualSigning",
 					Message:            waitMsg,
-					LastTransitionTime: metav1.Now(),
+					ObservedGeneration: cert.Generation,
 				})
 			}); statusErr != nil {
 				logger.Error(statusErr, "failed to update Certificate status to WaitingForSigning")
@@ -457,7 +457,7 @@ func (r *CertificateReconciler) reconcileCertRenewal(ctx context.Context, cert *
 				Status:             metav1.ConditionFalse,
 				Reason:             "RenewalFailed",
 				Message:            errMsg,
-				LastTransitionTime: metav1.Now(),
+				ObservedGeneration: cert.Generation,
 			})
 		}); statusErr != nil {
 			logger.Error(statusErr, "failed to update Certificate status", "name", cert.Name)
@@ -615,6 +615,8 @@ func (r *CertificateReconciler) renewCertificate(ctx context.Context, cert *open
 	// Server sees the stale Renewing phase and transitions to Pending.
 	notAfter := parseCertNotAfter(ctx, body)
 	if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
+		cert.Status.ObservedGeneration = cert.Generation
+		cert.Status.SignedSpecHash = signingSpecHash(cert)
 		cert.Status.Phase = openvoxv1alpha1.CertificatePhaseSigned
 		cert.Status.SecretName = tlsSecretName
 		cert.Status.NotAfter = notAfter
@@ -623,7 +625,7 @@ func (r *CertificateReconciler) renewCertificate(ctx context.Context, cert *open
 			Status:             metav1.ConditionTrue,
 			Reason:             "CertificateRenewed",
 			Message:            "Certificate has been renewed",
-			LastTransitionTime: metav1.Now(),
+			ObservedGeneration: cert.Generation,
 		})
 	}); err != nil {
 		return fmt.Errorf("updating Certificate status to Signed: %w", err)

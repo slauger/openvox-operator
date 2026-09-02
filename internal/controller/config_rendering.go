@@ -35,7 +35,7 @@ func (r *ConfigReconciler) renderPuppetConf(ctx context.Context, cfg *openvoxv1a
 		fmt.Fprintf(&sb, "environment_timeout = %s\n", cfg.Spec.Puppet.EnvironmentTimeout)
 	}
 
-	if cfg.Spec.Puppet.Storeconfigs {
+	if openvoxv1alpha1.BoolValue(cfg.Spec.Puppet.Storeconfigs, true) {
 		sb.WriteString("storeconfigs = true\n")
 		if cfg.Spec.Puppet.StoreBackend != "" {
 			fmt.Fprintf(&sb, "storeconfigs_backend = %s\n", cfg.Spec.Puppet.StoreBackend)
@@ -60,7 +60,11 @@ func (r *ConfigReconciler) renderPuppetConf(ctx context.Context, cfg *openvoxv1a
 	}
 
 	// CA settings from CertificateAuthority (if one exists for this Config)
-	if ca := r.findCertificateAuthority(ctx, cfg); ca != nil {
+	ca, err := r.findCertificateAuthority(ctx, cfg)
+	if err != nil {
+		return "", err
+	}
+	if ca != nil {
 		if ca.Spec.TTL != "" {
 			ttlSeconds, err := openvoxv1alpha1.ParseDurationToSeconds(ca.Spec.TTL)
 			if err != nil {
@@ -162,7 +166,7 @@ func puppetDBActiveForFacts(cfg *openvoxv1alpha1.Config) bool {
 	if !wired {
 		return false
 	}
-	return (cfg.Spec.Puppet.Storeconfigs && cfg.Spec.Puppet.StoreBackend == "puppetdb") ||
+	return (openvoxv1alpha1.BoolValue(cfg.Spec.Puppet.Storeconfigs, true) && cfg.Spec.Puppet.StoreBackend == "puppetdb") ||
 		strings.Contains(cfg.Spec.Puppet.Reports, "puppetdb")
 }
 
@@ -703,10 +707,10 @@ func (r *ConfigReconciler) renderCAConf(ca *openvoxv1alpha1.CertificateAuthority
 	autoRenewalCertTTL := "90d"
 
 	if ca != nil {
-		allowSANs = ca.Spec.AllowSubjectAltNames
-		allowAuthzExt = ca.Spec.AllowAuthorizationExtensions
-		enableInfraCRL = ca.Spec.EnableInfraCRL
-		allowAutoRenewal = ca.Spec.AllowAutoRenewal
+		allowSANs = openvoxv1alpha1.BoolValue(ca.Spec.AllowSubjectAltNames, true)
+		allowAuthzExt = openvoxv1alpha1.BoolValue(ca.Spec.AllowAuthorizationExtensions, true)
+		enableInfraCRL = openvoxv1alpha1.BoolValue(ca.Spec.EnableInfraCRL, true)
+		allowAutoRenewal = openvoxv1alpha1.BoolValue(ca.Spec.AllowAutoRenewal, true)
 		if ca.Spec.AutoRenewalCertTTL != "" {
 			autoRenewalCertTTL = ca.Spec.AutoRenewalCertTTL
 		}

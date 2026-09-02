@@ -80,6 +80,13 @@ spec:
                       - name: openvox-stack-gw-server
 
     - name: Verify DNS alt name injected into Certificate
+      description: |
+        The full expected set, in the order the chart and the operator build it:
+        the server name, the certname, then the Service name of every Pool the
+        server joins, and finally the route hostname the Pool controller
+        injects. This server has poolRefs [ca, server], so it is reachable
+        through both Services and needs both names; the ca Pool's Service name
+        equals the server name and is deduplicated away.
       try:
         - assert:
             resource:
@@ -91,6 +98,7 @@ spec:
                 dnsAltNames:
                   - openvox-stack-gw-ca
                   - puppet
+                  - openvox-stack-gw-server
                   - puppet.e2e.example.com
 
     - name: Verify no TLSRoute for CA pool

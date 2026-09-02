@@ -58,7 +58,7 @@ type ExternalCASpec struct {
 }
 
 // CertificateAuthoritySpec defines the desired state of CertificateAuthority.
-// +kubebuilder:validation:XValidation:rule="!(has(self.external) && has(self.storage) && size(self.storage.size) > 0 && self.storage.size != '1Gi')",message="external and custom storage are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(has(self.external) && has(self.storage))",message="external and storage are mutually exclusive"
 type CertificateAuthoritySpec struct {
 	// TTL is the CA certificate TTL as a duration string.
 	// Supported units: s (seconds), m (minutes), h (hours), d (days), y (years).
@@ -71,23 +71,23 @@ type CertificateAuthoritySpec struct {
 	// AllowSubjectAltNames controls whether SANs are allowed in CSRs.
 	// +kubebuilder:default=true
 	// +optional
-	AllowSubjectAltNames bool `json:"allowSubjectAltNames,omitempty"`
+	AllowSubjectAltNames *bool `json:"allowSubjectAltNames,omitempty"`
 
 	// AllowAuthorizationExtensions controls whether authorization extensions
 	// (pp_role, pp_environment, etc.) are allowed in CSRs.
 	// +kubebuilder:default=true
 	// +optional
-	AllowAuthorizationExtensions bool `json:"allowAuthorizationExtensions,omitempty"`
+	AllowAuthorizationExtensions *bool `json:"allowAuthorizationExtensions,omitempty"`
 
 	// EnableInfraCRL enables infrastructure CRL for compile server revocation.
 	// +kubebuilder:default=true
 	// +optional
-	EnableInfraCRL bool `json:"enableInfraCRL,omitempty"`
+	EnableInfraCRL *bool `json:"enableInfraCRL,omitempty"`
 
 	// AllowAutoRenewal allows agents to automatically renew certificates before expiry.
 	// +kubebuilder:default=true
 	// +optional
-	AllowAutoRenewal bool `json:"allowAutoRenewal,omitempty"`
+	AllowAutoRenewal *bool `json:"allowAutoRenewal,omitempty"`
 
 	// AutoRenewalCertTTL is the TTL threshold for automatic certificate renewal.
 	// Uses duration format: "90d", "30d", "2160h".
@@ -95,9 +95,15 @@ type CertificateAuthoritySpec struct {
 	// +optional
 	AutoRenewalCertTTL string `json:"autoRenewalCertTTL,omitempty"`
 
-	// Storage defines the PVC settings for CA data.
+	// Storage defines the PVC settings for CA data. An external CA keeps no
+	// state in the cluster, so the two are mutually exclusive.
+	//
+	// Declared as a pointer so has(self.storage) means "the user set it" rather
+	// than "the struct exists"; with a value type the exclusivity rule could
+	// only be expressed by comparing against the default size, which then
+	// wrongly accepted a storage block that happened to match that default.
 	// +optional
-	Storage StorageSpec `json:"storage,omitempty"`
+	Storage *StorageSpec `json:"storage,omitempty"`
 
 	// Resources defines the compute resources for the CA setup Job.
 	// If not specified, defaults are applied (requests: 200m CPU, 768Mi memory; limits: 1 CPU, 1Gi memory).
@@ -142,7 +148,17 @@ const (
 
 // CertificateAuthorityStatus defines the observed state of CertificateAuthority.
 type CertificateAuthorityStatus struct {
-	// Phase is the current lifecycle phase.
+	// ObservedGeneration is the .metadata.generation that was last processed by
+	// the controller. A value below .metadata.generation means the rest of this
+	// status has not caught up with the current spec yet.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Phase is a coarse, human-readable summary of the observed state.
+	//
+	// It is derived on every reconcile and is never read back as controller
+	// input: use Conditions for anything machine-readable. Editing or losing
+	// the phase does not change what the operator does.
 	// +optional
 	Phase CertificateAuthorityPhase `json:"phase,omitempty"`
 
@@ -167,13 +183,19 @@ type CertificateAuthorityStatus struct {
 	NotAfter *metav1.Time `json:"notAfter,omitempty"`
 
 	// Conditions represent the latest available observations.
+	// +listType=map
+	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // Condition types for CertificateAuthority.
 const (
-	ConditionCAReady              = "CAReady"
+	ConditionCAReady = "CAReady"
+
+	// ConditionCADeletionBlocked reports that deletion is being held back
+	// because Certificates still reference this CertificateAuthority.
+	ConditionCADeletionBlocked    = "DeletionBlocked"
 	ConditionOperatorSigningReady = "OperatorSigningReady"
 )
 

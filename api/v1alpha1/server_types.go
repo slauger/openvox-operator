@@ -47,6 +47,7 @@ type ServerSpec struct {
 	// PoolRefs lists the Pools this Server joins.
 	// The Server controller adds a pool label for each entry, making the pod
 	// selectable by the corresponding Pool's Service.
+	// +listType=set
 	// +optional
 	PoolRefs []string `json:"poolRefs,omitempty"`
 
@@ -62,9 +63,10 @@ type ServerSpec struct {
 
 	// Server enables the server role (catalog compilation, file serving).
 	// A Server with both CA and Server serves as a combined CA+server.
+	// Set this to false for a CA-only instance.
 	// +kubebuilder:default=true
 	// +optional
-	Server bool `json:"server,omitempty"`
+	Server *bool `json:"server,omitempty"`
 
 	// Replicas is the number of Server instances.
 	// +kubebuilder:default=1
@@ -95,6 +97,11 @@ type ServerSpec struct {
 	// or a mountPath.
 	// +kubebuilder:validation:MaxItems=64
 	// +kubebuilder:validation:XValidation:rule="size(self) <= 1 || self.all(e, (has(e.environment) && e.environment != '') || (has(e.mountPath) && e.mountPath != ''))",message="with more than one code entry, each entry must set either environment or mountPath"
+	// Deliberately an atomic list: the entries have no stable key. Both
+	// environment and mountPath are optional and mutually exclusive, and a
+	// single entry may set neither, so a listMapKey would contradict the CEL
+	// validation above.
+	// +listType=atomic
 	// +optional
 	Code []CodeSpec `json:"code,omitempty"`
 
@@ -207,7 +214,17 @@ const (
 
 // ServerStatus defines the observed state of Server.
 type ServerStatus struct {
-	// Phase is the current lifecycle phase.
+	// ObservedGeneration is the .metadata.generation that was last processed by
+	// the controller. A value below .metadata.generation means the rest of this
+	// status has not caught up with the current spec yet.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Phase is a coarse, human-readable summary of the observed state.
+	//
+	// It is derived on every reconcile and is never read back as controller
+	// input: use Conditions for anything machine-readable. Editing or losing
+	// the phase does not change what the operator does.
 	// +optional
 	Phase ServerPhase `json:"phase,omitempty"`
 
@@ -220,6 +237,8 @@ type ServerStatus struct {
 	Desired int32 `json:"desired,omitempty"`
 
 	// Conditions represent the latest available observations.
+	// +listType=map
+	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }

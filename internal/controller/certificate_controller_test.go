@@ -43,8 +43,7 @@ func TestCertReconcile_CANotFound(t *testing.T) {
 
 func TestCertReconcile_CANotReady(t *testing.T) {
 	cert := newCertificate("my-cert", "test-ca", "")
-	ca := newCertificateAuthority("test-ca")
-	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhasePending // not ready
+	ca := newCertificateAuthority("test-ca", withCANotReady())
 
 	c := setupTestClient(cert, ca)
 	r := newCertificateReconciler(c)
@@ -115,8 +114,7 @@ func TestCertReconcile_TLSSecretExists(t *testing.T) {
 
 func TestCertReconcile_PhasePending(t *testing.T) {
 	cert := newCertificate("my-cert", "test-ca", "")
-	ca := newCertificateAuthority("test-ca")
-	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhasePending
+	ca := newCertificateAuthority("test-ca", withCANotReady())
 
 	c := setupTestClient(cert, ca)
 	r := newCertificateReconciler(c)
@@ -222,47 +220,63 @@ func TestCertReconcile_RenewalTriggered(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Should trigger immediate requeue (renewal triggered)
+	// Should come back to look at the certificate again.
 	if res.RequeueAfter == 0 {
-		t.Error("expected RequeueAfter > 0 when renewal is triggered")
+		t.Error("expected RequeueAfter > 0 when renewal is due")
 	}
 
 	updated := &openvoxv1alpha1.Certificate{}
 	if err := c.Get(testCtx(), types.NamespacedName{Name: "my-cert", Namespace: testNamespace}, updated); err != nil {
 		t.Fatalf("failed to get Certificate: %v", err)
 	}
-	if updated.Status.Phase != openvoxv1alpha1.CertificatePhaseRenewing {
-		t.Errorf("expected phase %q, got %q", openvoxv1alpha1.CertificatePhaseRenewing, updated.Status.Phase)
+	// Renewal is no longer remembered in a phase; it is recomputed from
+	// notAfter and renewBefore on every reconcile.
+	if !r.renewalDue(updated) {
+		t.Errorf("renewal should be due 30 days before expiry with the default renewBefore of 60d (notAfter %v)",
+			updated.Status.NotAfter)
 	}
 }
 
-func TestCertReconcile_RenewingPhaseNotOverriddenByAdopt(t *testing.T) {
-	// Regression test: a cert already in Renewing phase must not be reset to
-	// Signed by the adopt-existing-secret block on the next reconcile.
+func TestCertReconcile_RenewalSurvivesStatusLoss(t *testing.T) {
+	// Renewal used to be remembered in status.phase, which the adopt block could
+	// overwrite -- losing the intent. The decision is now recomputed from
+	// notAfter and renewBefore, so any status the controller finds, including a
+	// stale phase from an older version or a hand-edited one, ends up renewing.
 	certPEM, keyPEM := generateTestCertWithExpiry(t, 30*24*time.Hour)
 
-	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhaseRenewing)
-	cert.Status.NotAfter = parseCertNotAfter(testCtx(), certPEM)
-	cert.Status.SecretName = "my-cert-tls"
 	ca := newCertificateAuthority("test-ca")
 	tlsSecret := newSecret("my-cert-tls", map[string][]byte{
 		"cert.pem": certPEM,
 		"key.pem":  keyPEM,
 	})
 
-	c := setupTestClient(cert, ca, tlsSecret)
-	r := newCertificateReconciler(c)
+	for _, tc := range []struct {
+		name  string
+		phase openvoxv1alpha1.CertificatePhase
+	}{
+		{"stale Renewing phase from an earlier version", openvoxv1alpha1.CertificatePhaseRenewing},
+		{"status phase cleared entirely", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cert := newCertificate("my-cert", "test-ca", tc.phase)
+			cert.Status.NotAfter = parseCertNotAfter(testCtx(), certPEM)
+			cert.Status.SecretName = "my-cert-tls"
 
-	// Reconcile should enter reconcileCertRenewal, not the adopt block.
-	// It will fail (no actual CA server) but must NOT reset the phase to Signed.
-	_, _ = r.Reconcile(testCtx(), testRequest("my-cert"))
+			c := setupTestClient(cert, ca, tlsSecret)
+			r := newCertificateReconciler(c)
 
-	updated := &openvoxv1alpha1.Certificate{}
-	if err := c.Get(testCtx(), types.NamespacedName{Name: "my-cert", Namespace: testNamespace}, updated); err != nil {
-		t.Fatalf("failed to get Certificate: %v", err)
-	}
-	if updated.Status.Phase != openvoxv1alpha1.CertificatePhaseRenewing {
-		t.Errorf("expected phase %q to be preserved, got %q", openvoxv1alpha1.CertificatePhaseRenewing, updated.Status.Phase)
+			// Signing against a fake CA cannot succeed; only the decision matters.
+			_, _ = r.Reconcile(testCtx(), testRequest("my-cert"))
+
+			updated := &openvoxv1alpha1.Certificate{}
+			if err := c.Get(testCtx(), types.NamespacedName{Name: "my-cert", Namespace: testNamespace}, updated); err != nil {
+				t.Fatalf("failed to get Certificate: %v", err)
+			}
+			if !r.renewalDue(updated) {
+				t.Errorf("renewal should still be due regardless of the status phase, got phase %q notAfter %v",
+					updated.Status.Phase, updated.Status.NotAfter)
+			}
+		})
 	}
 }
 
@@ -416,8 +430,7 @@ func TestScheduleRenewalCheck_CooldownPreventsLoop(t *testing.T) {
 
 func TestCertReconcile_FinalizerAdded(t *testing.T) {
 	cert := newCertificate("my-cert", "test-ca", "")
-	ca := newCertificateAuthority("test-ca")
-	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhasePending
+	ca := newCertificateAuthority("test-ca", withCANotReady())
 
 	c := setupTestClient(cert, ca)
 	r := newCertificateReconciler(c)

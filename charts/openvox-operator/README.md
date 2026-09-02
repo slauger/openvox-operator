@@ -26,6 +26,20 @@ helm install openvox-operator oci://ghcr.io/slauger/charts/openvox-operator
 To deploy a complete OpenVox stack after installing the operator, use the
 [openvox-stack](https://github.com/slauger/openvox-operator/tree/main/charts/openvox-stack) chart.
 
+## Upgrading
+
+Helm does not update CRDs on `helm upgrade`. Apply the CRDs of the target
+version before upgrading the release, otherwise the operator runs against the
+schema that was installed first:
+
+```bash
+helm pull oci://ghcr.io/slauger/charts/openvox-operator --version "$VERSION" --untar
+kubectl apply -f openvox-operator/crds/
+helm upgrade openvox-operator oci://ghcr.io/slauger/charts/openvox-operator --version "$VERSION"
+```
+
+See [Installation](https://slauger.github.io/openvox-operator/getting-started/installation/) for details.
+
 ## Maintainers
 
 | Name | Email | Url |

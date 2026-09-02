@@ -36,6 +36,19 @@ spec:
 | `notAfter` | time | Expiry time of the signed certificate |
 | `conditions` | []Condition | `CertSigned` |
 
+## Deletion
+
+Deleting a Certificate revokes it on the CA before the finalizer
+(`openvox.voxpupuli.org/certificate-cleanup`) is released, so the certificate
+cannot be used again. If the CA cannot be reached the controller retries a few
+times and then releases the finalizer anyway, rather than leaving the resource
+stuck in `Terminating`.
+
+Revocation is skipped when the CertificateAuthority is itself being deleted --
+there is nothing left to revoke against, and its Service is on its way out. This
+is what lets `kubectl delete namespace` finish promptly: every object is marked
+for deletion at the same moment.
+
 ## Phases
 
 | Phase | Description |
@@ -44,8 +57,37 @@ spec:
 | `Requesting` | Certificate signing in progress |
 | `WaitingForSigning` | CSR submitted, waiting for CA to sign (backoff polling in progress) |
 | `Signed` | TLS Secret created, Servers can mount it |
-| `Renewing` | Certificate is within its `renewBefore` window and is being re-signed |
+| `Renewing` | A renewal attempt failed and will be retried |
 | `Error` | Certificate signing failed |
+
+Phases are a human-readable summary of the observed state. The controller never
+reads them back as input: whether a certificate needs renewing is recomputed on
+every reconcile from `status.notAfter` and `spec.renewBefore`, so editing or
+losing the phase does not change what the operator does.
+
+### Immutable fields
+
+`certname` cannot be changed after creation. The name is baked into the issued
+certificate and into the entry the CA keeps for it; changing it would orphan
+that entry under the old name, so the finalizer could no longer revoke it on
+deletion.
+
+To use a different certname, delete the Certificate and create a new one -- the
+finalizer cleans up the old entry on the CA on the way out.
+
+### Re-signing on spec changes
+
+`status.signedSpecHash` records the spec fields the current certificate was
+issued for: `certname`, `dnsAltNames` and `csrExtensions`. When any of them
+changes, the certificate is re-signed on the next reconcile -- adding a DNS alt
+name takes effect immediately instead of waiting for the next renewal.
+
+`renewBefore` is not part of the hash. It only moves the point in time at which
+renewal happens and does not change the certificate itself.
+
+Certificates issued before this field existed carry an empty hash. The
+controller adopts the current spec as the baseline for them rather than
+re-signing every certificate after an operator upgrade.
 
 ### CSR Poll Backoff
 

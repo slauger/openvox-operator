@@ -101,19 +101,60 @@ jobs:
           echo "fix_count=$FIX_COUNT" >> $GITHUB_OUTPUT
           echo "breaking=$BREAKING" >> $GITHUB_OUTPUT
 
-      - name: Analyze changes with AI
+      - name: Build change summary
         if: steps.check-pr.outputs.count == '0' || steps.check-pr.outputs.is_auto == 'true'
         id: analyze
+        env:
+          # Optional. Without a key the categorised commit list below is the
+          # description. GitHub Models, which this step used to call, was
+          # retired on 2026-07-30, so there is no free default endpoint left.
+          # Any OpenAI-compatible chat/completions URL works, for example
+          # https://generativelanguage.googleapis.com/v1beta/openai/chat/completions
+          # or https://api.groq.com/openai/v1/chat/completions
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_API_URL: ${{ vars.LLM_API_URL }}
+          LLM_MODEL: ${{ vars.LLM_MODEL }}
         run: |
-          COMMITS=$(git log main..HEAD --pretty=format:"- %s (%h)" --no-merges)
           FILES_CHANGED=$(git diff main..HEAD --stat)
 
-          BUMP="${{ steps.version.outputs.bump }}"
-          CURRENT="${{ steps.version.outputs.current }}"
-          NEXT="${{ steps.version.outputs.next }}"
+          # Group the commits the way semantic-release categorises them, so the
+          # description is useful on its own rather than a flat list.
+          {
+            emit_group() {
+              BODY=$(git log main..HEAD --pretty=format:"- %s (%h)" --no-merges \
+                | grep -E "^- $2(\(.+\))?!?: " || true)
+              if [ -n "$BODY" ]; then
+                printf '### %s\n\n%s\n\n' "$1" "$BODY"
+              fi
+            }
+            emit_group "Features" "feat"
+            emit_group "Fixes" "fix"
+            emit_group "Performance" "perf"
+            emit_group "Refactoring" "refactor"
+            emit_group "Tests" "test"
+            emit_group "Documentation" "docs"
+            emit_group "Build and CI" "(build|ci)"
+            emit_group "Chores" "chore"
 
-          cat > /tmp/prompt.txt <<PROMPT
-          Create a pull request title and description for merging develop into main.
+            OTHER=$(git log main..HEAD --pretty=format:"- %s (%h)" --no-merges \
+              | grep -vE "^- (feat|fix|perf|refactor|test|docs|build|ci|chore)(\(.+\))?!?: " || true)
+            if [ -n "$OTHER" ]; then
+              printf '### Other\n\n%s\n\n' "$OTHER"
+            fi
+
+            printf '<details>\n<summary>Files changed</summary>\n\n```\n%s\n```\n</details>\n' "$FILES_CHANGED"
+          } > /tmp/pr_description.txt
+
+          if [ -z "${LLM_API_KEY}" ]; then
+            echo "::notice::No LLM_API_KEY configured, using the generated change summary"
+          else
+            COMMITS=$(git log main..HEAD --pretty=format:"- %s (%h)" --no-merges)
+            CURRENT="${{ steps.version.outputs.current }}"
+            NEXT="${{ steps.version.outputs.next }}"
+            BUMP="${{ steps.version.outputs.bump }}"
+
+            cat > /tmp/prompt.txt <<PROMPT
+          Write a pull request description for merging develop into main.
 
           Project: OpenVox Operator - a Kubernetes Operator for deploying and managing OpenVox (Puppet) environments on Kubernetes/OpenShift using rootless containers.
 
@@ -125,9 +166,7 @@ jobs:
           Files changed (summary):
           $FILES_CHANGED
 
-          IMPORTANT: The FIRST line of your response must be a concise PR title (max 60 chars, no markdown, no prefix like "Title:"). It should summarize the most important changes. Examples: "Add Database CRD and update CI workflows", "Fix auth handling and bump dependencies".
-
-          Then leave one blank line and write the description. You MUST cover ALL commits listed above - do not skip any.
+          Write the description only, with no title line and no preamble.
           ## Summary
           - 5-8 bullet points explaining WHAT changed and WHY
 
@@ -138,42 +177,46 @@ jobs:
           - How to verify these changes
           PROMPT
 
-          REQUEST_JSON=$(jq -n \
-            --arg system "You are a technical writer creating concise PR descriptions for a Kubernetes Operator project written in Go with Helm charts. Focus on WHY changes were made, not just WHAT changed. Be professional and concise. The very first line of your response MUST be a short PR title without any markdown formatting." \
-            --arg user "$(cat /tmp/prompt.txt)" \
-            '{
-              "messages": [
-                {"role": "system", "content": $system},
-                {"role": "user", "content": $user}
-              ],
-              "model": "gpt-4.1",
-              "temperature": 0.7,
-              "max_tokens": 4000
-            }')
+            REQUEST_JSON=$(jq -n \
+              --arg system "You are a technical writer creating concise PR descriptions for a Kubernetes Operator project written in Go with Helm charts. Focus on WHY changes were made, not just WHAT changed. Be professional and concise." \
+              --arg user "$(cat /tmp/prompt.txt)" \
+              --arg model "${LLM_MODEL:-gpt-4.1}" \
+              '{
+                "messages": [
+                  {"role": "system", "content": $system},
+                  {"role": "user", "content": $user}
+                ],
+                "model": $model,
+                "temperature": 0.7,
+                "max_tokens": 4000
+              }')
 
-          API_RESPONSE=$(echo "$REQUEST_JSON" | curl -s -X POST \
-            "https://models.inference.ai.azure.com/chat/completions" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${{ github.token }}" \
-            -d @-)
+            # This step runs under `bash -e`, so a failing curl would abort it
+            # and the generated summary would never be used. Keep the exit code.
+            CURL_EXIT=0
+            API_RESPONSE=$(echo "$REQUEST_JSON" | curl -sS --max-time 120 -X POST \
+              "${LLM_API_URL}" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${LLM_API_KEY}" \
+              -d @- 2>/tmp/curl_err.txt) || CURL_EXIT=$?
 
-          ANALYSIS=$(echo "$API_RESPONSE" | jq -r '.choices[0].message.content // empty')
+            ANALYSIS=$(printf '%s' "$API_RESPONSE" | jq -r '.choices[0].message.content // empty' 2>/dev/null || true)
 
-          if [ -z "$ANALYSIS" ]; then
-            echo "::warning::AI analysis failed, using fallback description"
-            ANALYSIS="Release ${NEXT:-develop -> main}
-
-          ## Changes
-
-          $COMMITS
-
-          ## Files changed
-          \`\`\`
-          $FILES_CHANGED
-          \`\`\`"
+            if [ -n "$ANALYSIS" ]; then
+              printf '%s\n' "$ANALYSIS" > /tmp/pr_description.txt
+            else
+              # Without this the next outage looks the same as a model that
+              # simply returned nothing.
+              echo "::warning::LLM request failed, using the generated change summary"
+              echo "curl exit code: ${CURL_EXIT}"
+              if [ -s /tmp/curl_err.txt ]; then
+                sed 's/^/curl: /' /tmp/curl_err.txt
+              fi
+              printf '%s' "$API_RESPONSE" | head -c 500 | sed 's/^/response: /'
+              echo
+            fi
           fi
 
-          echo "$ANALYSIS" > /tmp/pr_description.txt
           echo "description_file=/tmp/pr_description.txt" >> $GITHUB_OUTPUT
 
       - name: Build PR title and body
@@ -216,11 +259,12 @@ jobs:
             fi
           fi
 
-          # Build body: skip first line (title) from AI output
-          AI_DESCRIPTION=$(tail -n +2 /tmp/pr_description.txt)
+          # The title is derived from the release prediction above, so the
+          # description file holds the body and nothing else.
+          DESCRIPTION=$(cat /tmp/pr_description.txt)
 
           cat > /tmp/pr_body.txt <<EOF
-          $AI_DESCRIPTION
+          $DESCRIPTION
 
           ---
 
@@ -232,7 +276,8 @@ jobs:
 
           **Source:** \`develop\` | **Target:** \`main\` | **Trigger:** Successful CI on develop
 
-          > Auto-generated by GitHub Actions & AI - updated automatically on new commits.
+          > Auto-generated by GitHub Actions - updated automatically on new commits.
+          > Replace this text, for example with a Copilot-written summary, and it will be left alone.
           EOF
 
       - name: Update existing PR

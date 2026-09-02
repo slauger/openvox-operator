@@ -16,7 +16,7 @@ func validConfig() *Config {
 			Namespace:    "default",
 		},
 		Spec: ConfigSpec{
-			Image: ImageSpec{},
+			Image: ImageSpec{Repository: "example.invalid/openvox-server", Tag: "8"},
 		},
 	}
 }

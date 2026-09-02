@@ -70,5 +70,5 @@ spec:
         - script:
             timeout: 2m
             content: |
-              kubectl delete certificateauthority --all -n e2e-webhook-smoke --ignore-not-found 2>/dev/null || true
+              kubectl delete certificateauthority --all -n e2e-webhook-smoke --timeout=120s --ignore-not-found 2>/dev/null || true
               kubectl delete namespace e2e-webhook-smoke --ignore-not-found 2>/dev/null || true

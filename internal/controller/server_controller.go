@@ -19,6 +19,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
@@ -66,9 +67,21 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	server := &openvoxv1alpha1.Server{}
 	if err := r.Get(ctx, req.NamespacedName, server); err != nil {
 		if errors.IsNotFound(err) {
+			// The Server carries no finalizer, so this is the only point at
+			// which its gauges can be retired.
+			forgetServerMetrics(req.Name, req.Namespace)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("getting Server %s: %w", req.NamespacedName, err)
+	}
+
+	// Pausing comes after the deletion path: a paused resource must still be
+	// deletable, otherwise the annotation turns into a trap.
+	if paused, err := reconcilePauseState(ctx, r.Client, server, &server.Status.Conditions); err != nil {
+		return ctrl.Result{}, err
+	} else if paused {
+		logger.Info("reconciliation paused by annotation", "name", server.Name)
+		return ctrl.Result{}, nil
 	}
 
 	// Set initial phase
@@ -100,7 +113,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, fmt.Errorf("getting Certificate %s: %w", server.Spec.CertificateRef, err)
 	}
 
-	if cert.Status.Phase != openvoxv1alpha1.CertificatePhaseSigned || cert.Status.SecretName == "" {
+	if !certificateUsable(cert) {
 		logger.Info("waiting for Certificate to be signed", "certificate", cert.Name, "phase", cert.Status.Phase)
 		if statusErr := updateStatusWithRetry(ctx, r.Client, server, func() {
 			server.Status.Phase = openvoxv1alpha1.ServerPhaseWaitingForCert
@@ -142,12 +155,16 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	// Update status
-	ready := r.getReadyReplicas(ctx, server)
+	ready, err := r.getReadyReplicas(ctx, server)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("reading ready replicas for Server %s: %w", server.Name, err)
+	}
 	if err := updateStatusWithRetry(ctx, r.Client, server, func() {
 		replicas := int32(1)
 		if server.Spec.Replicas != nil {
 			replicas = *server.Spec.Replicas
 		}
+		server.Status.ObservedGeneration = server.Generation
 		server.Status.Desired = replicas
 		server.Status.Ready = ready
 
@@ -161,7 +178,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 				Status:             metav1.ConditionTrue,
 				Reason:             "ReplicasReady",
 				Message:            fmt.Sprintf("%d/%d replicas ready", ready, replicas),
-				LastTransitionTime: metav1.Now(),
+				ObservedGeneration: server.Generation,
 			})
 		} else {
 			server.Status.Phase = openvoxv1alpha1.ServerPhasePending
@@ -170,7 +187,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 				Status:             metav1.ConditionFalse,
 				Reason:             "ReplicasNotReady",
 				Message:            fmt.Sprintf("0/%d replicas ready", replicas),
-				LastTransitionTime: metav1.Now(),
+				ObservedGeneration: server.Generation,
 			})
 		}
 	}); err != nil {
@@ -186,17 +203,22 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 func (r *ServerReconciler) reconcilePDB(ctx context.Context, server *openvoxv1alpha1.Server) error {
 	logger := log.FromContext(ctx)
 	pdbName := server.Name
-	existing := &policyv1.PodDisruptionBudget{}
-	err := r.Get(ctx, types.NamespacedName{Name: pdbName, Namespace: server.Namespace}, existing)
 
 	// If PDB is disabled or not configured, delete if exists
 	if server.Spec.PDB == nil || !server.Spec.PDB.Enabled {
+		existing := &policyv1.PodDisruptionBudget{}
+		err := r.Get(ctx, types.NamespacedName{Name: pdbName, Namespace: server.Namespace}, existing)
 		if err == nil {
+			if guardErr := assertControlledBy(existing, server, "PodDisruptionBudget"); guardErr != nil {
+				return guardErr
+			}
 			logger.Info("deleting PDB (disabled)", "name", pdbName)
 			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
 				return fmt.Errorf("deleting PodDisruptionBudget %s: %w", pdbName, err)
 			}
 			r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonPDBDeleted, "Reconcile", "PodDisruptionBudget %s deleted", pdbName)
+		} else if !errors.IsNotFound(err) {
+			return fmt.Errorf("getting PodDisruptionBudget %s: %w", pdbName, err)
 		}
 		return nil
 	}
@@ -205,24 +227,28 @@ func (r *ServerReconciler) reconcilePDB(ctx context.Context, server *openvoxv1al
 	if buildErr != nil {
 		return buildErr
 	}
-	if errors.IsNotFound(err) {
-		logger.Info("creating PDB", "name", pdbName)
-		if err := r.Create(ctx, desired); err != nil {
-			return fmt.Errorf("creating PodDisruptionBudget %s: %w", pdbName, err)
-		}
-		r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonPDBCreated, "Reconcile", "PodDisruptionBudget %s created", pdbName)
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("getting PodDisruptionBudget %s: %w", pdbName, err)
-	}
 
-	// Update existing
-	existing.Spec = desired.Spec
-	if err := r.Update(ctx, existing); err != nil {
-		return fmt.Errorf("updating PodDisruptionBudget %s: %w", pdbName, err)
+	pdb := &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{Name: pdbName, Namespace: server.Namespace},
 	}
-	r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonPDBUpdated, "Reconcile", "PodDisruptionBudget %s updated", pdbName)
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, pdb, func() error {
+		if err := assertControlledBy(pdb, server, "PodDisruptionBudget"); err != nil {
+			return err
+		}
+		pdb.Labels = desired.Labels
+		pdb.Spec = desired.Spec
+		return controllerutil.SetControllerReference(server, pdb, r.Scheme)
+	})
+	if err != nil {
+		return fmt.Errorf("reconciling PodDisruptionBudget %s: %w", pdbName, err)
+	}
+	switch op {
+	case controllerutil.OperationResultCreated:
+		logger.Info("created PDB", "name", pdbName)
+		r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonPDBCreated, "Reconcile", "PodDisruptionBudget %s created", pdbName)
+	case controllerutil.OperationResultUpdated:
+		r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonPDBUpdated, "Reconcile", "PodDisruptionBudget %s updated", pdbName)
+	}
 	return nil
 }
 
@@ -262,17 +288,22 @@ func (r *ServerReconciler) buildPDB(server *openvoxv1alpha1.Server) (*policyv1.P
 func (r *ServerReconciler) reconcileHPA(ctx context.Context, server *openvoxv1alpha1.Server) error {
 	logger := log.FromContext(ctx)
 	hpaName := server.Name
-	existing := &autoscalingv2.HorizontalPodAutoscaler{}
-	err := r.Get(ctx, types.NamespacedName{Name: hpaName, Namespace: server.Namespace}, existing)
 
 	// If HPA is disabled, delete if exists
 	if !server.Spec.Autoscaling.Enabled {
+		existing := &autoscalingv2.HorizontalPodAutoscaler{}
+		err := r.Get(ctx, types.NamespacedName{Name: hpaName, Namespace: server.Namespace}, existing)
 		if err == nil {
+			if guardErr := assertControlledBy(existing, server, "HorizontalPodAutoscaler"); guardErr != nil {
+				return guardErr
+			}
 			logger.Info("deleting HPA (disabled)", "name", hpaName)
 			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
 				return fmt.Errorf("deleting HorizontalPodAutoscaler %s: %w", hpaName, err)
 			}
 			r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonHPADeleted, "Reconcile", "HorizontalPodAutoscaler %s deleted", hpaName)
+		} else if !errors.IsNotFound(err) {
+			return fmt.Errorf("getting HorizontalPodAutoscaler %s: %w", hpaName, err)
 		}
 		return nil
 	}
@@ -281,24 +312,28 @@ func (r *ServerReconciler) reconcileHPA(ctx context.Context, server *openvoxv1al
 	if buildErr != nil {
 		return buildErr
 	}
-	if errors.IsNotFound(err) {
-		logger.Info("creating HPA", "name", hpaName)
-		if err := r.Create(ctx, desired); err != nil {
-			return fmt.Errorf("creating HorizontalPodAutoscaler %s: %w", hpaName, err)
-		}
-		r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonHPACreated, "Reconcile", "HorizontalPodAutoscaler %s created", hpaName)
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("getting HorizontalPodAutoscaler %s: %w", hpaName, err)
-	}
 
-	// Update existing
-	existing.Spec = desired.Spec
-	if err := r.Update(ctx, existing); err != nil {
-		return fmt.Errorf("updating HorizontalPodAutoscaler %s: %w", hpaName, err)
+	hpa := &autoscalingv2.HorizontalPodAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{Name: hpaName, Namespace: server.Namespace},
 	}
-	r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonHPAUpdated, "Reconcile", "HorizontalPodAutoscaler %s updated", hpaName)
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, hpa, func() error {
+		if err := assertControlledBy(hpa, server, "HorizontalPodAutoscaler"); err != nil {
+			return err
+		}
+		hpa.Labels = desired.Labels
+		hpa.Spec = desired.Spec
+		return controllerutil.SetControllerReference(server, hpa, r.Scheme)
+	})
+	if err != nil {
+		return fmt.Errorf("reconciling HorizontalPodAutoscaler %s: %w", hpaName, err)
+	}
+	switch op {
+	case controllerutil.OperationResultCreated:
+		logger.Info("created HPA", "name", hpaName)
+		r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonHPACreated, "Reconcile", "HorizontalPodAutoscaler %s created", hpaName)
+	case controllerutil.OperationResultUpdated:
+		r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonHPAUpdated, "Reconcile", "HorizontalPodAutoscaler %s updated", hpaName)
+	}
 	return nil
 }
 
@@ -354,16 +389,21 @@ func (r *ServerReconciler) buildHPA(server *openvoxv1alpha1.Server) (*autoscalin
 func (r *ServerReconciler) reconcileNetworkPolicy(ctx context.Context, server *openvoxv1alpha1.Server) error {
 	logger := log.FromContext(ctx)
 	npName := server.Name + "-netpol"
-	existing := &networkingv1.NetworkPolicy{}
-	err := r.Get(ctx, types.NamespacedName{Name: npName, Namespace: server.Namespace}, existing)
 
 	if server.Spec.NetworkPolicy == nil || !server.Spec.NetworkPolicy.Enabled {
+		existing := &networkingv1.NetworkPolicy{}
+		err := r.Get(ctx, types.NamespacedName{Name: npName, Namespace: server.Namespace}, existing)
 		if err == nil {
+			if guardErr := assertControlledBy(existing, server, "NetworkPolicy"); guardErr != nil {
+				return guardErr
+			}
 			logger.Info("deleting NetworkPolicy (disabled)", "name", npName)
 			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
 				return fmt.Errorf("deleting NetworkPolicy %s: %w", npName, err)
 			}
 			r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonNetworkPolicyDeleted, "Reconcile", "NetworkPolicy %s deleted", npName)
+		} else if !errors.IsNotFound(err) {
+			return fmt.Errorf("getting NetworkPolicy %s: %w", npName, err)
 		}
 		return nil
 	}
@@ -372,23 +412,28 @@ func (r *ServerReconciler) reconcileNetworkPolicy(ctx context.Context, server *o
 	if buildErr != nil {
 		return buildErr
 	}
-	if errors.IsNotFound(err) {
-		logger.Info("creating NetworkPolicy", "name", npName)
-		if err := r.Create(ctx, desired); err != nil {
-			return fmt.Errorf("creating NetworkPolicy %s: %w", npName, err)
-		}
-		r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonNetworkPolicyCreated, "Reconcile", "NetworkPolicy %s created", npName)
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("getting NetworkPolicy %s: %w", npName, err)
-	}
 
-	existing.Spec = desired.Spec
-	if err := r.Update(ctx, existing); err != nil {
-		return fmt.Errorf("updating NetworkPolicy %s: %w", npName, err)
+	np := &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: npName, Namespace: server.Namespace},
 	}
-	r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonNetworkPolicyUpdated, "Reconcile", "NetworkPolicy %s updated", npName)
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, np, func() error {
+		if err := assertControlledBy(np, server, "NetworkPolicy"); err != nil {
+			return err
+		}
+		np.Labels = desired.Labels
+		np.Spec = desired.Spec
+		return controllerutil.SetControllerReference(server, np, r.Scheme)
+	})
+	if err != nil {
+		return fmt.Errorf("reconciling NetworkPolicy %s: %w", npName, err)
+	}
+	switch op {
+	case controllerutil.OperationResultCreated:
+		logger.Info("created NetworkPolicy", "name", npName)
+		r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonNetworkPolicyCreated, "Reconcile", "NetworkPolicy %s created", npName)
+	case controllerutil.OperationResultUpdated:
+		r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonNetworkPolicyUpdated, "Reconcile", "NetworkPolicy %s updated", npName)
+	}
 	return nil
 }
 
@@ -438,6 +483,15 @@ func (r *ServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).
 		Owns(&networkingv1.NetworkPolicy{}).
 		Watches(&corev1.Secret{}, enqueueServersForSecret(mgr.GetClient())).
+		Watches(&openvoxv1alpha1.Config{}, handler.EnqueueRequestsFromMapFunc(
+			enqueueServersForConfigObject(mgr.GetClient()),
+		)).
+		Watches(&openvoxv1alpha1.Certificate{}, handler.EnqueueRequestsFromMapFunc(
+			enqueueServersForCertificate(mgr.GetClient()),
+		)).
+		Watches(&openvoxv1alpha1.CertificateAuthority{}, handler.EnqueueRequestsFromMapFunc(
+			enqueueServersForCertificateAuthority(mgr.GetClient()),
+		)).
 		Complete(r)
 }
 
@@ -445,10 +499,19 @@ func intstrInt(val int) intstr.IntOrString {
 	return intstr.FromInt32(int32(val))
 }
 
-func (r *ServerReconciler) getReadyReplicas(ctx context.Context, server *openvoxv1alpha1.Server) int32 {
+// getReadyReplicas reports how many replicas of the Server Deployment are ready.
+//
+// A missing Deployment genuinely means nothing is ready, so it counts as zero.
+// Any other error is returned: reporting zero for a failed lookup would be
+// indistinguishable from an idle workload and would flip the status to Pending
+// on every API hiccup.
+func (r *ServerReconciler) getReadyReplicas(ctx context.Context, server *openvoxv1alpha1.Server) (int32, error) {
 	deploy := &appsv1.Deployment{}
 	if err := r.Get(ctx, types.NamespacedName{Name: server.Name, Namespace: server.Namespace}, deploy); err != nil {
-		return 0
+		if errors.IsNotFound(err) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("getting Deployment %s: %w", server.Name, err)
 	}
-	return deploy.Status.ReadyReplicas
+	return deploy.Status.ReadyReplicas, nil
 }

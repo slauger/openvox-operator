@@ -11,6 +11,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -123,30 +124,42 @@ func isSecretReady(ctx context.Context, reader client.Reader, name, namespace, r
 	return true
 }
 
-// createOrUpdateSecret creates or updates a Secret with the given data and owner reference.
+// createOrUpdateSecret creates or updates a Secret with the given data, owned by
+// the given object.
+// preserveKeys names entries that belong to a different writer and must
+// survive an update that does not carry them. Without it a caller that owns one
+// key of a shared Secret silently drops the rest, and the loss is invisible:
+// the Secret still exists, only poorer.
 func createOrUpdateSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, owner client.Object,
-	name, namespace string, labels map[string]string, data map[string][]byte) error {
-	secret := &corev1.Secret{}
-	err := c.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, secret)
-	if errors.IsNotFound(err) {
-		secret = &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: namespace,
-				Labels:    labels,
-			},
-			Data: data,
-		}
-		if err := controllerutil.SetControllerReference(owner, secret, scheme); err != nil {
-			return fmt.Errorf("setting owner reference on Secret %s: %w", name, err)
-		}
-		return c.Create(ctx, secret)
-	} else if err != nil {
-		return fmt.Errorf("getting Secret %s: %w", name, err)
+	name, namespace string, labels map[string]string, data map[string][]byte, preserveKeys ...string) error {
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}
-
-	secret.Data = data
-	return c.Update(ctx, secret)
+	_, err := controllerutil.CreateOrUpdate(ctx, c, secret, func() error {
+		if err := assertControlledBy(secret, owner, "Secret"); err != nil {
+			return err
+		}
+		// Read from the object CreateOrUpdate just fetched, so the carry-over
+		// cannot race with a concurrent write.
+		carried := make(map[string][]byte, len(preserveKeys))
+		for _, k := range preserveKeys {
+			if v, ok := secret.Data[k]; ok {
+				carried[k] = v
+			}
+		}
+		secret.Labels = labels
+		secret.Data = data
+		for k, v := range carried {
+			if _, taken := secret.Data[k]; !taken {
+				secret.Data[k] = v
+			}
+		}
+		return controllerutil.SetControllerReference(owner, secret, scheme)
+	})
+	if err != nil {
+		return fmt.Errorf("reconciling Secret %s: %w", name, err)
+	}
+	return nil
 }
 
 // getCAPublicCert reads the CA public certificate from the CA Secret.
@@ -253,4 +266,183 @@ func resolveImage(server *openvoxv1alpha1.Server, cfg *openvoxv1alpha1.Config) s
 		return fmt.Sprintf("%s:%s", repo, tag)
 	}
 	return fmt.Sprintf("%s:%s", cfg.Spec.Image.Repository, cfg.Spec.Image.Tag)
+}
+
+// resolveImagePullPolicy returns the pull policy for a Server, preferring its
+// own value and falling back to the Config, then to IfNotPresent.
+func resolveImagePullPolicy(server *openvoxv1alpha1.Server, cfg *openvoxv1alpha1.Config) corev1.PullPolicy {
+	if server.Spec.Image.PullPolicy != "" {
+		return server.Spec.Image.PullPolicy
+	}
+	return configImagePullPolicy(cfg)
+}
+
+// configImagePullPolicy returns the Config's pull policy, or the Kubernetes
+// default when it is unset.
+func configImagePullPolicy(cfg *openvoxv1alpha1.Config) corev1.PullPolicy {
+	if cfg.Spec.Image.PullPolicy != "" {
+		return cfg.Spec.Image.PullPolicy
+	}
+	return corev1.PullIfNotPresent
+}
+
+// pullPolicyOrDefault returns the given policy, or IfNotPresent when unset.
+func pullPolicyOrDefault(p corev1.PullPolicy) corev1.PullPolicy {
+	if p != "" {
+		return p
+	}
+	return corev1.PullIfNotPresent
+}
+
+// resolveImagePullSecrets returns the pull secrets for a Server. A list on the
+// Server replaces the Config's rather than extending it, so a Server pulling
+// from a different registry does not drag the Config's credentials along.
+func resolveImagePullSecrets(server *openvoxv1alpha1.Server, cfg *openvoxv1alpha1.Config) []corev1.LocalObjectReference {
+	if len(server.Spec.Image.PullSecrets) > 0 {
+		return server.Spec.Image.PullSecrets
+	}
+	return cfg.Spec.Image.PullSecrets
+}
+
+// appendPullSecrets adds refs that are not already present, so callers can
+// combine sources without producing duplicates.
+func appendPullSecrets(existing []corev1.LocalObjectReference, add ...corev1.LocalObjectReference) []corev1.LocalObjectReference {
+	seen := make(map[string]bool, len(existing))
+	for _, e := range existing {
+		seen[e.Name] = true
+	}
+	for _, a := range add {
+		if a.Name == "" || seen[a.Name] {
+			continue
+		}
+		seen[a.Name] = true
+		existing = append(existing, a)
+	}
+	return existing
+}
+
+// certnameOf returns the certname a Certificate is issued under.
+//
+// The field is required and non-empty since the shared "puppet" default was
+// removed. The fallback only covers resources written while that default still
+// existed, which all carry "puppet" anyway.
+func certnameOf(cert *openvoxv1alpha1.Certificate) string {
+	if cert.Spec.Certname != "" {
+		return cert.Spec.Certname
+	}
+	return "puppet"
+}
+
+// resolveReadOnlyRootFilesystem returns the setting for a Server, preferring
+// its own override over the Config's.
+func resolveReadOnlyRootFilesystem(server *openvoxv1alpha1.Server, cfg *openvoxv1alpha1.Config) bool {
+	if server.Spec.ReadOnlyRootFilesystem != nil {
+		return *server.Spec.ReadOnlyRootFilesystem
+	}
+	return openvoxv1alpha1.BoolValue(cfg.Spec.ReadOnlyRootFilesystem, true)
+}
+
+// serverRoleEnabled reports whether the Server runs the catalog server role.
+// The spec field defaults to true, so an unset value enables the role.
+func serverRoleEnabled(server *openvoxv1alpha1.Server) bool {
+	return openvoxv1alpha1.BoolValue(server.Spec.Server, true)
+}
+
+// assertControlledBy fails when obj already exists and is not controlled by the
+// expected owner.
+//
+// Managed child resources are addressed by a name derived from the owner, so a
+// pre-existing resource that happens to share that name would otherwise be
+// silently taken over and overwritten. Refusing is the safer answer: the
+// operator does not own it, and the reconcile error makes that visible instead
+// of destroying someone else's object.
+func assertControlledBy(obj, owner metav1.Object, kind string) error {
+	// An empty resourceVersion means the object was constructed locally and does
+	// not exist yet, so there is nothing to conflict with. It is the one field
+	// the API server always populates on read.
+	if obj.GetResourceVersion() == "" {
+		return nil
+	}
+	if !metav1.IsControlledBy(obj, owner) {
+		return fmt.Errorf("%s %s already exists and is not controlled by %s %s",
+			kind, obj.GetName(), ownerKind(owner), owner.GetName())
+	}
+	return nil
+}
+
+// ownerKind renders a readable type name for the error above.
+func ownerKind(owner metav1.Object) string {
+	switch owner.(type) {
+	case *openvoxv1alpha1.Server:
+		return "Server"
+	case *openvoxv1alpha1.Pool:
+		return "Pool"
+	case *openvoxv1alpha1.Database:
+		return "Database"
+	case *openvoxv1alpha1.Config:
+		return "Config"
+	case *openvoxv1alpha1.CertificateAuthority:
+		return "CertificateAuthority"
+	case *openvoxv1alpha1.Certificate:
+		return "Certificate"
+	default:
+		return "owner"
+	}
+}
+
+// isPaused reports whether reconciliation is suspended for this object.
+func isPaused(obj client.Object) bool {
+	return obj.GetAnnotations()[openvoxv1alpha1.AnnotationPaused] == "true"
+}
+
+// reconcilePauseState reports whether reconciliation is suspended and keeps the
+// Paused condition in sync with the annotation. Callers return early -- without
+// requeueing -- when it reports true; removing the annotation produces an event
+// that starts a fresh reconcile.
+//
+// The status is only written when the condition actually has to change, so a
+// paused resource does not generate traffic while it sits there.
+func reconcilePauseState(ctx context.Context, c client.Client, obj client.Object, conditions *[]metav1.Condition) (bool, error) {
+	paused := isPaused(obj)
+	generation := obj.GetGeneration()
+
+	if paused {
+		if meta.IsStatusConditionTrue(*conditions, openvoxv1alpha1.ConditionPaused) {
+			return true, nil
+		}
+		err := updateStatusWithRetry(ctx, c, obj, func() {
+			meta.SetStatusCondition(conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionPaused,
+				Status:             metav1.ConditionTrue,
+				Reason:             "Paused",
+				Message:            "Reconciliation is suspended by the " + openvoxv1alpha1.AnnotationPaused + " annotation",
+				ObservedGeneration: generation,
+			})
+		})
+		if err != nil {
+			return true, fmt.Errorf("recording the paused condition: %w", err)
+		}
+		return true, nil
+	}
+
+	if meta.FindStatusCondition(*conditions, openvoxv1alpha1.ConditionPaused) == nil {
+		return false, nil
+	}
+	if err := updateStatusWithRetry(ctx, c, obj, func() {
+		meta.RemoveStatusCondition(conditions, openvoxv1alpha1.ConditionPaused)
+	}); err != nil {
+		return false, fmt.Errorf("clearing the paused condition: %w", err)
+	}
+	return false, nil
+}
+
+// certificateUsable reports whether a Certificate can be mounted: it has been
+// signed and its Secret name is known.
+//
+// The signal is the CertSigned condition rather than status.phase. Conditions
+// are the machine-readable contract; phase is a coarse summary for humans and
+// may lag or be edited without changing what the operator does.
+func certificateUsable(cert *openvoxv1alpha1.Certificate) bool {
+	return meta.IsStatusConditionTrue(cert.Status.Conditions, openvoxv1alpha1.ConditionCertSigned) &&
+		cert.Status.SecretName != ""
 }

@@ -14,15 +14,21 @@ import (
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
 
+// defaultCAStorageQuantity is the parsed form of DefaultCAStorageGi. Parsing it
+// once at startup keeps the panic-prone MustParse away from the reconcile path;
+// the input is our own constant, so a failure here is a build-time mistake.
+var defaultCAStorageQuantity = resource.MustParse(DefaultCAStorageGi)
+
 func (r *CertificateAuthorityReconciler) reconcileCAPVC(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority) error {
 	pvcName := fmt.Sprintf("%s-data", ca.Name)
 
 	pvc := &corev1.PersistentVolumeClaim{}
 	err := r.Get(ctx, types.NamespacedName{Name: pvcName, Namespace: ca.Namespace}, pvc)
 	if errors.IsNotFound(err) {
-		storageSize := DefaultCAStorageGi
-		if ca.Spec.Storage.Size != "" {
-			storageSize = ca.Spec.Storage.Size
+		storage := resolveCAStorage(ca)
+		storageSize := defaultCAStorageQuantity
+		if storage.Size != nil {
+			storageSize = *storage.Size
 		}
 
 		pvc = &corev1.PersistentVolumeClaim{
@@ -35,14 +41,14 @@ func (r *CertificateAuthorityReconciler) reconcileCAPVC(ctx context.Context, ca 
 				AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 				Resources: corev1.VolumeResourceRequirements{
 					Requests: corev1.ResourceList{
-						corev1.ResourceStorage: resource.MustParse(storageSize),
+						corev1.ResourceStorage: storageSize,
 					},
 				},
 			},
 		}
 
-		if ca.Spec.Storage.StorageClass != "" {
-			pvc.Spec.StorageClassName = &ca.Spec.Storage.StorageClass
+		if storage.StorageClass != "" {
+			pvc.Spec.StorageClassName = &storage.StorageClass
 		}
 
 		if err := controllerutil.SetControllerReference(ca, pvc, r.Scheme); err != nil {
@@ -53,4 +59,18 @@ func (r *CertificateAuthorityReconciler) reconcileCAPVC(ctx context.Context, ca 
 		return fmt.Errorf("getting PVC %s: %w", pvcName, err)
 	}
 	return nil
+}
+
+// resolveCAStorage returns the configured storage settings, or an empty struct
+// when none were given.
+//
+// The kubebuilder default on StorageSpec.Size does not apply when the whole
+// storage object is omitted -- nested defaults need the parent to be present --
+// so the fallback lives here, the same way resolveEnvironmentPath handles
+// spec.puppet.environmentPath.
+func resolveCAStorage(ca *openvoxv1alpha1.CertificateAuthority) openvoxv1alpha1.StorageSpec {
+	if ca.Spec.Storage != nil {
+		return *ca.Spec.Storage
+	}
+	return openvoxv1alpha1.StorageSpec{}
 }

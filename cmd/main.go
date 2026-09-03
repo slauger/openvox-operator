@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 
@@ -83,6 +84,12 @@ func main() {
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), mgrOptions)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
+		os.Exit(1)
+	}
+
+	// Field indexes must exist before any controller starts using them.
+	if err := controller.SetupFieldIndexers(context.Background(), mgr); err != nil {
+		setupLog.Error(err, "unable to set up field indexers")
 		os.Exit(1)
 	}
 

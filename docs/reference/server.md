@@ -111,7 +111,18 @@ When enabled, the default policy allows TCP/8140 from all sources (agents may co
 | `phase` | string | Current lifecycle phase |
 | `ready` | int32 | Number of ready replicas |
 | `desired` | int32 | Desired number of replicas |
-| `conditions` | []Condition | `SSLBootstrapped`, `Ready` |
+| `observedGeneration` | int64 | The `.metadata.generation` the status was last derived from |
+| `conditions` | []Condition | See below |
+
+### Conditions
+
+| Type | Reason | Meaning |
+|---|---|---|
+| `SSLBootstrapped` | `CertificateSigned` | The referenced Certificate is signed, so the pods have TLS material |
+| `SSLBootstrapped` | `CertificateNotFound` | `spec.certificateRef` points at a Certificate that does not exist |
+| `SSLBootstrapped` | `CertificateNotSigned` | The Certificate exists but has not been signed yet |
+| `Ready` | `ReplicasReady` | At least one replica is ready |
+| `Ready` | `ReplicasNotReady` | No replica is ready yet |
 
 ## Phases
 
@@ -183,6 +194,15 @@ Key differences:
 | webserver.conf | `webserver-ca.conf` (CRL from PVC) | `webserver.conf` (CRL from Secret mount) |
 | ca.cfg | `ca-enabled.cfg` | `ca-disabled.cfg` |
 | Strategy | Recreate | RollingUpdate |
+
+### Image resolution
+
+`repository` and `tag` on a Server override the Config's values individually;
+an unset field falls back to the Config. `pullPolicy` follows the same rule and
+defaults to `IfNotPresent` when neither sets it. `pullSecrets` is different: a
+non-empty list on the Server *replaces* the Config's rather than extending it,
+so a Server pulling from another registry does not carry the Config's
+credentials along. Secrets for code images are always added on top.
 
 ## Created Resources
 

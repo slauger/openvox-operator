@@ -196,10 +196,7 @@ func buildCSRExtensions(spec *openvoxv1alpha1.CSRExtensionsSpec) ([]pkix.Extensi
 func (r *CertificateReconciler) submitCSR(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, caBaseURL, namespace string) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	certname := cert.Spec.Certname
-	if certname == "" {
-		certname = "puppet"
-	}
+	certname := certnameOf(cert)
 
 	pendingSecretName := fmt.Sprintf("%s-tls-pending", cert.Name)
 
@@ -221,7 +218,11 @@ func (r *CertificateReconciler) submitCSR(ctx context.Context, cert *openvoxv1al
 	}
 
 	// Build CSR
-	csrPEM, err := buildCSR(certname, cert.Spec.DNSAltNames, cert.Spec.CSRExtensions, privateKey)
+	altNames, err := r.effectiveDNSAltNames(ctx, cert)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	csrPEM, err := buildCSR(certname, altNames, cert.Spec.CSRExtensions, privateKey)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -261,12 +262,55 @@ func (r *CertificateReconciler) submitCSR(ctx context.Context, cert *openvoxv1al
 	return ctrl.Result{}, nil
 }
 
+// certMatchesKey reports whether the certificate was issued for the given
+// private key. It is the last line of defence against adopting a certificate
+// that belongs to a different Certificate sharing the same certname.
+func certMatchesKey(certPEM, keyPEM []byte) (bool, error) {
+	certBlock, _ := pem.Decode(certPEM)
+	if certBlock == nil {
+		return false, fmt.Errorf("decoding certificate PEM")
+	}
+	parsed, err := x509.ParseCertificate(certBlock.Bytes)
+	if err != nil {
+		return false, fmt.Errorf("parsing certificate: %w", err)
+	}
+
+	keyBlock, _ := pem.Decode(keyPEM)
+	if keyBlock == nil {
+		return false, fmt.Errorf("decoding private key PEM")
+	}
+	key, err := parsePrivateKey(keyBlock.Bytes)
+	if err != nil {
+		return false, err
+	}
+
+	pub, ok := parsed.PublicKey.(*rsa.PublicKey)
+	if !ok {
+		return false, fmt.Errorf("unsupported certificate public key type %T", parsed.PublicKey)
+	}
+	return pub.Equal(&key.PublicKey), nil
+}
+
+// parsePrivateKey accepts both PKCS#1 and PKCS#8 encodings, since the format
+// depends on who generated the key.
+func parsePrivateKey(der []byte) (*rsa.PrivateKey, error) {
+	if key, err := x509.ParsePKCS1PrivateKey(der); err == nil {
+		return key, nil
+	}
+	parsed, err := x509.ParsePKCS8PrivateKey(der)
+	if err != nil {
+		return nil, fmt.Errorf("parsing private key: %w", err)
+	}
+	key, ok := parsed.(*rsa.PrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("unsupported private key type %T", parsed)
+	}
+	return key, nil
+}
+
 // fetchSignedCert checks if the CA has signed the certificate. Returns the PEM cert or nil.
 func (r *CertificateReconciler) fetchSignedCert(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, caBaseURL, namespace string) ([]byte, error) {
-	certname := cert.Spec.Certname
-	if certname == "" {
-		certname = "puppet"
-	}
+	certname := certnameOf(cert)
 
 	httpClient, err := caHTTPClientForCA(ctx, r.Client, ca, namespace)
 	if err != nil {
@@ -312,7 +356,12 @@ func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openv
 		return result, err
 	}
 
-	// Step 2: Check if cert is signed (non-blocking, single attempt)
+	// Step 2: Check if cert is signed (non-blocking, single attempt).
+	//
+	// The CA is queried by certname, so a foreign certificate issued under the
+	// same name comes back here. Storing it would pair someone else's
+	// certificate with our private key, and the mismatch would only surface as
+	// a failed TLS handshake at runtime.
 	signedCertPEM, err := r.fetchSignedCert(ctx, cert, ca, caBaseURL, namespace)
 	if err != nil {
 		logger.Info("failed to fetch signed cert, will retry", "error", err)
@@ -346,10 +395,7 @@ func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openv
 		// Check absolute timeout based on pending Secret creation time
 		elapsed := time.Since(pendingSecret.CreationTimestamp.Time)
 		if !pendingSecret.CreationTimestamp.IsZero() && elapsed >= CSRPollAbsoluteTimeout {
-			certname := cert.Spec.Certname
-			if certname == "" {
-				certname = "puppet"
-			}
+			certname := certnameOf(cert)
 			timeoutMsg := fmt.Sprintf("CSR polling timed out after %s", elapsed.Truncate(time.Minute))
 			if statusErr := updateStatusWithRetry(ctx, r.Client, cert, func() {
 				cert.Status.Phase = openvoxv1alpha1.CertificatePhaseError
@@ -358,7 +404,7 @@ func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openv
 					Status:             metav1.ConditionFalse,
 					Reason:             "CSRPollingTimeout",
 					Message:            timeoutMsg,
-					LastTransitionTime: metav1.Now(),
+					ObservedGeneration: cert.Generation,
 				})
 			}); statusErr != nil {
 				logger.Error(statusErr, "failed to update Certificate status to Error")
@@ -388,10 +434,7 @@ func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openv
 
 		// After threshold, transition to WaitingForSigning phase
 		if attempts >= CSRPollWaitingThreshold {
-			certname := cert.Spec.Certname
-			if certname == "" {
-				certname = "puppet"
-			}
+			certname := certnameOf(cert)
 			waitMsg := fmt.Sprintf("CSR submitted but not yet signed after %d attempts", attempts)
 			if statusErr := updateStatusWithRetry(ctx, r.Client, cert, func() {
 				cert.Status.Phase = openvoxv1alpha1.CertificatePhaseWaitingForSigning
@@ -400,7 +443,7 @@ func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openv
 					Status:             metav1.ConditionFalse,
 					Reason:             "WaitingForManualSigning",
 					Message:            waitMsg,
-					LastTransitionTime: metav1.Now(),
+					ObservedGeneration: cert.Generation,
 				})
 			}); statusErr != nil {
 				logger.Error(statusErr, "failed to update Certificate status to WaitingForSigning")
@@ -420,6 +463,35 @@ func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openv
 		return ctrl.Result{}, fmt.Errorf("reading pending key Secret: %w", err)
 	}
 	keyPEM := pendingSecret.Data["key.pem"]
+
+	// The CA was queried by certname, so what came back is whatever holds that
+	// name - not necessarily what we asked to be signed. Pairing a foreign
+	// certificate with our key would produce a Secret that only fails much
+	// later, during a TLS handshake, with an error that points nowhere near
+	// here.
+	matches, matchErr := certMatchesKey(signedCertPEM, keyPEM)
+	if matchErr != nil {
+		return ctrl.Result{}, fmt.Errorf("verifying the signed certificate against the pending key: %w", matchErr)
+	}
+	if !matches {
+		msg := fmt.Sprintf("the CA returned a certificate for certname %q that was issued for a different key; "+
+			"another Certificate is most likely using the same certname", certnameOf(cert))
+		if statusErr := updateStatusWithRetry(ctx, r.Client, cert, func() {
+			cert.Status.Phase = openvoxv1alpha1.CertificatePhaseError
+			meta.SetStatusCondition(&cert.Status.Conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionCertSigned,
+				Status:             metav1.ConditionFalse,
+				Reason:             "CertnameConflict",
+				Message:            msg,
+				ObservedGeneration: cert.Generation,
+			})
+		}); statusErr != nil {
+			logger.Error(statusErr, "failed to record the certname conflict")
+		}
+		r.Recorder.Eventf(cert, nil, corev1.EventTypeWarning, EventReasonCertnameConflict, "Reconcile", "%s", msg)
+		// Nothing improves by retrying: only a spec change frees the certname.
+		return ctrl.Result{}, nil
+	}
 
 	tlsSecretName := fmt.Sprintf("%s-tls", cert.Name)
 	if err := r.createOrUpdateTLSSecret(ctx, cert, ca, tlsSecretName, signedCertPEM, keyPEM); err != nil {
@@ -457,7 +529,7 @@ func (r *CertificateReconciler) reconcileCertRenewal(ctx context.Context, cert *
 				Status:             metav1.ConditionFalse,
 				Reason:             "RenewalFailed",
 				Message:            errMsg,
-				LastTransitionTime: metav1.Now(),
+				ObservedGeneration: cert.Generation,
 			})
 		}); statusErr != nil {
 			logger.Error(statusErr, "failed to update Certificate status", "name", cert.Name)
@@ -549,7 +621,11 @@ func (r *CertificateReconciler) renewCertificate(ctx context.Context, cert *open
 		return fmt.Errorf("parsing existing key: %w", err)
 	}
 
-	csrPEM, err := buildCSR(certname, cert.Spec.DNSAltNames, cert.Spec.CSRExtensions, privateKey)
+	altNames, err := r.effectiveDNSAltNames(ctx, cert)
+	if err != nil {
+		return err
+	}
+	csrPEM, err := buildCSR(certname, altNames, cert.Spec.CSRExtensions, privateKey)
 	if err != nil {
 		return fmt.Errorf("building CSR for %s: %w", certname, err)
 	}
@@ -614,7 +690,14 @@ func (r *CertificateReconciler) renewCertificate(ctx context.Context, cert *open
 	// Certificate phase. Setting Signed first avoids a race where the
 	// Server sees the stale Renewing phase and transitions to Pending.
 	notAfter := parseCertNotAfter(ctx, body)
+	hash, effective, hashErr := r.signingSpecHashFor(ctx, cert)
+	if hashErr != nil {
+		return hashErr
+	}
 	if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
+		cert.Status.ObservedGeneration = cert.Generation
+		cert.Status.SignedSpecHash = hash
+		cert.Status.EffectiveDNSAltNames = effective
 		cert.Status.Phase = openvoxv1alpha1.CertificatePhaseSigned
 		cert.Status.SecretName = tlsSecretName
 		cert.Status.NotAfter = notAfter
@@ -623,7 +706,7 @@ func (r *CertificateReconciler) renewCertificate(ctx context.Context, cert *open
 			Status:             metav1.ConditionTrue,
 			Reason:             "CertificateRenewed",
 			Message:            "Certificate has been renewed",
-			LastTransitionTime: metav1.Now(),
+			ObservedGeneration: cert.Generation,
 		})
 	}); err != nil {
 		return fmt.Errorf("updating Certificate status to Signed: %w", err)
@@ -741,10 +824,7 @@ func (r *CertificateReconciler) cleanCertViaAPI(ctx context.Context, cert *openv
 // signCSRViaAPI signs a pending CSR via the Puppet CA HTTP API using mTLS with the
 // operator-signing certificate (authorized by CN-based auth.conf rules).
 func (r *CertificateReconciler) signCSRViaAPI(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, caBaseURL, namespace string) error {
-	certname := cert.Spec.Certname
-	if certname == "" {
-		certname = "puppet"
-	}
+	certname := certnameOf(cert)
 
 	// Load CA public cert for TLS server verification
 	caCertPEM, err := getCAPublicCert(ctx, r.Client, ca, namespace)

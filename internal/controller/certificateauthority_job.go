@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -175,11 +177,12 @@ func (r *CertificateAuthorityReconciler) buildCASetupJob(ctx context.Context, ca
 					// otherwise owned by root; overridable via ca.spec.securityContext.
 					SecurityContext: buildPodSecurityContext(
 						CASetupRunAsUser, CASetupRunAsGroup, CASetupFSGroup, ca.Spec.SecurityContext),
+					ImagePullSecrets: appendPullSecrets(nil, cfg.Spec.Image.PullSecrets...),
 					Containers: []corev1.Container{
 						{
 							Name:            "ca-setup",
 							Image:           image,
-							ImagePullPolicy: cfg.Spec.Image.PullPolicy,
+							ImagePullPolicy: configImagePullPolicy(cfg),
 							Command:         []string{"/bin/bash", "-c", script},
 							Env:             envVars,
 							Resources:       resolveCAJobResources(ca),
@@ -396,6 +399,99 @@ fi
 
 // --- Job lifecycle management ---
 
+// maxSetupAttempts bounds the delete/recreate loop above the Job's own
+// backoffLimit. A Job that cannot succeed -- a bad image reference, a broken
+// PVC, an unschedulable pod -- used to be recreated roughly every 15 seconds
+// forever, leaving the CertificateAuthority in Initializing with no indication
+// of why.
+const maxSetupAttempts = 5
+
+// AnnotationSetupAttempts counts consecutive unsuccessful CA setup jobs.
+const AnnotationSetupAttempts = "openvox.voxpupuli.org/setup-attempts"
+
+// setupAttempts reads the counter, treating anything unparseable as a fresh
+// start rather than failing the reconcile over an annotation.
+func setupAttempts(ca *openvoxv1alpha1.CertificateAuthority) int {
+	v, ok := ca.Annotations[AnnotationSetupAttempts]
+	if !ok {
+		return 0
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}
+
+// recordSetupAttempts persists the counter. Passing 0 clears it.
+func (r *CertificateAuthorityReconciler) recordSetupAttempts(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, attempts int) error {
+	if setupAttempts(ca) == attempts {
+		return nil
+	}
+
+	patch := client.MergeFrom(ca.DeepCopy())
+	if attempts == 0 {
+		delete(ca.Annotations, AnnotationSetupAttempts)
+	} else {
+		if ca.Annotations == nil {
+			ca.Annotations = make(map[string]string)
+		}
+		ca.Annotations[AnnotationSetupAttempts] = strconv.Itoa(attempts)
+	}
+	if err := r.Patch(ctx, ca, patch); err != nil {
+		return fmt.Errorf("recording setup attempts on CertificateAuthority %s: %w", ca.Name, err)
+	}
+	return nil
+}
+
+// jobFailureMessage summarises why the Job gave up, for the condition a user
+// reads instead of the Job status they would otherwise have to dig out.
+func jobFailureMessage(c batchv1.JobCondition) string {
+	switch {
+	case c.Message != "":
+		return c.Message
+	case c.Reason != "":
+		return c.Reason
+	default:
+		return "the CA setup job failed without a reason"
+	}
+}
+
+// giveUpOnSetupJob records the terminal state and stops recreating the Job. The
+// failed Job is deliberately left in place: its logs are the only evidence of
+// what went wrong.
+func (r *CertificateAuthorityReconciler) giveUpOnSetupJob(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, jobName, failure string, attempts int) (ctrl.Result, error) {
+	message := fmt.Sprintf("CA setup job %s failed %d times, giving up: %s", jobName, attempts, failure)
+
+	existing := meta.FindStatusCondition(ca.Status.Conditions, openvoxv1alpha1.ConditionCAReady)
+	alreadyReported := existing != nil &&
+		existing.Status == metav1.ConditionFalse &&
+		existing.Reason == "SetupFailed" &&
+		existing.Message == message
+
+	if err := updateStatusWithRetry(ctx, r.Client, ca, func() {
+		ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseError
+		meta.SetStatusCondition(&ca.Status.Conditions, metav1.Condition{
+			Type:               openvoxv1alpha1.ConditionCAReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             "SetupFailed",
+			Message:            message,
+			ObservedGeneration: ca.Generation,
+		})
+	}); err != nil {
+		return ctrl.Result{}, fmt.Errorf("reporting the CA setup failure for %s: %w", ca.Name, err)
+	}
+
+	if !alreadyReported {
+		log.FromContext(ctx).Info("giving up on the CA setup job", "name", jobName, "attempts", attempts, "failure", failure)
+		r.Recorder.Eventf(ca, nil, corev1.EventTypeWarning, EventReasonCASetupFailed, "Reconcile", "%s", message)
+	}
+
+	// Nothing here improves by waiting. A corrected spec changes the desired
+	// Job, and that comparison runs before this point on the next reconcile.
+	return ctrl.Result{}, nil
+}
+
 func (r *CertificateAuthorityReconciler) reconcileJob(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, jobName string, desiredJob *batchv1.Job, expectedSecretName string) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -421,26 +517,56 @@ func (r *CertificateAuthorityReconciler) reconcileJob(ctx context.Context, ca *o
 		currentImage = existingJob.Spec.Template.Spec.Containers[0].Image
 	}
 	if currentImage != desiredImage {
+		// A corrected image is a fresh start, so the failure budget resets.
+		if err := r.recordSetupAttempts(ctx, ca, 0); err != nil {
+			return ctrl.Result{}, err
+		}
 		return r.deleteAndRequeueJob(ctx, existingJob, "image changed")
 	}
 
 	if existingJob.Status.Succeeded > 0 {
 		if !isSecretReady(ctx, r.Client, expectedSecretName, ca.Namespace, "ca_crt.pem") {
-			logger.Info("job succeeded but CA secret missing, recreating", "name", jobName)
-			return r.deleteAndRequeueJob(ctx, existingJob, "secret missing after success")
+			// This loops just as endlessly as an outright failure, so it draws
+			// from the same budget.
+			return r.retrySetupJob(ctx, ca, existingJob,
+				fmt.Sprintf("the job succeeded but Secret %s has no ca_crt.pem", expectedSecretName))
 		}
 		logger.Info("CA setup job completed successfully", "name", jobName)
+		if err := r.recordSetupAttempts(ctx, ca, 0); err != nil {
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{}, nil
 	}
 
 	// Check permanent failure
 	for _, c := range existingJob.Status.Conditions {
 		if c.Type == batchv1.JobFailed && c.Status == corev1.ConditionTrue {
-			return r.deleteAndRequeueJob(ctx, existingJob, "permanently failed")
+			return r.retrySetupJob(ctx, ca, existingJob, jobFailureMessage(c))
 		}
 	}
 
 	return ctrl.Result{RequeueAfter: RequeueIntervalLong}, nil
+}
+
+// retrySetupJob recreates the setup job while there is budget left, and reports
+// the failure once there is not.
+func (r *CertificateAuthorityReconciler) retrySetupJob(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, job *batchv1.Job, failure string) (ctrl.Result, error) {
+	attempts := setupAttempts(ca)
+	if attempts >= maxSetupAttempts {
+		// Already terminal: re-assert without spending another attempt, so the
+		// counter cannot grow on every reconcile.
+		return r.giveUpOnSetupJob(ctx, ca, job.Name, failure, attempts)
+	}
+
+	attempts++
+	if err := r.recordSetupAttempts(ctx, ca, attempts); err != nil {
+		return ctrl.Result{}, err
+	}
+	if attempts >= maxSetupAttempts {
+		return r.giveUpOnSetupJob(ctx, ca, job.Name, failure, attempts)
+	}
+
+	return r.deleteAndRequeueJob(ctx, job, fmt.Sprintf("%s (attempt %d/%d)", failure, attempts, maxSetupAttempts))
 }
 
 func (r *CertificateAuthorityReconciler) deleteAndRequeueJob(ctx context.Context, job *batchv1.Job, reason string) (ctrl.Result, error) {

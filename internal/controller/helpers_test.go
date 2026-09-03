@@ -511,3 +511,47 @@ MIIBVgIBADANBgkqhkiG9w0BAQEFAASCAUAwggE8AgEAAkEAu6PehQqeA2Jz/Vrw
 		}
 	})
 }
+
+// TestResolveImage_InheritsFromConfig covers the behaviour the removed
+// ImageSpec default used to hide: a Server without its own image runs what its
+// Config specifies.
+func TestResolveImage_InheritsFromConfig(t *testing.T) {
+	cfg := newConfig("production")
+	cfg.Spec.Image = openvoxv1alpha1.ImageSpec{Repository: "registry.invalid/openvox-server", Tag: "8.15.2"}
+
+	tests := []struct {
+		name  string
+		image openvoxv1alpha1.ImageSpec
+		want  string
+	}{
+		{
+			name: "no server image inherits both",
+			want: "registry.invalid/openvox-server:8.15.2",
+		},
+		{
+			name:  "only a tag override keeps the repository",
+			image: openvoxv1alpha1.ImageSpec{Tag: "9.0.0"},
+			want:  "registry.invalid/openvox-server:9.0.0",
+		},
+		{
+			name:  "only a repository override keeps the tag",
+			image: openvoxv1alpha1.ImageSpec{Repository: "other.invalid/openvox-server"},
+			want:  "other.invalid/openvox-server:8.15.2",
+		},
+		{
+			name:  "both overridden",
+			image: openvoxv1alpha1.ImageSpec{Repository: "other.invalid/openvox-server", Tag: "9.0.0"},
+			want:  "other.invalid/openvox-server:9.0.0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := newServer("web")
+			server.Spec.Image = tt.image
+			if got := resolveImage(server, cfg); got != tt.want {
+				t.Errorf("resolveImage() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

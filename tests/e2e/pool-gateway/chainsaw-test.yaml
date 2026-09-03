@@ -80,6 +80,15 @@ spec:
                       - name: openvox-stack-gw-server
 
     - name: Verify DNS alt name injected into Certificate
+      description: |
+        The spec holds what the chart wrote: the server name, the certname and
+        the Service name of every Pool the server joins. This server has
+        poolRefs [ca, server], so it needs both Service names; the ca Pool's
+        name equals the server name and is deduplicated away.
+
+        The route hostname is no longer written into the spec. It is derived
+        into status.effectiveDNSAltNames, which is what the certificate is
+        actually issued for - sorted, so the signing hash is stable.
       try:
         - assert:
             resource:
@@ -90,6 +99,12 @@ spec:
               spec:
                 dnsAltNames:
                   - openvox-stack-gw-ca
+                  - puppet
+                  - openvox-stack-gw-server
+              status:
+                effectiveDNSAltNames:
+                  - openvox-stack-gw-ca
+                  - openvox-stack-gw-server
                   - puppet
                   - puppet.e2e.example.com
 

@@ -40,7 +40,7 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 	javaArgs = fmt.Sprintf("%s -Djruby-puppet.max-active-instances=%d", javaArgs, maxActive)
 
 	role := RoleServer
-	if server.Spec.CA && !server.Spec.Server {
+	if server.Spec.CA && !serverRoleEnabled(server) {
 		role = RoleCA
 	}
 
@@ -85,7 +85,7 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 
 	// Add code image annotation for server:true pods to trigger rollout on image change.
 	// All code image references are joined so a change to any of them rolls the pod.
-	if server.Spec.Server {
+	if serverRoleEnabled(server) {
 		var codeImages []string
 		for _, e := range resolveCode(server, cfg) {
 			if e.Image != "" {
@@ -99,7 +99,7 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 
 	// Add ENC secret hash annotation for server pods to trigger rollout on ENC config changes.
 	// Skipped when a custom externalNodesCommand disables the NodeClassifier-driven flow.
-	if server.Spec.Server && cfg.Spec.NodeClassifierRef != "" && cfg.Spec.Puppet.ExternalNodesCommand == "" {
+	if serverRoleEnabled(server) && cfg.Spec.NodeClassifierRef != "" && cfg.Spec.Puppet.ExternalNodesCommand == "" {
 		encSecretName := fmt.Sprintf("%s-enc", server.Spec.ConfigRef)
 		if encHash, err := r.secretHash(ctx, encSecretName, server.Namespace); err == nil {
 			annotations["openvox.voxpupuli.org/enc-secret-hash"] = encHash
@@ -107,7 +107,7 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 	}
 
 	// Add report-webhook secret hash annotation for server pods to trigger rollout on report config changes
-	if server.Spec.Server {
+	if serverRoleEnabled(server) {
 		reportSecretName := fmt.Sprintf("%s-report-webhook", server.Spec.ConfigRef)
 		if reportHash, err := r.secretHash(ctx, reportSecretName, server.Namespace); err == nil {
 			annotations["openvox.voxpupuli.org/report-webhook-secret-hash"] = reportHash
@@ -165,10 +165,17 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 		return fmt.Errorf("getting Deployment %s: %w", deployName, err)
 	}
 
+	if err := assertControlledBy(deploy, server, "Deployment"); err != nil {
+		return err
+	}
+
 	// Update existing Deployment with conflict retry
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		if err := r.Get(ctx, types.NamespacedName{Name: deployName, Namespace: server.Namespace}, deploy); err != nil {
 			return fmt.Errorf("getting Deployment %s: %w", deployName, err)
+		}
+		if err := assertControlledBy(deploy, server, "Deployment"); err != nil {
+			return err
 		}
 		if !server.Spec.Autoscaling.Enabled {
 			deploy.Spec.Replicas = &replicas
@@ -327,7 +334,7 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 	}
 
 	// Code volumes: only mounted for server:true pods (CA-only pods don't compile catalogs)
-	if server.Spec.Server {
+	if serverRoleEnabled(server) {
 		if codeMounts := resolveCodeMounts(server, cfg); len(codeMounts) > 0 {
 			for _, cm := range codeMounts {
 				volumeMounts = append(volumeMounts, corev1.VolumeMount{
@@ -380,7 +387,7 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 
 	// ENC: mount config Secret and cache emptyDir for server:true pods with nodeClassifierRef.
 	// Skipped when a custom externalNodesCommand disables the NodeClassifier-driven flow.
-	if server.Spec.Server && cfg.Spec.NodeClassifierRef != "" && cfg.Spec.Puppet.ExternalNodesCommand == "" {
+	if serverRoleEnabled(server) && cfg.Spec.NodeClassifierRef != "" && cfg.Spec.Puppet.ExternalNodesCommand == "" {
 		encSecretName := fmt.Sprintf("%s-enc", server.Spec.ConfigRef)
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{
@@ -413,7 +420,7 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 	// ReportProcessor: mount config Secret for server:true pods when report-webhook Secret exists
 	// The Secret is created by ReportProcessorReconciler when any ReportProcessor references this Config.
 	// We mount it if it exists; the Secret presence indicates webhook reports are configured.
-	if server.Spec.Server {
+	if serverRoleEnabled(server) {
 		reportSecretName := fmt.Sprintf("%s-report-webhook", server.Spec.ConfigRef)
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{
@@ -449,7 +456,7 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 	container := corev1.Container{
 		Name:            "openvox-server",
 		Image:           image,
-		ImagePullPolicy: cfg.Spec.Image.PullPolicy,
+		ImagePullPolicy: resolveImagePullPolicy(server, cfg),
 		Env:             env,
 		EnvFrom:         server.Spec.EnvFrom,
 		Ports: []corev1.ContainerPort{
@@ -501,7 +508,7 @@ chmod 640 /ssl/private_keys/puppet.pem`
 	initContainer := corev1.Container{
 		Name:            "tls-init",
 		Image:           image,
-		ImagePullPolicy: cfg.Spec.Image.PullPolicy,
+		ImagePullPolicy: resolveImagePullPolicy(server, cfg),
 		Command:         []string{"sh", "-c", sslInitScript},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: "ssl", MountPath: "/ssl"},
@@ -512,7 +519,7 @@ chmod 640 /ssl/private_keys/puppet.pem`
 
 	containerSecurityContext := &corev1.SecurityContext{
 		AllowPrivilegeEscalation: boolPtr(false),
-		ReadOnlyRootFilesystem:   &cfg.Spec.ReadOnlyRootFilesystem,
+		ReadOnlyRootFilesystem:   boolPtr(resolveReadOnlyRootFilesystem(server, cfg)),
 		Capabilities: &corev1.Capabilities{
 			Drop: []corev1.Capability{"ALL"},
 		},
@@ -537,16 +544,13 @@ chmod 640 /ssl/private_keys/puppet.pem`
 		Volumes:                   volumes,
 	}
 
-	// Add imagePullSecrets for code images if configured (deduplicated across entries)
-	if server.Spec.Server {
-		seen := make(map[string]bool)
+	// The server image and the code images can live in different registries, so
+	// both sets of credentials end up on the pod, deduplicated.
+	podSpec.ImagePullSecrets = appendPullSecrets(nil, resolveImagePullSecrets(server, cfg)...)
+	if serverRoleEnabled(server) {
 		for _, e := range resolveCode(server, cfg) {
-			if e.ImagePullSecret != "" && !seen[e.ImagePullSecret] {
-				seen[e.ImagePullSecret] = true
-				podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, corev1.LocalObjectReference{
-					Name: e.ImagePullSecret,
-				})
-			}
+			podSpec.ImagePullSecrets = appendPullSecrets(podSpec.ImagePullSecrets,
+				corev1.LocalObjectReference{Name: e.ImagePullSecret})
 		}
 	}
 

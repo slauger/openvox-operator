@@ -6,12 +6,9 @@ import (
 	"sort"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
@@ -57,16 +54,14 @@ func (r *ConfigReconciler) reconcileReportWebhookSecret(ctx context.Context, cfg
 		return nil
 	}
 
+	// Rendering failures are reported on the Config, which owns this Secret. The
+	// ReportProcessor controller derives its own status from whether its
+	// endpoint ends up in the rendered Secret.
 	webhookYAML, renderErr := r.renderReportWebhookConfig(ctx, cfg.Namespace, processors)
 	if renderErr != nil {
-		for i := range processors {
-			r.updateReportProcessorStatus(ctx, &processors[i], renderErr)
-		}
+		r.Recorder.Eventf(cfg, nil, corev1.EventTypeWarning, EventReasonReportWebhookRenderFailed, "Reconcile",
+			"Rendering the report webhook configuration failed: %v", renderErr)
 		return renderErr
-	}
-
-	for i := range processors {
-		r.updateReportProcessorStatus(ctx, &processors[i], nil)
 	}
 
 	secretName := fmt.Sprintf("%s-report-webhook", cfg.Name)
@@ -219,38 +214,6 @@ func (r *ConfigReconciler) resolveConfigMapKey(ctx context.Context, namespace, c
 	return val, nil
 }
 
-// updateReportProcessorStatus sets the phase and condition on a ReportProcessor.
-func (r *ConfigReconciler) updateReportProcessorStatus(ctx context.Context, rp *openvoxv1alpha1.ReportProcessor, err error) {
-	var errMsg string
-	if err != nil {
-		errMsg = err.Error()
-	}
-	if statusErr := updateStatusWithRetry(ctx, r.Client, rp, func() {
-		if err != nil {
-			rp.Status.Phase = openvoxv1alpha1.ReportProcessorPhaseError
-			meta.SetStatusCondition(&rp.Status.Conditions, metav1.Condition{
-				Type:               openvoxv1alpha1.ConditionReportProcessorReady,
-				Status:             metav1.ConditionFalse,
-				Reason:             "Error",
-				Message:            errMsg,
-				LastTransitionTime: metav1.Now(),
-			})
-		} else {
-			rp.Status.Phase = openvoxv1alpha1.ReportProcessorPhaseActive
-			meta.SetStatusCondition(&rp.Status.Conditions, metav1.Condition{
-				Type:               openvoxv1alpha1.ConditionReportProcessorReady,
-				Status:             metav1.ConditionTrue,
-				Reason:             "ConfigRendered",
-				Message:            "Report processor configuration is active",
-				LastTransitionTime: metav1.Now(),
-			})
-		}
-	}); statusErr != nil {
-		log.FromContext(ctx).Error(statusErr, "failed to update ReportProcessor status", "name", rp.Name)
-	}
-}
-
-// enqueueConfigsForReportProcessor maps ReportProcessor changes to Config reconciles.
 func (r *ConfigReconciler) enqueueConfigsForReportProcessor(c client.Reader) handler.MapFunc {
 	return func(ctx context.Context, obj client.Object) []reconcile.Request {
 		rp, ok := obj.(*openvoxv1alpha1.ReportProcessor)

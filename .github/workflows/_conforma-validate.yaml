@@ -27,7 +27,7 @@ jobs:
       packages: read
     env:
       # renovate: datasource=github-releases depName=conforma/cli
-      EC_VERSION: "0.9.96"
+      EC_VERSION: "0.10.2"
     steps:
       - name: Checkout
         uses: actions/checkout@v7

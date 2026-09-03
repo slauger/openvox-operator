@@ -158,7 +158,11 @@ spec:
             timeout: 2m
             content: |
               kubectl delete database --all -n e2e-webhook-val-db --ignore-not-found 2>/dev/null || true
-              kubectl delete certificate --all -n e2e-webhook-val-db --ignore-not-found 2>/dev/null || true
-              kubectl delete certificateauthority --all -n e2e-webhook-val-db --ignore-not-found 2>/dev/null || true
+              # cert-manager is installed in this group and also serves a
+              # Certificate kind, so the bare name resolves to theirs and
+              # silently deletes nothing. The OpenVox Certificate then survives
+              # and blocks the CertificateAuthority finalizer forever.
+              kubectl delete certificates.openvox.voxpupuli.org --all -n e2e-webhook-val-db --timeout=120s --ignore-not-found 2>/dev/null || true
+              kubectl delete certificateauthority --all -n e2e-webhook-val-db --timeout=120s --ignore-not-found 2>/dev/null || true
               kubectl delete secret wh-db-pg-creds -n e2e-webhook-val-db --ignore-not-found 2>/dev/null || true
               kubectl delete namespace e2e-webhook-val-db --ignore-not-found 2>/dev/null || true

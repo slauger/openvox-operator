@@ -94,6 +94,71 @@ spec:
 |---|---|
 | `CAReady` | CA Secrets are present (`{name}-ca`, `{name}-ca-key`, `{name}-ca-crl`) and the CA can sign certificates. Set when the setup Job completes successfully or when an external CA is reachable. |
 | `OperatorSigningReady` | The auto-managed `{name}-operator-signing` Certificate is signed and its TLS Secret is available for mTLS-authenticated CSR signing. Not set for external CAs (which manage their own signing credentials). |
+| `DeletionBlocked` | Deletion is being held back because Certificates still reference this CertificateAuthority. The message lists them. |
+
+When the setup Job keeps failing, `CAReady` is set to `False` with reason
+`SetupFailed`, carrying the Job's own failure message. See
+[Setup failures](#setup-failures).
+
+## Storage changes
+
+`spec.storage.size` can be increased if the storage class supports volume
+expansion, but never decreased -- a PersistentVolumeClaim rejects a shrink, and
+accepting the edit would only leave the reconcile failing on every attempt.
+`spec.storage.storageClass` cannot be changed at all once the claim exists.
+
+Both are checked by the admission webhook. To move the CA to different storage,
+back up the `{name}-ca-key` Secret, delete the CertificateAuthority together
+with its Certificates, and recreate it with the new settings.
+
+## Relationship to Config
+
+A CertificateAuthority belongs to exactly one Config. The Config supplies the
+container image for the CA setup Job and the settings rendered into `ca.conf`,
+so a second Config claiming the same CA would make the outcome depend on which
+one the controller happened to list first.
+
+The Config webhook rejects a second Config with the same `authorityRef`. With
+the webhooks disabled the controller still resolves the ambiguity
+deterministically -- the alphabetically first Config wins -- and emits a
+`MultipleConfigs` warning event naming all claimants.
+
+## Deletion
+
+The CA private key (`{name}-ca-key`) and the CA data PVC are owned by the
+CertificateAuthority, so deleting it garbage-collects both. That is
+irreversible: every agent certificate signed by this CA becomes unverifiable,
+and there is no way to rebuild the key.
+
+The operator therefore holds a finalizer
+(`openvox.voxpupuli.org/ca-protection`) and refuses to release it while any
+Certificate still references the CA. A `kubectl delete` on such a CA leaves the
+resource in `Terminating` with a `DeletionBlocked` condition naming the
+certificates that are in the way. With the admission webhooks enabled the
+delete is rejected outright instead, so you get the answer immediately.
+
+A Certificate that is itself being deleted does not hold the CA back -- only one
+nobody asked to remove does. That is what lets `kubectl delete namespace` finish:
+everything is marked for deletion at once, and the CA would otherwise wait for
+Certificates whose own cleanup needs the CA service that is going away with it.
+
+To delete a CertificateAuthority on purpose, remove the Certificates first:
+
+```console
+$ kubectl delete certificate --all -n <namespace>
+$ kubectl delete certificateauthority <name> -n <namespace>
+```
+
+If you have to force it -- for example while cleaning up a namespace whose
+Certificates are themselves stuck -- drop the finalizer by hand:
+
+```console
+$ kubectl patch certificateauthority <name> -n <namespace> \
+    --type=merge -p '{"metadata":{"finalizers":[]}}'
+```
+
+This destroys the CA key. Take a backup of the `{name}-ca-key` Secret first if
+there is any chance you will need it again.
 
 ## Phases
 
@@ -104,6 +169,26 @@ spec:
 | `Ready` | CA Secrets created, Certificates can be signed |
 | `External` | External CA configured (no PVC, Job, or internal Service) |
 | `Error` | CA setup failed |
+
+## Setup failures
+
+A setup Job that cannot succeed -- a bad image reference, a broken PVC, an
+unschedulable pod -- is deleted and recreated by the controller. That retry is
+bounded: after five consecutive failures the controller stops, sets `CAReady` to
+`False` with reason `SetupFailed` and phase `Error`, and emits a
+`CASetupFailed` warning event.
+
+The failed Job is left in place; its logs are the only record of what went
+wrong:
+
+```bash
+kubectl logs -n <namespace> job/<ca-name>-setup
+```
+
+The attempt counter lives in the `openvox.voxpupuli.org/setup-attempts`
+annotation on the CertificateAuthority. It is cleared when the Job succeeds and
+when the image the Job runs changes, so correcting `spec.image` on the Config
+gives the setup another five attempts without any manual step.
 
 ## CA Secrets
 

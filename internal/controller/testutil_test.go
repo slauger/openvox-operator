@@ -6,6 +6,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -15,6 +16,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
@@ -34,7 +36,7 @@ func testScheme() *runtime.Scheme {
 // setupTestClient creates a fake client pre-loaded with the given objects.
 // StatusSubresource is enabled for all CRD types that use status updates.
 func setupTestClient(objs ...client.Object) client.Client {
-	return fake.NewClientBuilder().
+	b := fake.NewClientBuilder().
 		WithScheme(testScheme()).
 		WithObjects(objs...).
 		WithStatusSubresource(
@@ -47,8 +49,13 @@ func setupTestClient(objs ...client.Object) client.Client {
 			&openvoxv1alpha1.SigningPolicy{},
 			&openvoxv1alpha1.NodeClassifier{},
 			&openvoxv1alpha1.ReportProcessor{},
-		).
-		Build()
+		)
+	// Register the same field indexes the manager sets up, so watch map
+	// functions behave in tests the way they do in a cluster.
+	for _, idx := range fieldIndexes() {
+		b = b.WithIndex(idx.obj, idx.field, idx.extract)
+	}
+	return b.Build()
 }
 
 // testRecorder returns a fake event recorder.
@@ -79,7 +86,7 @@ func newConfig(name string, opts ...configOption) *openvoxv1alpha1.Config {
 			Namespace: testNamespace,
 		},
 		Spec: openvoxv1alpha1.ConfigSpec{
-			ReadOnlyRootFilesystem: true,
+			ReadOnlyRootFilesystem: boolPtr(true),
 			Image: openvoxv1alpha1.ImageSpec{
 				Repository: "ghcr.io/slauger/openvox-server-8",
 				Tag:        "latest",
@@ -89,7 +96,7 @@ func newConfig(name string, opts ...configOption) *openvoxv1alpha1.Config {
 				EnvironmentTimeout: "unlimited",
 				EnvironmentPath:    "/etc/puppetlabs/code/environments",
 				HieraConfig:        "$confdir/hiera.yaml",
-				Storeconfigs:       true,
+				Storeconfigs:       boolPtr(true),
 				StoreBackend:       "puppetdb",
 				Reports:            "puppetdb",
 			},
@@ -115,7 +122,7 @@ func withNodeClassifierRef(ref string) configOption {
 
 func withReadOnlyRootFS(v bool) configOption {
 	return func(c *openvoxv1alpha1.Config) {
-		c.Spec.ReadOnlyRootFilesystem = v
+		c.Spec.ReadOnlyRootFilesystem = boolPtr(v)
 	}
 }
 
@@ -194,7 +201,7 @@ func newServer(name string, opts ...serverOption) *openvoxv1alpha1.Server {
 		Spec: openvoxv1alpha1.ServerSpec{
 			ConfigRef:      "production",
 			CertificateRef: "production-cert",
-			Server:         true,
+			Server:         boolPtr(true),
 			CA:             false,
 			Replicas:       &replicas,
 		},
@@ -208,15 +215,15 @@ func newServer(name string, opts ...serverOption) *openvoxv1alpha1.Server {
 func withCA(ca bool) serverOption {
 	return func(s *openvoxv1alpha1.Server) {
 		s.Spec.CA = ca
-		if ca && !s.Spec.Server {
-			s.Spec.Server = false
+		if ca && !serverRoleEnabled(s) {
+			s.Spec.Server = boolPtr(false)
 		}
 	}
 }
 
 func withServerRole(server bool) serverOption {
 	return func(s *openvoxv1alpha1.Server) {
-		s.Spec.Server = server
+		s.Spec.Server = boolPtr(server)
 	}
 }
 
@@ -339,11 +346,28 @@ func newCertificate(name, authorityRef string, phase openvoxv1alpha1.Certificate
 	cert.Status.Phase = phase
 	if phase == openvoxv1alpha1.CertificatePhaseSigned {
 		cert.Status.SecretName = name + "-tls"
+		// Phase and condition are always set together by the controller, so a
+		// fixture that only sets the phase would not represent a real object.
+		meta.SetStatusCondition(&cert.Status.Conditions, metav1.Condition{
+			Type:    openvoxv1alpha1.ConditionCertSigned,
+			Status:  metav1.ConditionTrue,
+			Reason:  "CertificateSigned",
+			Message: "Certificate is signed and available",
+		})
 	}
 	return cert
 }
 
 type caOption func(*openvoxv1alpha1.CertificateAuthority)
+
+// withCANotReady models a CertificateAuthority that has not finished setting
+// itself up: neither the phase nor the readiness condition may claim otherwise.
+func withCANotReady() caOption {
+	return func(ca *openvoxv1alpha1.CertificateAuthority) {
+		ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhasePending
+		meta.RemoveStatusCondition(&ca.Status.Conditions, openvoxv1alpha1.ConditionCAReady)
+	}
+}
 
 func withExternal(url string) caOption {
 	return func(ca *openvoxv1alpha1.CertificateAuthority) {
@@ -371,15 +395,21 @@ func newCertificateAuthority(name string, opts ...caOption) *openvoxv1alpha1.Cer
 		},
 		Spec: openvoxv1alpha1.CertificateAuthoritySpec{
 			TTL:                          "5y",
-			AllowSubjectAltNames:         true,
-			AllowAuthorizationExtensions: true,
-			EnableInfraCRL:               true,
-			AllowAutoRenewal:             true,
+			AllowSubjectAltNames:         boolPtr(true),
+			AllowAuthorizationExtensions: boolPtr(true),
+			EnableInfraCRL:               boolPtr(true),
+			AllowAutoRenewal:             boolPtr(true),
 			AutoRenewalCertTTL:           "90d",
 		},
 	}
 	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseReady
 	ca.Status.CASecretName = name + "-ca"
+	meta.SetStatusCondition(&ca.Status.Conditions, metav1.Condition{
+		Type:    openvoxv1alpha1.ConditionCAReady,
+		Status:  metav1.ConditionTrue,
+		Reason:  "CAInitialized",
+		Message: "CA is initialized and ready",
+	})
 	for _, o := range opts {
 		o(ca)
 	}
@@ -604,4 +634,21 @@ func newDatabaseReconciler(c client.Client) *DatabaseReconciler {
 		Scheme:   testScheme(),
 		Recorder: testRecorder(),
 	}
+}
+
+// ownedBy stamps a controller reference on a fixture so it looks like a
+// resource the operator created earlier. Managed child resources carry one in
+// a cluster, and the reconcilers refuse to touch objects that do not.
+func ownedBy(owner, obj client.Object) client.Object {
+	if err := controllerutil.SetControllerReference(owner, obj, testScheme()); err != nil {
+		panic("setting controller reference on test fixture: " + err.Error())
+	}
+	return obj
+}
+
+// specHash hashes a Certificate against its own spec alt names. Tests that do
+// not involve Pools want exactly that; the production path derives the names
+// from the Pools the Servers join.
+func specHash(cert *openvoxv1alpha1.Certificate) string {
+	return signingSpecHash(cert, cert.Spec.DNSAltNames)
 }

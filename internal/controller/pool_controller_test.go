@@ -201,10 +201,16 @@ func TestPoolReconcile_TLSRouteHostnameConflict(t *testing.T) {
 		t.Fatalf("failed to create pool-b: %v", err)
 	}
 
-	// Reconcile pool-b should fail with hostname conflict
-	_, err := r.Reconcile(testCtx(), testRequest("puppet-b"))
-	if err == nil {
-		t.Fatal("expected hostname conflict error")
+	// The conflict is reported, not retried: nothing about a duplicate
+	// hostname improves by waiting, so returning an error would only produce
+	// an endless backoff loop.
+	if _, err := r.Reconcile(testCtx(), testRequest("puppet-b")); err != nil {
+		t.Fatalf("a hostname conflict must not fail the reconcile: %v", err)
+	}
+
+	route := &gwapiv1.TLSRoute{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "puppet-b", Namespace: testNamespace}, route); err == nil {
+		t.Error("the losing Pool must not create a TLSRoute for a hostname it does not own")
 	}
 }
 
@@ -217,7 +223,7 @@ func TestPoolReconcile_UpdateExistingService(t *testing.T) {
 		{Name: "https", Port: 8140},
 	}
 
-	c := setupTestClient(pool, existingSvc)
+	c := setupTestClient(pool, ownedBy(pool, existingSvc))
 	r := newPoolReconciler(c, false)
 
 	if _, err := r.Reconcile(testCtx(), testRequest("puppet")); err != nil {
@@ -293,98 +299,5 @@ func TestPoolReconcile_TLSRouteCustomPort(t *testing.T) {
 	}
 	if route.Spec.Rules[0].BackendRefs[0].Port == nil || int32(*route.Spec.Rules[0].BackendRefs[0].Port) != 9140 {
 		t.Errorf("expected port 9140 on backend ref")
-	}
-}
-
-func TestPoolReconcile_InjectDNSAltNames(t *testing.T) {
-	pool := newPool("puppet", withRoute(true, "puppet.example.com", "my-gw"))
-	server := newServer("srv1", withPoolRefs("puppet"))
-	cert := newCertificate("production-cert", "test-ca", openvoxv1alpha1.CertificatePhaseSigned)
-
-	c := setupTestClient(pool, server, cert)
-	r := newPoolReconciler(c, true)
-
-	if err := r.injectDNSAltNames(testCtx(), pool); err != nil {
-		t.Fatalf("injectDNSAltNames: %v", err)
-	}
-
-	updatedCert := &openvoxv1alpha1.Certificate{}
-	if err := c.Get(testCtx(), types.NamespacedName{Name: "production-cert", Namespace: testNamespace}, updatedCert); err != nil {
-		t.Fatalf("failed to get Certificate: %v", err)
-	}
-
-	found := false
-	for _, san := range updatedCert.Spec.DNSAltNames {
-		if san == "puppet.example.com" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("expected DNS alt name 'puppet.example.com' to be injected, got %v", updatedCert.Spec.DNSAltNames)
-	}
-}
-
-func TestPoolReconcile_InjectDNSAltNames_AlreadyPresent(t *testing.T) {
-	pool := newPool("puppet", withRoute(true, "puppet.example.com", "my-gw"))
-	server := newServer("srv1", withPoolRefs("puppet"))
-	cert := newCertificate("production-cert", "test-ca", openvoxv1alpha1.CertificatePhaseSigned)
-	cert.Spec.DNSAltNames = []string{"puppet.example.com"}
-
-	c := setupTestClient(pool, server, cert)
-	r := newPoolReconciler(c, true)
-
-	if err := r.injectDNSAltNames(testCtx(), pool); err != nil {
-		t.Fatalf("injectDNSAltNames: %v", err)
-	}
-
-	updatedCert := &openvoxv1alpha1.Certificate{}
-	if err := c.Get(testCtx(), types.NamespacedName{Name: "production-cert", Namespace: testNamespace}, updatedCert); err != nil {
-		t.Fatalf("failed to get Certificate: %v", err)
-	}
-
-	count := 0
-	for _, san := range updatedCert.Spec.DNSAltNames {
-		if san == "puppet.example.com" {
-			count++
-		}
-	}
-	if count != 1 {
-		t.Errorf("expected exactly 1 occurrence of DNS alt name, got %d in %v", count, updatedCert.Spec.DNSAltNames)
-	}
-}
-
-func TestPoolReconcile_InjectDNSAltNames_NoCertRef(t *testing.T) {
-	pool := newPool("puppet", withRoute(true, "puppet.example.com", "my-gw"))
-	server := newServer("srv1", withPoolRefs("puppet"))
-	server.Spec.CertificateRef = "" // no cert
-
-	c := setupTestClient(pool, server)
-	r := newPoolReconciler(c, true)
-
-	if err := r.injectDNSAltNames(testCtx(), pool); err != nil {
-		t.Fatalf("injectDNSAltNames should succeed when server has no cert ref: %v", err)
-	}
-}
-
-func TestPoolReconcile_InjectDNSAltNames_ServerNotInPool(t *testing.T) {
-	pool := newPool("puppet", withRoute(true, "puppet.example.com", "my-gw"))
-	server := newServer("srv1", withPoolRefs("other-pool"))
-	cert := newCertificate("production-cert", "test-ca", openvoxv1alpha1.CertificatePhaseSigned)
-
-	c := setupTestClient(pool, server, cert)
-	r := newPoolReconciler(c, true)
-
-	if err := r.injectDNSAltNames(testCtx(), pool); err != nil {
-		t.Fatalf("injectDNSAltNames: %v", err)
-	}
-
-	// Cert should be unchanged
-	updatedCert := &openvoxv1alpha1.Certificate{}
-	if err := c.Get(testCtx(), types.NamespacedName{Name: "production-cert", Namespace: testNamespace}, updatedCert); err != nil {
-		t.Fatalf("failed to get Certificate: %v", err)
-	}
-	if len(updatedCert.Spec.DNSAltNames) != 0 {
-		t.Errorf("expected no DNS alt names injected, got %v", updatedCert.Spec.DNSAltNames)
 	}
 }

@@ -102,12 +102,19 @@ type PoolServiceSpec struct {
 
 	// ExternalIPs is a list of IP addresses for which nodes in the cluster
 	// will also accept traffic for this service.
+	// +listType=set
 	// +optional
 	ExternalIPs []string `json:"externalIPs,omitempty"`
 }
 
 // PoolStatus defines the observed state of Pool.
 type PoolStatus struct {
+	// ObservedGeneration is the .metadata.generation that was last processed by
+	// the controller. A value below .metadata.generation means the rest of this
+	// status has not caught up with the current spec yet.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
 	// ServiceName is the name of the created Kubernetes Service.
 	// +optional
 	ServiceName string `json:"serviceName,omitempty"`
@@ -115,7 +122,18 @@ type PoolStatus struct {
 	// Endpoints is the number of Pods behind the Service.
 	// +optional
 	Endpoints int32 `json:"endpoints,omitempty"`
+
+	// Conditions represent the latest available observations.
+	// +listType=map
+	// +listMapKey=type
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
+
+// Condition types for Pool.
+const (
+	ConditionPoolReady = "Ready"
+)
 
 func init() {
 	SchemeBuilder.Register(func(s *runtime.Scheme) error {

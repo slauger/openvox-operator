@@ -58,12 +58,24 @@ type CertificateSpec struct {
 	// AuthorityRef references the CertificateAuthority that signs this certificate.
 	AuthorityRef string `json:"authorityRef"`
 
-	// Certname is the certificate common name.
-	// +kubebuilder:default="puppet"
-	// +optional
-	Certname string `json:"certname,omitempty"`
+	// Certname is the certificate common name. Immutable after creation.
+	//
+	// The name is baked into the issued certificate and into the entry the CA
+	// keeps for it. Changing it would leave that entry behind under the old
+	// name, so the finalizer could no longer clean it up on deletion.
+	//
+	// There is deliberately no default. A certname identifies exactly one entry
+	// on the CA, so a shared default made two Certificates collide by default
+	// rather than by mistake. "puppet" is also only the right identity for the
+	// main server: PuppetDB and any further certificate need their own. The
+	// names agents connect through belong in DNSAltNames, not here.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="certname is immutable"
+	Certname string `json:"certname"`
 
 	// DNSAltNames is a list of DNS subject alternative names for the certificate.
+	// Order is irrelevant and duplicates are rejected.
+	// +listType=set
 	// +optional
 	DNSAltNames []string `json:"dnsAltNames,omitempty"`
 
@@ -94,7 +106,17 @@ const (
 
 // CertificateStatus defines the observed state of Certificate.
 type CertificateStatus struct {
-	// Phase is the current lifecycle phase.
+	// ObservedGeneration is the .metadata.generation that was last processed by
+	// the controller. A value below .metadata.generation means the rest of this
+	// status has not caught up with the current spec yet.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Phase is a coarse, human-readable summary of the observed state.
+	//
+	// It is derived on every reconcile and is never read back as controller
+	// input: use Conditions for anything machine-readable. Editing or losing
+	// the phase does not change what the operator does.
 	// +optional
 	Phase CertificatePhase `json:"phase,omitempty"`
 
@@ -102,11 +124,34 @@ type CertificateStatus struct {
 	// +optional
 	SecretName string `json:"secretName,omitempty"`
 
+	// SignedSpecHash digests what the current certificate was issued for:
+	// certname, the effective alt names and csrExtensions. When it no longer
+	// matches, the certificate is re-signed. An empty value means the hash was
+	// never recorded (certificates issued before this field existed) and is
+	// adopted on the next reconcile rather than triggering a re-sign.
+	// +optional
+	SignedSpecHash string `json:"signedSpecHash,omitempty"`
+
+	// EffectiveDNSAltNames lists the alt names the certificate is actually
+	// issued for: spec.dnsAltNames plus the route hostname of every Pool that
+	// asks for injection and is joined by a Server using this Certificate.
+	//
+	// The Pool used to append its hostname to spec.dnsAltNames directly. Under
+	// GitOps that turned into a loop: the Pool added the name, the source of
+	// truth reverted it, the Pool added it again, and each round changed a
+	// signing-relevant field. Deriving it here writes nothing foreign and is
+	// idempotent.
+	// +listType=set
+	// +optional
+	EffectiveDNSAltNames []string `json:"effectiveDNSAltNames,omitempty"`
+
 	// NotAfter is the expiration time of the signed certificate.
 	// +optional
 	NotAfter *metav1.Time `json:"notAfter,omitempty"`
 
 	// Conditions represent the latest available observations.
+	// +listType=map
+	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
@@ -114,6 +159,10 @@ type CertificateStatus struct {
 // Condition types for Certificate.
 const (
 	ConditionCertSigned = "CertSigned"
+
+	// ConditionCertnameConflict reports that another Certificate already claims
+	// this certname against the same CertificateAuthority.
+	ConditionCertnameConflict = "CertnameConflict"
 )
 
 func init() {

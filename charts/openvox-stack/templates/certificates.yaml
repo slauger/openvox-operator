@@ -1,4 +1,7 @@
 {{- range $entry := .Values.servers }}
+{{- if not $entry.certificate.certname }}
+{{- fail (printf "servers[%s].certificate.certname is required: a certname identifies exactly one entry on the CA, so two servers sharing one cannot both be signed" $entry.name) }}
+{{- end }}
 ---
 apiVersion: openvox.voxpupuli.org/v1alpha1
 kind: Certificate
@@ -12,6 +15,15 @@ spec:
     {{- $autoNames := list $serverName }}
     {{- if ne $serverName "puppet" }}
     {{- $autoNames = append $autoNames "puppet" }}
+    {{- end }}
+    {{- /* Agents reach a server through the Services of the Pools it joins, so
+           those names have to be in the certificate or the TLS handshake fails. */}}
+    {{- range $poolRef := ($entry.poolRefs | default list) }}
+    {{- range $pool := ($.Values.pools | default list) }}
+    {{- if eq $pool.name $poolRef }}
+    {{- $autoNames = append $autoNames (include "openvox-stack.poolName" (dict "root" $ "entry" $pool)) }}
+    {{- end }}
+    {{- end }}
     {{- end }}
     {{- $allNames := concat $autoNames ($entry.certificate.dnsAltNames | default list) | uniq }}
     {{- toYaml $allNames | nindent 4 }}

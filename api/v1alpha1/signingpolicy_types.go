@@ -80,12 +80,15 @@ type SigningPolicySpec struct {
 	// CSRAttributes defines CSR extension attributes that must all match (AND logic).
 	// Each entry specifies an attribute name and the expected value (inline or from a Secret).
 	// +optional
+	// +listType=map
+	// +listMapKey=name
 	CSRAttributes []CSRAttributeMatch `json:"csrAttributes,omitempty"`
 }
 
 // PatternSpec defines certname glob matching.
 type PatternSpec struct {
 	// Allow is a list of glob patterns. The certname must match at least one.
+	// +listType=set
 	Allow []string `json:"allow"`
 }
 
@@ -131,11 +134,23 @@ const (
 
 // SigningPolicyStatus defines the observed state of SigningPolicy.
 type SigningPolicyStatus struct {
-	// Phase is the current lifecycle phase.
+	// ObservedGeneration is the .metadata.generation that was last processed by
+	// the controller. A value below .metadata.generation means the rest of this
+	// status has not caught up with the current spec yet.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Phase is a coarse, human-readable summary of the observed state.
+	//
+	// It is derived on every reconcile and is never read back as controller
+	// input: use Conditions for anything machine-readable. Editing or losing
+	// the phase does not change what the operator does.
 	// +optional
 	Phase SigningPolicyPhase `json:"phase,omitempty"`
 
 	// Conditions represent the latest available observations.
+	// +listType=map
+	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }

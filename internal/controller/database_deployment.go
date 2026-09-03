@@ -103,6 +103,10 @@ func (r *DatabaseReconciler) reconcileDeployment(ctx context.Context, db *openvo
 		return fmt.Errorf("getting Deployment %s: %w", deployName, err)
 	}
 
+	if err := assertControlledBy(deploy, db, "Deployment"); err != nil {
+		return err
+	}
+
 	// Update existing Deployment
 	deploy.Spec.Replicas = &replicas
 	deploy.Spec.Template.Labels = labels
@@ -181,7 +185,7 @@ func (r *DatabaseReconciler) buildPodSpec(db *openvoxv1alpha1.Database, cert *op
 	container := corev1.Container{
 		Name:            "openvox-db",
 		Image:           image,
-		ImagePullPolicy: db.Spec.Image.PullPolicy,
+		ImagePullPolicy: pullPolicyOrDefault(db.Spec.Image.PullPolicy),
 		Env:             env,
 		Ports: []corev1.ContainerPort{
 			{Name: "https", ContainerPort: DatabaseHTTPSPort, Protocol: corev1.ProtocolTCP},
@@ -225,7 +229,7 @@ chmod 640 /ssl/private_keys/%s.pem`, certname, certname, certname)
 	initContainer := corev1.Container{
 		Name:            "tls-init",
 		Image:           image,
-		ImagePullPolicy: db.Spec.Image.PullPolicy,
+		ImagePullPolicy: pullPolicyOrDefault(db.Spec.Image.PullPolicy),
 		Command:         []string{"sh", "-c", sslInitScript},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: "ssl", MountPath: "/ssl"},
@@ -256,6 +260,7 @@ chmod 640 /ssl/private_keys/%s.pem`, certname, certname, certname)
 		InitContainers:    []corev1.Container{initContainer},
 		Containers:        []corev1.Container{container},
 		Volumes:           volumes,
+		ImagePullSecrets:  appendPullSecrets(nil, db.Spec.Image.PullSecrets...),
 	}
 
 	return podSpec

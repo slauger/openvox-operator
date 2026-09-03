@@ -179,7 +179,7 @@ func (r *ConfigReconciler) updateNodeClassifierStatus(ctx context.Context, nc *o
 				Status:             metav1.ConditionFalse,
 				Reason:             "Error",
 				Message:            errMsg,
-				LastTransitionTime: metav1.Now(),
+				ObservedGeneration: nc.Generation,
 			})
 		} else {
 			nc.Status.Phase = openvoxv1alpha1.NodeClassifierPhaseActive
@@ -188,7 +188,7 @@ func (r *ConfigReconciler) updateNodeClassifierStatus(ctx context.Context, nc *o
 				Status:             metav1.ConditionTrue,
 				Reason:             "ConfigRendered",
 				Message:            "Node classifier configuration is active",
-				LastTransitionTime: metav1.Now(),
+				ObservedGeneration: nc.Generation,
 			})
 		}
 	}); statusErr != nil {

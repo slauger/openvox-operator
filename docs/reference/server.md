@@ -45,6 +45,7 @@ spec:
 | `envFrom` | []EnvFromSource | - | ConfigMap/Secret sources to populate environment variables from |
 | `extraVolumes` | []Volume | - | Extra volumes added to the Server pods |
 | `extraVolumeMounts` | []VolumeMount | - | Extra volume mounts for the `openvox-server` container |
+| `readOnlyRootFilesystem` | *bool | *(inherits from Config)* | Overrides the Config's setting for this Server. One Config backs several Servers with different roles, so the CA and the compilers can differ. Unset inherits |
 | `securityContext` | [PodSecurityContextSpec](index.md#podsecuritycontextspec) | - | Override pod-level security context (runAsUser/runAsGroup/fsGroup) |
 
 ### Extra Environment and Volumes

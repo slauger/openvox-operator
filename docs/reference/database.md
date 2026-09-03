@@ -86,6 +86,7 @@ When enabled, the default policy allows TCP/8081 only from pods with `app.kubern
 
 | Field | Type | Description |
 |---|---|---|
+| `observedGeneration` | int64 | The `.metadata.generation` the status was last derived from. A value below `.metadata.generation` means the rest of this status has not caught up with the current spec yet |
 | `phase` | string | Current lifecycle phase |
 | `url` | string | HTTPS endpoint of the Database Service (e.g. `https://production-db:8081`) |
 | `ready` | int32 | Number of ready replicas |

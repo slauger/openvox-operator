@@ -31,9 +31,12 @@ spec:
 
 | Field | Type | Description |
 |---|---|---|
+| `observedGeneration` | int64 | The `.metadata.generation` the status was last derived from. A value below `.metadata.generation` means the rest of this status has not caught up with the current spec yet |
 | `phase` | string | Current lifecycle phase |
 | `secretName` | string | Name of the Secret containing `cert.pem` and `key.pem` |
 | `notAfter` | time | Expiry time of the signed certificate |
+| `signedSpecHash` | string | Digest of what the current certificate was issued for: certname, effective alt names and CSR extensions. A mismatch triggers re-signing; empty means the hash was never recorded and is adopted rather than triggering one |
+| `effectiveDNSAltNames` | []string | The alt names the certificate is actually issued for: `spec.dnsAltNames` plus the route hostname of every Pool with `injectDNSAltName` that a Server using this Certificate joins |
 | `conditions` | []Condition | `CertSigned` |
 
 ## Deletion

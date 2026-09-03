@@ -127,6 +127,7 @@ Either `value` or `valueFrom` must be set.
 
 | Field | Type | Description |
 |---|---|---|
+| `observedGeneration` | int64 | The `.metadata.generation` the status was last derived from. A value below `.metadata.generation` means the rest of this status has not caught up with the current spec yet |
 | `phase` | string | Current lifecycle phase |
 | `conditions` | []Condition | `Ready` |
 

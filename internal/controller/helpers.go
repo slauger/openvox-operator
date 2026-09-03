@@ -126,8 +126,12 @@ func isSecretReady(ctx context.Context, reader client.Reader, name, namespace, r
 
 // createOrUpdateSecret creates or updates a Secret with the given data, owned by
 // the given object.
+// preserveKeys names entries that belong to a different writer and must
+// survive an update that does not carry them. Without it a caller that owns one
+// key of a shared Secret silently drops the rest, and the loss is invisible:
+// the Secret still exists, only poorer.
 func createOrUpdateSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, owner client.Object,
-	name, namespace string, labels map[string]string, data map[string][]byte) error {
+	name, namespace string, labels map[string]string, data map[string][]byte, preserveKeys ...string) error {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}
@@ -135,8 +139,21 @@ func createOrUpdateSecret(ctx context.Context, c client.Client, scheme *runtime.
 		if err := assertControlledBy(secret, owner, "Secret"); err != nil {
 			return err
 		}
+		// Read from the object CreateOrUpdate just fetched, so the carry-over
+		// cannot race with a concurrent write.
+		carried := make(map[string][]byte, len(preserveKeys))
+		for _, k := range preserveKeys {
+			if v, ok := secret.Data[k]; ok {
+				carried[k] = v
+			}
+		}
 		secret.Labels = labels
 		secret.Data = data
+		for k, v := range carried {
+			if _, taken := secret.Data[k]; !taken {
+				secret.Data[k] = v
+			}
+		}
 		return controllerutil.SetControllerReference(owner, secret, scheme)
 	})
 	if err != nil {
@@ -314,6 +331,15 @@ func certnameOf(cert *openvoxv1alpha1.Certificate) string {
 		return cert.Spec.Certname
 	}
 	return "puppet"
+}
+
+// resolveReadOnlyRootFilesystem returns the setting for a Server, preferring
+// its own override over the Config's.
+func resolveReadOnlyRootFilesystem(server *openvoxv1alpha1.Server, cfg *openvoxv1alpha1.Config) bool {
+	if server.Spec.ReadOnlyRootFilesystem != nil {
+		return *server.Spec.ReadOnlyRootFilesystem
+	}
+	return openvoxv1alpha1.BoolValue(cfg.Spec.ReadOnlyRootFilesystem, true)
 }
 
 // serverRoleEnabled reports whether the Server runs the catalog server role.

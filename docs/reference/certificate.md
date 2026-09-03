@@ -163,6 +163,24 @@ flowchart TD
 
 The controller discovers the CA Service automatically by finding Servers with `ca: true` in the same Config and the Pools whose selector matches them.
 
+## Certname uniqueness
+
+A certname identifies exactly one entry on the CertificateAuthority. Two
+Certificates that claim the same certname against the same CA are
+indistinguishable to it, with two consequences: the second CSR is rejected, and
+deleting either one revokes the entry both rely on.
+
+The operator therefore refuses the collision in three places:
+
+- the admission webhook rejects a duplicate at creation, naming the other resource
+- the controller refuses to sign and reports `CertnameConflict`, since webhooks
+  are disabled by default
+- a certificate returned by the CA is verified against the private key it was
+  requested for, so a foreign certificate under the same name is never stored
+
+`certname` defaults to `puppet`, so two Certificates created without one collide
+by default rather than by mistake. Give each Certificate its own certname.
+
 ## Created Resources
 
 | Resource | Name | Description |

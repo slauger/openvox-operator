@@ -148,6 +148,49 @@ func generateTestCertWithExpiry(t *testing.T, validity time.Duration) ([]byte, [
 	return certPEM, keyPEM
 }
 
+// issueForCSR signs a submitted CSR with the test CA, so the returned
+// certificate carries the requester's public key. A canned certificate pairs a
+// foreign key with the controller's, which is exactly what certMatchesKey
+// refuses -- and what a shared certname would produce against a real CA.
+func issueForCSR(t *testing.T, caCertPEM, caKeyPEM, csrPEM []byte) []byte {
+	t.Helper()
+
+	csrBlock, _ := pem.Decode(csrPEM)
+	if csrBlock == nil {
+		t.Fatalf("decoding submitted CSR")
+	}
+	csr, err := x509.ParseCertificateRequest(csrBlock.Bytes)
+	if err != nil {
+		t.Fatalf("parsing submitted CSR: %v", err)
+	}
+
+	caBlock, _ := pem.Decode(caCertPEM)
+	caCert, err := x509.ParseCertificate(caBlock.Bytes)
+	if err != nil {
+		t.Fatalf("parsing CA certificate: %v", err)
+	}
+	keyBlock, _ := pem.Decode(caKeyPEM)
+	caKey, err := x509.ParsePKCS1PrivateKey(keyBlock.Bytes)
+	if err != nil {
+		t.Fatalf("parsing CA key: %v", err)
+	}
+
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(2),
+		Subject:      csr.Subject,
+		DNSNames:     csr.DNSNames,
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(24 * time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, caCert, csr.PublicKey, caKey)
+	if err != nil {
+		t.Fatalf("signing the submitted CSR: %v", err)
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+}
+
 func TestBuildExternalCAHTTPClient_Minimal(t *testing.T) {
 	ext := &openvoxv1alpha1.ExternalCASpec{
 		URL: "https://puppet-ca.example.com:8140",
@@ -970,14 +1013,20 @@ func TestFetchSignedCert_EmptyCertname(t *testing.T) {
 func TestSignCertificate_FullFlow(t *testing.T) {
 	certPEM, keyPEM := generateTestCert(t)
 
-	// Server handles CSR submit and cert fetch
+	// Server handles CSR submit and cert fetch. It signs the submitted CSR
+	// rather than returning a canned certificate: the controller now refuses a
+	// certificate that was issued for a different key, which is what stops it
+	// from adopting a foreign certificate that shares its certname.
+	var issued []byte
 	server := newTestTLSServer(t, certPEM, keyPEM, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/certificate_request/"):
+			csrPEM, _ := io.ReadAll(r.Body)
+			issued = issueForCSR(t, certPEM, keyPEM, csrPEM)
 			w.WriteHeader(http.StatusOK)
 		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/certificate/"):
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write(certPEM)
+			_, _ = w.Write(issued)
 		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/certificate_status/"):
 			w.WriteHeader(http.StatusNoContent)
 		default:

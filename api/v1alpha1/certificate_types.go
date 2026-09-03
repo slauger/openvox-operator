@@ -141,6 +141,10 @@ type CertificateStatus struct {
 // Condition types for Certificate.
 const (
 	ConditionCertSigned = "CertSigned"
+
+	// ConditionCertnameConflict reports that another Certificate already claims
+	// this certname against the same CertificateAuthority.
+	ConditionCertnameConflict = "CertnameConflict"
 )
 
 func init() {

@@ -108,6 +108,8 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	if err := r.Get(ctx, types.NamespacedName{Name: server.Spec.CertificateRef, Namespace: server.Namespace}, cert); err != nil {
 		if errors.IsNotFound(err) {
 			logger.Info("waiting for Certificate", "certificateRef", server.Spec.CertificateRef)
+			r.reportSSLBootstrapped(ctx, server, metav1.ConditionFalse, "CertificateNotFound",
+				fmt.Sprintf("Certificate %s does not exist", server.Spec.CertificateRef))
 			return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("getting Certificate %s: %w", server.Spec.CertificateRef, err)
@@ -117,6 +119,13 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		logger.Info("waiting for Certificate to be signed", "certificate", cert.Name, "phase", cert.Status.Phase)
 		if statusErr := updateStatusWithRetry(ctx, r.Client, server, func() {
 			server.Status.Phase = openvoxv1alpha1.ServerPhaseWaitingForCert
+			meta.SetStatusCondition(&server.Status.Conditions, metav1.Condition{
+				Type:               openvoxv1alpha1.ConditionSSLBootstrapped,
+				Status:             metav1.ConditionFalse,
+				Reason:             "CertificateNotSigned",
+				Message:            fmt.Sprintf("Certificate %s is in phase %q", cert.Name, cert.Status.Phase),
+				ObservedGeneration: server.Generation,
+			})
 		}); statusErr != nil {
 			logger.Error(statusErr, "failed to update Server status", "name", server.Name)
 		}
@@ -168,6 +177,16 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		server.Status.Desired = replicas
 		server.Status.Ready = ready
 
+		// Reaching this point means the Certificate exists and is signed, so the
+		// pods have TLS material to mount.
+		meta.SetStatusCondition(&server.Status.Conditions, metav1.Condition{
+			Type:               openvoxv1alpha1.ConditionSSLBootstrapped,
+			Status:             metav1.ConditionTrue,
+			Reason:             "CertificateSigned",
+			Message:            fmt.Sprintf("Certificate %s is signed and mounted", cert.Name),
+			ObservedGeneration: server.Generation,
+		})
+
 		serverReplicasDesired.WithLabelValues(server.Name, server.Namespace).Set(float64(replicas))
 		serverReplicasReady.WithLabelValues(server.Name, server.Namespace).Set(float64(ready))
 
@@ -198,6 +217,25 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonServerRunning, "Reconcile", "Server reconciled successfully")
 	}
 	return ctrl.Result{}, nil
+}
+
+// reportSSLBootstrapped records the condition on its own, for the early
+// returns that happen before the single status write at the end of Reconcile.
+// A dependency the Server is waiting for used to leave no trace in the status
+// at all, so "nothing happens" looked the same as "nothing is wrong".
+func (r *ServerReconciler) reportSSLBootstrapped(ctx context.Context, server *openvoxv1alpha1.Server,
+	status metav1.ConditionStatus, reason, message string) {
+	if err := updateStatusWithRetry(ctx, r.Client, server, func() {
+		meta.SetStatusCondition(&server.Status.Conditions, metav1.Condition{
+			Type:               openvoxv1alpha1.ConditionSSLBootstrapped,
+			Status:             status,
+			Reason:             reason,
+			Message:            message,
+			ObservedGeneration: server.Generation,
+		})
+	}); err != nil {
+		log.FromContext(ctx).Error(err, "failed to record the SSLBootstrapped condition", "name", server.Name)
+	}
 }
 
 func (r *ServerReconciler) reconcilePDB(ctx context.Context, server *openvoxv1alpha1.Server) error {

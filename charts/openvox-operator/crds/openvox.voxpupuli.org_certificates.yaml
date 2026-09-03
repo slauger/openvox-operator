@@ -185,6 +185,21 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              effectiveDNSAltNames:
+                description: |-
+                  EffectiveDNSAltNames lists the alt names the certificate is actually
+                  issued for: spec.dnsAltNames plus the route hostname of every Pool that
+                  asks for injection and is joined by a Server using this Certificate.
+
+                  The Pool used to append its hostname to spec.dnsAltNames directly. Under
+                  GitOps that turned into a loop: the Pool added the name, the source of
+                  truth reverted it, the Pool added it again, and each round changed a
+                  signing-relevant field. Deriving it here writes nothing foreign and is
+                  idempotent.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: set
               notAfter:
                 description: NotAfter is the expiration time of the signed certificate.
                 format: date-time
@@ -217,9 +232,9 @@ spec:
                 type: string
               signedSpecHash:
                 description: |-
-                  SignedSpecHash digests the spec fields the current certificate was issued
-                  for: certname, dnsAltNames and csrExtensions. When it no longer matches
-                  the spec, the certificate is re-signed. An empty value means the hash was
+                  SignedSpecHash digests what the current certificate was issued for:
+                  certname, the effective alt names and csrExtensions. When it no longer
+                  matches, the certificate is re-signed. An empty value means the hash was
                   never recorded (certificates issued before this field existed) and is
                   adopted on the next reconcile rather than triggering a re-sign.
                 type: string

@@ -251,6 +251,59 @@ func resolveImage(server *openvoxv1alpha1.Server, cfg *openvoxv1alpha1.Config) s
 	return fmt.Sprintf("%s:%s", cfg.Spec.Image.Repository, cfg.Spec.Image.Tag)
 }
 
+// resolveImagePullPolicy returns the pull policy for a Server, preferring its
+// own value and falling back to the Config, then to IfNotPresent.
+func resolveImagePullPolicy(server *openvoxv1alpha1.Server, cfg *openvoxv1alpha1.Config) corev1.PullPolicy {
+	if server.Spec.Image.PullPolicy != "" {
+		return server.Spec.Image.PullPolicy
+	}
+	return configImagePullPolicy(cfg)
+}
+
+// configImagePullPolicy returns the Config's pull policy, or the Kubernetes
+// default when it is unset.
+func configImagePullPolicy(cfg *openvoxv1alpha1.Config) corev1.PullPolicy {
+	if cfg.Spec.Image.PullPolicy != "" {
+		return cfg.Spec.Image.PullPolicy
+	}
+	return corev1.PullIfNotPresent
+}
+
+// pullPolicyOrDefault returns the given policy, or IfNotPresent when unset.
+func pullPolicyOrDefault(p corev1.PullPolicy) corev1.PullPolicy {
+	if p != "" {
+		return p
+	}
+	return corev1.PullIfNotPresent
+}
+
+// resolveImagePullSecrets returns the pull secrets for a Server. A list on the
+// Server replaces the Config's rather than extending it, so a Server pulling
+// from a different registry does not drag the Config's credentials along.
+func resolveImagePullSecrets(server *openvoxv1alpha1.Server, cfg *openvoxv1alpha1.Config) []corev1.LocalObjectReference {
+	if len(server.Spec.Image.PullSecrets) > 0 {
+		return server.Spec.Image.PullSecrets
+	}
+	return cfg.Spec.Image.PullSecrets
+}
+
+// appendPullSecrets adds refs that are not already present, so callers can
+// combine sources without producing duplicates.
+func appendPullSecrets(existing []corev1.LocalObjectReference, add ...corev1.LocalObjectReference) []corev1.LocalObjectReference {
+	seen := make(map[string]bool, len(existing))
+	for _, e := range existing {
+		seen[e.Name] = true
+	}
+	for _, a := range add {
+		if a.Name == "" || seen[a.Name] {
+			continue
+		}
+		seen[a.Name] = true
+		existing = append(existing, a)
+	}
+	return existing
+}
+
 // serverRoleEnabled reports whether the Server runs the catalog server role.
 // The spec field defaults to true, so an unset value enables the role.
 func serverRoleEnabled(server *openvoxv1alpha1.Server) bool {

@@ -149,11 +149,18 @@ spec:
                   in this Config.
                 properties:
                   pullPolicy:
-                    default: IfNotPresent
-                    description: PullPolicy defines the image pull policy.
+                    description: |-
+                      PullPolicy defines the image pull policy.
+
+                      A nested default would be materialised into every Server, which is what
+                      made the Server-level override unreachable: the field was never empty, so
+                      it could not express "inherit". Unset falls back to the Config and then
+                      to IfNotPresent.
                     type: string
                   pullSecrets:
-                    description: PullSecrets is a list of image pull secrets.
+                    description: |-
+                      PullSecrets is a list of image pull secrets.
+                      On Server an entry overrides the Config's list rather than adding to it.
                     items:
                       description: |-
                         LocalObjectReference contains enough information to let you locate the

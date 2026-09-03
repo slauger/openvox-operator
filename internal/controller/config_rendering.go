@@ -270,7 +270,7 @@ func (r *ConfigReconciler) renderAuthConf(cfg *openvoxv1alpha1.Config, ca *openv
 	// Derive the operator-signing certname when an internal CA exists.
 	var operatorCertname string
 	if ca != nil && ca.Spec.External == nil {
-		operatorCertname = fmt.Sprintf("%s-operator", ca.Name)
+		operatorCertname = operatorSigningCertname(ca.Name)
 	}
 
 	var sb strings.Builder

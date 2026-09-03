@@ -67,6 +67,11 @@ From this point on, the Certificate controller uses this Secret for mTLS-authent
 
 External CAs do not get an operator-signing Certificate: they manage their own signing credentials externally.
 
+
+The certname of this certificate is reserved: the CA `auth.conf` grants admin
+rights to it, so the autosign policy refuses to issue it to anyone else. See
+[Checks that no policy can waive](../reference/signingpolicy.md#checks-that-no-policy-can-waive).
+
 ## Certificate Signing Strategies
 
 The operator uses two strategies depending on when the Certificate is created relative to the CA:

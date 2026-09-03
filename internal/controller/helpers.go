@@ -342,6 +342,16 @@ func resolveReadOnlyRootFilesystem(server *openvoxv1alpha1.Server, cfg *openvoxv
 	return openvoxv1alpha1.BoolValue(cfg.Spec.ReadOnlyRootFilesystem, true)
 }
 
+// operatorSigningCertname is the certname the operator issues to itself for
+// mTLS against the CA API.
+//
+// The CA auth.conf grants admin rights to this name, so it is also the name the
+// autosign policy reserves. Both derive from here: a drift between them would
+// reserve one name while granting admin to another.
+func operatorSigningCertname(caName string) string {
+	return fmt.Sprintf("%s-operator", caName)
+}
+
 // serverRoleEnabled reports whether the Server runs the catalog server role.
 // The spec field defaults to true, so an unset value enables the role.
 func serverRoleEnabled(server *openvoxv1alpha1.Server) bool {

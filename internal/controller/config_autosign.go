@@ -76,7 +76,7 @@ func (r *ConfigReconciler) reconcileAutosignSecret(ctx context.Context, cfg *ope
 	}
 
 	// Render policy config YAML
-	policyYAML, renderErr := r.renderAutosignPolicyConfig(ctx, cfg.Namespace, policies)
+	policyYAML, renderErr := r.renderAutosignPolicyConfig(ctx, cfg.Namespace, ca, policies)
 	if renderErr != nil {
 		return fmt.Errorf("rendering autosign policy config: %w", renderErr)
 	}
@@ -94,8 +94,17 @@ func (r *ConfigReconciler) reconcileAutosignSecret(ctx context.Context, cfg *ope
 }
 
 // renderAutosignPolicyConfig renders the policy config YAML that openvox-autosign reads.
-func (r *ConfigReconciler) renderAutosignPolicyConfig(ctx context.Context, namespace string, policies []openvoxv1alpha1.SigningPolicy) (string, error) {
+func (r *ConfigReconciler) renderAutosignPolicyConfig(ctx context.Context, namespace string,
+	ca *openvoxv1alpha1.CertificateAuthority, policies []openvoxv1alpha1.SigningPolicy) (string, error) {
 	var sb strings.Builder
+
+	// The CA auth.conf grants admin rights to this certname as well as to the
+	// pp_cli_auth extension (see builtinAuthRules). An agent holding a
+	// certificate under it would be a CA admin, so the name is refused before
+	// any policy runs - including any: true, which no downstream guard can undo.
+	sb.WriteString("reservedCertnames:\n")
+	fmt.Fprintf(&sb, "  - %q\n", operatorSigningCertname(ca.Name))
+
 	sb.WriteString("policies:\n")
 
 	// Sort policies by name for deterministic output
@@ -108,23 +117,28 @@ func (r *ConfigReconciler) renderAutosignPolicyConfig(ctx context.Context, names
 
 		if p.Spec.Any {
 			sb.WriteString("    any: true\n")
-			continue
 		}
 
-		if p.Spec.Pattern != nil {
-			sb.WriteString("    pattern:\n")
-			sb.WriteString("      allow:\n")
-			for _, a := range p.Spec.Pattern.Allow {
-				fmt.Fprintf(&sb, "        - %q\n", a)
-			}
+		// Guard fields (SAN allowlists and extensions) are rendered for every
+		// policy, including any:true, so the autosign binary enforces them and no
+		// policy can implicitly waive escalation protection.
+		if p.Spec.Certnames != nil {
+			renderAllowList(&sb, "certnames", p.Spec.Certnames.Allow)
 		}
-
 		if p.Spec.DNSAltNames != nil {
-			sb.WriteString("    dnsAltNames:\n")
-			sb.WriteString("      allow:\n")
-			for _, a := range p.Spec.DNSAltNames.Allow {
-				fmt.Fprintf(&sb, "        - %q\n", a)
-			}
+			renderAllowList(&sb, "dnsAltNames", p.Spec.DNSAltNames.Allow)
+		}
+		if p.Spec.IPAltNames != nil {
+			renderAllowList(&sb, "ipAltNames", p.Spec.IPAltNames.Allow)
+		}
+		if p.Spec.URIAltNames != nil {
+			renderAllowList(&sb, "uriAltNames", p.Spec.URIAltNames.Allow)
+		}
+		if p.Spec.EmailAltNames != nil {
+			renderAllowList(&sb, "emailAltNames", p.Spec.EmailAltNames.Allow)
+		}
+		if p.Spec.Extensions != nil {
+			renderAllowList(&sb, "extensions", p.Spec.Extensions.Allow)
 		}
 
 		if len(p.Spec.CSRAttributes) > 0 {
@@ -147,6 +161,15 @@ func (r *ConfigReconciler) renderAutosignPolicyConfig(ctx context.Context, names
 	}
 
 	return sb.String(), nil
+}
+
+// renderAllowList writes an "{field}: { allow: [...] }" block with quoted entries.
+func renderAllowList(sb *strings.Builder, field string, allow []string) {
+	fmt.Fprintf(sb, "    %s:\n", field)
+	sb.WriteString("      allow:\n")
+	for _, a := range allow {
+		fmt.Fprintf(sb, "        - %q\n", a)
+	}
 }
 
 // updateSigningPolicyStatus sets the phase and condition on a SigningPolicy.

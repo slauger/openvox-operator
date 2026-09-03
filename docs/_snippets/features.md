@@ -1,5 +1,5 @@
 - 🔐 **Automated CA Lifecycle** - CA initialization, certificate signing, distribution, and periodic CRL refresh - fully managed
-- 📜 **Declarative Signing Policies** - CSR approval via patterns, DNS SANs, CSR attributes, or open signing - no autosign scripts
+- 📜 **Declarative Signing Policies** - CSR approval via certname globs, SAN allowlists, CSR attributes, or open signing - no autosign scripts
 - 🏷️ **External Node Classification** - Declarative ENC support for custom HTTP classifiers
 - 📦 **One Image, Two Roles** - Same rootless image runs as CA or server, configured by the operator
 - ⚡ **Scalable Servers** - Scale catalog compilation horizontally - multiple server pools with HPA

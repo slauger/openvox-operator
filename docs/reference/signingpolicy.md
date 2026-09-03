@@ -80,6 +80,27 @@ spec:
 
 A CSR carrying a SAN of a type whose allowlist is unset is denied.
 
+### Checks that no policy can waive
+
+Two conditions are evaluated before any policy is consulted. They apply to
+every policy, `any: true` included.
+
+**Reserved certnames.** The operator issues itself a certificate under
+`{ca}-operator` for mTLS against the CA API, and the CA `auth.conf` grants
+admin rights to that name as well as to the `pp_cli_auth` extension. An agent
+holding a certificate under it would therefore be a CA admin. The operator
+renders the name into the generated policy file, and the autosign binary
+refuses it regardless of what any policy allows.
+
+You do not configure this: the name is derived from the CertificateAuthority
+and reserved automatically.
+
+**Subject binding.** puppetserver takes the certname from the request path and
+passes it to the autosign binary as an argument, while the CN lives in the CSR
+subject. A CSR whose subject differs from the requested certname is refused,
+so a policy cannot approve one name while the certificate is issued carrying
+another.
+
 ### Authorization Extensions
 
 Privileged authorization extensions (the `1.3.6.1.4.1.34380.1.3` arc: `pp_cli_auth`, `pp_authorization`, `pp_auth_token`) are **denied by default**, even for `any: true` policies. A certificate carrying `pp_cli_auth=true` is granted CA-admin access by the built-in auth.conf rules, so a CSR requesting it must be explicitly allowed:

@@ -208,7 +208,17 @@ Controls Puppet Server metrics.conf settings.
 |---|---|
 | `Pending` | Config created, waiting for reconciliation |
 | `Running` | ConfigMap created, ready for use |
-| `Error` | Reconciliation failed |
+| `Error` | Defined in the API, but never set by the controller (see below) |
+
+`Error` is part of the API but the controller never assigns it. A failing
+reconcile leaves the phase at its previous value, reports the reason in the
+`ConfigReady` condition and emits a warning event. Watch the condition rather than
+the phase:
+
+```bash
+kubectl get config <name> -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.reason}: {.message}{"\n"}{end}'
+```
+
 
 ### Image resolution
 

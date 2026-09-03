@@ -131,7 +131,17 @@ When enabled, the default policy allows TCP/8140 from all sources (agents may co
 | `Pending` | Server created, resolving references |
 | `WaitingForCert` | Certificate not yet `Signed` |
 | `Running` | Deployment created and running |
-| `Error` | Reconciliation failed |
+| `Error` | Defined in the API, but never set by the controller (see below) |
+
+`Error` is part of the API but the controller never assigns it. A failing
+reconcile leaves the phase at its previous value, reports the reason in the
+`Ready` condition and emits a warning event. Watch the condition rather than
+the phase:
+
+```bash
+kubectl get server <name> -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.reason}: {.message}{"\n"}{end}'
+```
+
 
 ## Deployment Strategy
 

@@ -89,6 +89,17 @@ Certificates issued before this field existed carry an empty hash. The
 controller adopts the current spec as the baseline for them rather than
 re-signing every certificate after an operator upgrade.
 
+### Renewal reuses the private key
+
+A renewal submits a CSR for the key the certificate already has
+(`certificate_signing.go`: the existing `key.pem` is read from the TLS Secret
+and reused). The CA renews for the same public key, so the key material must
+not change between the old and the new certificate.
+
+The consequence is worth stating: renewal extends validity, it does not rotate
+the key. A key that must be replaced needs a new Certificate under a different
+name, since `certname` is immutable and the CA keeps one entry per name.
+
 ### CSR Poll Backoff
 
 When the CA does not immediately sign the CSR (e.g. autosigning is disabled), the controller enters `WaitingForSigning` after 10 unsuccessful poll attempts and retries with exponential backoff:

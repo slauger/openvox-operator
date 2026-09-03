@@ -229,7 +229,7 @@ func TestRenderAutosignPolicyConfig(t *testing.T) {
 			c := setupTestClient(tt.objs...)
 			r := newConfigReconciler(c)
 
-			out, err := r.renderAutosignPolicyConfig(testCtx(), testNamespace, tt.policies)
+			out, err := r.renderAutosignPolicyConfig(testCtx(), testNamespace, newCertificateAuthority("production-ca"), tt.policies)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -267,7 +267,7 @@ func TestRenderAutosignPolicyConfig_SortOrder(t *testing.T) {
 		},
 	}
 
-	out, err := r.renderAutosignPolicyConfig(testCtx(), testNamespace, policies)
+	out, err := r.renderAutosignPolicyConfig(testCtx(), testNamespace, newCertificateAuthority("production-ca"), policies)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -314,5 +314,28 @@ func TestUpdateSigningPolicyStatus_Error(t *testing.T) {
 	}
 	if updated.Status.Phase != openvoxv1alpha1.SigningPolicyPhaseError {
 		t.Errorf("expected phase %q, got %q", openvoxv1alpha1.SigningPolicyPhaseError, updated.Status.Phase)
+	}
+}
+
+// TestRenderAutosignPolicy_ReservesTheOperatorCertname is the operator half of
+// the escalation guard. The CA auth.conf grants admin rights to this certname,
+// so the rendered policy has to tell the autosign binary never to hand it out.
+func TestRenderAutosignPolicy_ReservesTheOperatorCertname(t *testing.T) {
+	ca := newCertificateAuthority("production-ca")
+	r := newConfigReconciler(setupTestClient(ca))
+
+	out, err := r.renderAutosignPolicyConfig(testCtx(), testNamespace, ca, nil)
+	if err != nil {
+		t.Fatalf("rendering the policy: %v", err)
+	}
+
+	if !strings.Contains(out, "reservedCertnames:") {
+		t.Fatalf("the rendered policy carries no reservation:\n%s", out)
+	}
+	// Must match what the operator actually issues to itself, not a literal
+	// spelled out twice.
+	want := operatorSigningCertname(ca.Name)
+	if !strings.Contains(out, want) {
+		t.Errorf("expected %q to be reserved, got:\n%s", want, out)
 	}
 }

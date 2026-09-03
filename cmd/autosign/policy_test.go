@@ -599,3 +599,80 @@ func TestWildcardMatch(t *testing.T) {
 		}
 	}
 }
+
+// --- reserved certnames and subject binding ---
+
+// TestReservedCertname_DeniedEvenByAnyPolicy is the point of the reservation.
+// The CA auth.conf grants admin rights by certname as well as by extension, so
+// a policy must never be able to hand that name to an agent - and any: true
+// would otherwise approve unconditionally once the guards pass, and the guards
+// inspect the CSR, not the name.
+func TestReservedCertname_DeniedEvenByAnyPolicy(t *testing.T) {
+	cfg := &PolicyConfig{
+		ReservedCertnames: []string{"production-ca-operator"},
+		Policies:          []Policy{{Name: "open", Any: true}},
+	}
+	csr := generateCSR(t, "production-ca-operator", nil, nil)
+
+	if evaluatePolicies(cfg, "production-ca-operator", csr) {
+		t.Error("a reserved certname must never be signed, not even under any: true")
+	}
+}
+
+// TestReservedCertname_CaseInsensitive closes the obvious way around it, since
+// Puppet lowercases certnames.
+func TestReservedCertname_CaseInsensitive(t *testing.T) {
+	cfg := &PolicyConfig{
+		ReservedCertnames: []string{"production-ca-operator"},
+		Policies:          []Policy{{Name: "open", Any: true}},
+	}
+	csr := generateCSR(t, "Production-CA-Operator", nil, nil)
+
+	if evaluatePolicies(cfg, "Production-CA-Operator", csr) {
+		t.Error("the reservation must not depend on capitalisation")
+	}
+}
+
+// TestReservedCertname_LeavesOtherNamesAlone bounds the rule.
+func TestReservedCertname_LeavesOtherNamesAlone(t *testing.T) {
+	cfg := &PolicyConfig{
+		ReservedCertnames: []string{"production-ca-operator"},
+		Policies:          []Policy{{Name: "open", Any: true}},
+	}
+	csr := generateCSR(t, "web01.example.com", nil, nil)
+
+	if !evaluatePolicies(cfg, "web01.example.com", csr) {
+		t.Error("an ordinary agent must still be signed")
+	}
+}
+
+// TestSubjectMustMatchCertname covers the second half of the same escalation.
+// puppetserver takes the certname from the request path and passes it as the
+// argument; the CN lives in the CSR subject. Judging the argument while signing
+// the document means the policy can approve a name the certificate will not
+// carry - here a harmless one, while the CSR asks for the reserved name.
+func TestSubjectMustMatchCertname(t *testing.T) {
+	cfg := &PolicyConfig{
+		ReservedCertnames: []string{"production-ca-operator"},
+		Policies:          []Policy{{Name: "open", Any: true}},
+	}
+	csr := generateCSR(t, "production-ca-operator", nil, nil)
+
+	if evaluatePolicies(cfg, "harmless-node", csr) {
+		t.Error("a CSR whose subject differs from the requested certname must be refused")
+	}
+}
+
+// TestSubjectMatchesCertname_AcceptsTheNormalCase makes sure the check does not
+// reject everyday enrolment.
+func TestSubjectMatchesCertname_AcceptsTheNormalCase(t *testing.T) {
+	cfg := &PolicyConfig{Policies: []Policy{{Name: "open", Any: true}}}
+	csr := generateCSR(t, "web01.example.com", nil, nil)
+
+	if !evaluatePolicies(cfg, "web01.example.com", csr) {
+		t.Error("matching subject and certname must pass")
+	}
+	if !evaluatePolicies(cfg, "WEB01.example.com", csr) {
+		t.Error("the comparison must ignore capitalisation")
+	}
+}

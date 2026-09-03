@@ -76,7 +76,7 @@ func (r *ConfigReconciler) reconcileAutosignSecret(ctx context.Context, cfg *ope
 	}
 
 	// Render policy config YAML
-	policyYAML, renderErr := r.renderAutosignPolicyConfig(ctx, cfg.Namespace, policies)
+	policyYAML, renderErr := r.renderAutosignPolicyConfig(ctx, cfg.Namespace, ca, policies)
 	if renderErr != nil {
 		return fmt.Errorf("rendering autosign policy config: %w", renderErr)
 	}
@@ -94,8 +94,17 @@ func (r *ConfigReconciler) reconcileAutosignSecret(ctx context.Context, cfg *ope
 }
 
 // renderAutosignPolicyConfig renders the policy config YAML that openvox-autosign reads.
-func (r *ConfigReconciler) renderAutosignPolicyConfig(ctx context.Context, namespace string, policies []openvoxv1alpha1.SigningPolicy) (string, error) {
+func (r *ConfigReconciler) renderAutosignPolicyConfig(ctx context.Context, namespace string,
+	ca *openvoxv1alpha1.CertificateAuthority, policies []openvoxv1alpha1.SigningPolicy) (string, error) {
 	var sb strings.Builder
+
+	// The CA auth.conf grants admin rights to this certname as well as to the
+	// pp_cli_auth extension (see builtinAuthRules). An agent holding a
+	// certificate under it would be a CA admin, so the name is refused before
+	// any policy runs - including any: true, which no downstream guard can undo.
+	sb.WriteString("reservedCertnames:\n")
+	fmt.Fprintf(&sb, "  - %q\n", operatorSigningCertname(ca.Name))
+
 	sb.WriteString("policies:\n")
 
 	// Sort policies by name for deterministic output

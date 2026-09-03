@@ -27,7 +27,7 @@ func (r *CertificateAuthorityReconciler) reconcileOperatorSigningCert(ctx contex
 	}
 
 	certName := fmt.Sprintf("%s-operator-signing", ca.Name)
-	certname := fmt.Sprintf("%s-operator", ca.Name)
+	certname := operatorSigningCertname(ca.Name)
 
 	// Look for existing operator-signing Certificate in the list
 	var signingCert *openvoxv1alpha1.Certificate

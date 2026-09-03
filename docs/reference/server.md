@@ -33,7 +33,7 @@ spec:
 | `replicas` | int32 | `1` | Number of pod replicas |
 | `autoscaling` | [AutoscalingSpec](#autoscalingspec) | - | HPA configuration |
 | `resources` | ResourceRequirements | - | CPU/memory requests and limits |
-| `javaArgs` | string | `-Xms512m -Xmx1024m` | JVM arguments |
+| `javaArgs` | string | `-Xms512m -Xmx1024m` | JVM arguments. The controller can derive the heap from the memory limit, but the CRD default makes that path unreachable today - see [#592](https://github.com/slauger/openvox-operator/issues/592). Set this explicitly to size the heap |
 | `maxActiveInstances` | int32 | `1` | Number of JRuby instances per pod |
 | `code` | [[]CodeSpec](index.md#codespec) | - | Override the Config's code sources (replace, not merge). A list; see [CodeSpec](index.md#codespec) |
 | `topologySpreadConstraints` | []TopologySpreadConstraint | - | Pod spread constraints across topology domains |

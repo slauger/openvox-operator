@@ -182,7 +182,7 @@ The failed Job is left in place; its logs are the only record of what went
 wrong:
 
 ```bash
-kubectl logs -n <namespace> job/<ca-name>-setup
+kubectl logs -n <namespace> job/<ca-name>-ca-setup
 ```
 
 The attempt counter lives in the `openvox.voxpupuli.org/setup-attempts`

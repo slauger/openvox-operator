@@ -13,7 +13,7 @@ spec:
   authorityRef: production-ca
   image:
     repository: ghcr.io/slauger/openvox-server-8
-    tag: "8.12.1"
+    tag: "latest"
   puppet:
     environmentTimeout: "0"
     storeconfigs: true
@@ -223,6 +223,6 @@ credentials along. Secrets for code images are always added on top.
 
 | Resource | Name | Description |
 |---|---|---|
-| ConfigMap | `{name}` | puppet.conf, puppetserver.conf, auth.conf, webserver.conf, `routes.yaml` (facts terminus, when PuppetDB is the active backend), etc. |
+| ConfigMap | `{name}-config` | puppet.conf, puppetserver.conf, auth.conf, webserver.conf, `routes.yaml` (facts terminus, when PuppetDB is the active backend), etc. |
 | Secret | `{name}-enc` | ENC config for openvox-enc binary (only when `nodeClassifierRef` is set) |
 | ServiceAccount | `{name}-server` | Shared ServiceAccount for all Server pods (`automountServiceAccountToken: false`) |

@@ -68,7 +68,7 @@ condition names it.
 
 ```bash
 kubectl describe deployment <server-name> -n <namespace>
-kubectl describe pod -l app.kubernetes.io/instance=<server-name> -n <namespace>
+kubectl describe pod -l openvox.voxpupuli.org/server=<server-name> -n <namespace>
 kubectl get events -n <namespace> --sort-by='.lastTimestamp'
 ```
 
@@ -117,7 +117,7 @@ kubectl logs <pod-name> -n <namespace> --previous
 1. Verify the Pool Service exists:
 
     ```bash
-    kubectl get svc -n <namespace> -l app.kubernetes.io/name=openvox-server
+    kubectl get svc -n <namespace> -l app.kubernetes.io/name=openvox
     ```
 
 2. Check endpoints are populated:

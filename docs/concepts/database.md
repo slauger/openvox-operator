@@ -71,7 +71,7 @@ spec:
   databaseRef: production-db   # operator reads Database.status.url
   image:
     repository: ghcr.io/slauger/openvox-server-8
-    tag: "8.12.1"
+    tag: "latest"
 ```
 
 The operator reads `Database.status.url` (e.g. `https://production-db.namespace.svc.cluster.local:8081`) and renders it into `puppetdb.conf`. When the Database is not yet `Running`, the Config controller waits.

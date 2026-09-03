@@ -1,4 +1,7 @@
 {{- range $entry := .Values.servers }}
+{{- if not $entry.certificate.certname }}
+{{- fail (printf "servers[%s].certificate.certname is required: a certname identifies exactly one entry on the CA, so two servers sharing one cannot both be signed" $entry.name) }}
+{{- end }}
 ---
 apiVersion: openvox.voxpupuli.org/v1alpha1
 kind: Certificate

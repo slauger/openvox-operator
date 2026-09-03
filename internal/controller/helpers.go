@@ -126,8 +126,12 @@ func isSecretReady(ctx context.Context, reader client.Reader, name, namespace, r
 
 // createOrUpdateSecret creates or updates a Secret with the given data, owned by
 // the given object.
+// preserveKeys names entries that belong to a different writer and must
+// survive an update that does not carry them. Without it a caller that owns one
+// key of a shared Secret silently drops the rest, and the loss is invisible:
+// the Secret still exists, only poorer.
 func createOrUpdateSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, owner client.Object,
-	name, namespace string, labels map[string]string, data map[string][]byte) error {
+	name, namespace string, labels map[string]string, data map[string][]byte, preserveKeys ...string) error {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}
@@ -135,8 +139,21 @@ func createOrUpdateSecret(ctx context.Context, c client.Client, scheme *runtime.
 		if err := assertControlledBy(secret, owner, "Secret"); err != nil {
 			return err
 		}
+		// Read from the object CreateOrUpdate just fetched, so the carry-over
+		// cannot race with a concurrent write.
+		carried := make(map[string][]byte, len(preserveKeys))
+		for _, k := range preserveKeys {
+			if v, ok := secret.Data[k]; ok {
+				carried[k] = v
+			}
+		}
 		secret.Labels = labels
 		secret.Data = data
+		for k, v := range carried {
+			if _, taken := secret.Data[k]; !taken {
+				secret.Data[k] = v
+			}
+		}
 		return controllerutil.SetControllerReference(owner, secret, scheme)
 	})
 	if err != nil {
@@ -249,6 +266,80 @@ func resolveImage(server *openvoxv1alpha1.Server, cfg *openvoxv1alpha1.Config) s
 		return fmt.Sprintf("%s:%s", repo, tag)
 	}
 	return fmt.Sprintf("%s:%s", cfg.Spec.Image.Repository, cfg.Spec.Image.Tag)
+}
+
+// resolveImagePullPolicy returns the pull policy for a Server, preferring its
+// own value and falling back to the Config, then to IfNotPresent.
+func resolveImagePullPolicy(server *openvoxv1alpha1.Server, cfg *openvoxv1alpha1.Config) corev1.PullPolicy {
+	if server.Spec.Image.PullPolicy != "" {
+		return server.Spec.Image.PullPolicy
+	}
+	return configImagePullPolicy(cfg)
+}
+
+// configImagePullPolicy returns the Config's pull policy, or the Kubernetes
+// default when it is unset.
+func configImagePullPolicy(cfg *openvoxv1alpha1.Config) corev1.PullPolicy {
+	if cfg.Spec.Image.PullPolicy != "" {
+		return cfg.Spec.Image.PullPolicy
+	}
+	return corev1.PullIfNotPresent
+}
+
+// pullPolicyOrDefault returns the given policy, or IfNotPresent when unset.
+func pullPolicyOrDefault(p corev1.PullPolicy) corev1.PullPolicy {
+	if p != "" {
+		return p
+	}
+	return corev1.PullIfNotPresent
+}
+
+// resolveImagePullSecrets returns the pull secrets for a Server. A list on the
+// Server replaces the Config's rather than extending it, so a Server pulling
+// from a different registry does not drag the Config's credentials along.
+func resolveImagePullSecrets(server *openvoxv1alpha1.Server, cfg *openvoxv1alpha1.Config) []corev1.LocalObjectReference {
+	if len(server.Spec.Image.PullSecrets) > 0 {
+		return server.Spec.Image.PullSecrets
+	}
+	return cfg.Spec.Image.PullSecrets
+}
+
+// appendPullSecrets adds refs that are not already present, so callers can
+// combine sources without producing duplicates.
+func appendPullSecrets(existing []corev1.LocalObjectReference, add ...corev1.LocalObjectReference) []corev1.LocalObjectReference {
+	seen := make(map[string]bool, len(existing))
+	for _, e := range existing {
+		seen[e.Name] = true
+	}
+	for _, a := range add {
+		if a.Name == "" || seen[a.Name] {
+			continue
+		}
+		seen[a.Name] = true
+		existing = append(existing, a)
+	}
+	return existing
+}
+
+// certnameOf returns the certname a Certificate is issued under.
+//
+// The field is required and non-empty since the shared "puppet" default was
+// removed. The fallback only covers resources written while that default still
+// existed, which all carry "puppet" anyway.
+func certnameOf(cert *openvoxv1alpha1.Certificate) string {
+	if cert.Spec.Certname != "" {
+		return cert.Spec.Certname
+	}
+	return "puppet"
+}
+
+// resolveReadOnlyRootFilesystem returns the setting for a Server, preferring
+// its own override over the Config's.
+func resolveReadOnlyRootFilesystem(server *openvoxv1alpha1.Server, cfg *openvoxv1alpha1.Config) bool {
+	if server.Spec.ReadOnlyRootFilesystem != nil {
+		return *server.Spec.ReadOnlyRootFilesystem
+	}
+	return openvoxv1alpha1.BoolValue(cfg.Spec.ReadOnlyRootFilesystem, true)
 }
 
 // serverRoleEnabled reports whether the Server runs the catalog server role.

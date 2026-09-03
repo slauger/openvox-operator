@@ -177,11 +177,12 @@ func (r *CertificateAuthorityReconciler) buildCASetupJob(ctx context.Context, ca
 					// otherwise owned by root; overridable via ca.spec.securityContext.
 					SecurityContext: buildPodSecurityContext(
 						CASetupRunAsUser, CASetupRunAsGroup, CASetupFSGroup, ca.Spec.SecurityContext),
+					ImagePullSecrets: appendPullSecrets(nil, cfg.Spec.Image.PullSecrets...),
 					Containers: []corev1.Container{
 						{
 							Name:            "ca-setup",
 							Image:           image,
-							ImagePullPolicy: cfg.Spec.Image.PullPolicy,
+							ImagePullPolicy: configImagePullPolicy(cfg),
 							Command:         []string{"/bin/bash", "-c", script},
 							Env:             envVars,
 							Resources:       resolveCAJobResources(ca),

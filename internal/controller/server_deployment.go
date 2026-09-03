@@ -456,7 +456,7 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 	container := corev1.Container{
 		Name:            "openvox-server",
 		Image:           image,
-		ImagePullPolicy: cfg.Spec.Image.PullPolicy,
+		ImagePullPolicy: resolveImagePullPolicy(server, cfg),
 		Env:             env,
 		EnvFrom:         server.Spec.EnvFrom,
 		Ports: []corev1.ContainerPort{
@@ -508,7 +508,7 @@ chmod 640 /ssl/private_keys/puppet.pem`
 	initContainer := corev1.Container{
 		Name:            "tls-init",
 		Image:           image,
-		ImagePullPolicy: cfg.Spec.Image.PullPolicy,
+		ImagePullPolicy: resolveImagePullPolicy(server, cfg),
 		Command:         []string{"sh", "-c", sslInitScript},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: "ssl", MountPath: "/ssl"},
@@ -519,7 +519,7 @@ chmod 640 /ssl/private_keys/puppet.pem`
 
 	containerSecurityContext := &corev1.SecurityContext{
 		AllowPrivilegeEscalation: boolPtr(false),
-		ReadOnlyRootFilesystem:   boolPtr(openvoxv1alpha1.BoolValue(cfg.Spec.ReadOnlyRootFilesystem, true)),
+		ReadOnlyRootFilesystem:   boolPtr(resolveReadOnlyRootFilesystem(server, cfg)),
 		Capabilities: &corev1.Capabilities{
 			Drop: []corev1.Capability{"ALL"},
 		},
@@ -544,16 +544,13 @@ chmod 640 /ssl/private_keys/puppet.pem`
 		Volumes:                   volumes,
 	}
 
-	// Add imagePullSecrets for code images if configured (deduplicated across entries)
+	// The server image and the code images can live in different registries, so
+	// both sets of credentials end up on the pod, deduplicated.
+	podSpec.ImagePullSecrets = appendPullSecrets(nil, resolveImagePullSecrets(server, cfg)...)
 	if serverRoleEnabled(server) {
-		seen := make(map[string]bool)
 		for _, e := range resolveCode(server, cfg) {
-			if e.ImagePullSecret != "" && !seen[e.ImagePullSecret] {
-				seen[e.ImagePullSecret] = true
-				podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, corev1.LocalObjectReference{
-					Name: e.ImagePullSecret,
-				})
-			}
+			podSpec.ImagePullSecrets = appendPullSecrets(podSpec.ImagePullSecrets,
+				corev1.LocalObjectReference{Name: e.ImagePullSecret})
 		}
 	}
 

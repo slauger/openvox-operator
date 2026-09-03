@@ -212,3 +212,79 @@ func TestCertificateValidator(t *testing.T) {
 		}
 	})
 }
+
+// TestCertificateValidator_RejectsDuplicateCertname closes the collision at
+// admission. The CA keeps one entry per certname, so two Certificates sharing
+// one against the same CA cannot both be signed - and deleting either revokes
+// the entry the other depends on.
+func TestCertificateValidator_RejectsDuplicateCertname(t *testing.T) {
+	ca := &openvoxv1alpha1.CertificateAuthority{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-ca", Namespace: "default"},
+	}
+	existing := &openvoxv1alpha1.Certificate{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-a", Namespace: "default"},
+		Spec:       openvoxv1alpha1.CertificateSpec{AuthorityRef: "my-ca", Certname: "shared.example.com"},
+	}
+	c := setupTestClient(ca, existing)
+	v := &CertificateValidator{Client: c}
+
+	duplicate := &openvoxv1alpha1.Certificate{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-b", Namespace: "default"},
+		Spec:       openvoxv1alpha1.CertificateSpec{AuthorityRef: "my-ca", Certname: "shared.example.com"},
+	}
+	if _, err := v.ValidateCreate(context.Background(), duplicate); err == nil {
+		t.Error("expected a duplicate certname against the same CA to be rejected")
+	}
+
+	// Updating the existing resource must not report a conflict with itself.
+	if _, err := v.ValidateUpdate(context.Background(), nil, existing); err != nil {
+		t.Errorf("a Certificate must not conflict with itself: %v", err)
+	}
+}
+
+// TestCertificateValidator_DuplicateDefaultCertname covers the accidental case:
+// the CRD defaults certname to puppet, so two Certificates created without one
+// collide without anybody writing the same value twice.
+func TestCertificateValidator_DuplicateDefaultCertname(t *testing.T) {
+	ca := &openvoxv1alpha1.CertificateAuthority{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-ca", Namespace: "default"},
+	}
+	existing := &openvoxv1alpha1.Certificate{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-a", Namespace: "default"},
+		Spec:       openvoxv1alpha1.CertificateSpec{AuthorityRef: "my-ca"},
+	}
+	c := setupTestClient(ca, existing)
+	v := &CertificateValidator{Client: c}
+
+	duplicate := &openvoxv1alpha1.Certificate{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-b", Namespace: "default"},
+		Spec:       openvoxv1alpha1.CertificateSpec{AuthorityRef: "my-ca"},
+	}
+	if _, err := v.ValidateCreate(context.Background(), duplicate); err == nil {
+		t.Error("two Certificates without an explicit certname both use puppet and must be rejected")
+	}
+}
+
+// TestCertificateValidator_DifferentAuthorityIsFine bounds the rule.
+func TestCertificateValidator_DifferentAuthorityIsFine(t *testing.T) {
+	caOne := &openvoxv1alpha1.CertificateAuthority{
+		ObjectMeta: metav1.ObjectMeta{Name: "ca-one", Namespace: "default"},
+	}
+	caTwo := &openvoxv1alpha1.CertificateAuthority{
+		ObjectMeta: metav1.ObjectMeta{Name: "ca-two", Namespace: "default"},
+	}
+	existing := &openvoxv1alpha1.Certificate{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-a", Namespace: "default"},
+		Spec:       openvoxv1alpha1.CertificateSpec{AuthorityRef: "ca-one", Certname: "shared.example.com"},
+	}
+	c := setupTestClient(caOne, caTwo, existing)
+	v := &CertificateValidator{Client: c}
+
+	other := &openvoxv1alpha1.Certificate{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-b", Namespace: "default"},
+		Spec:       openvoxv1alpha1.CertificateSpec{AuthorityRef: "ca-two", Certname: "shared.example.com"},
+	}
+	if _, err := v.ValidateCreate(context.Background(), other); err != nil {
+		t.Errorf("each CA keeps its own entries, so the same certname is fine: %v", err)
+	}
+}

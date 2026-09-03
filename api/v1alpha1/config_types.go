@@ -397,11 +397,16 @@ type ImageSpec struct {
 	Tag string `json:"tag,omitempty"`
 
 	// PullPolicy defines the image pull policy.
-	// +kubebuilder:default="IfNotPresent"
+	//
+	// A nested default would be materialised into every Server, which is what
+	// made the Server-level override unreachable: the field was never empty, so
+	// it could not express "inherit". Unset falls back to the Config and then
+	// to IfNotPresent.
 	// +optional
 	PullPolicy corev1.PullPolicy `json:"pullPolicy,omitempty"`
 
 	// PullSecrets is a list of image pull secrets.
+	// On Server an entry overrides the Config's list rather than adding to it.
 	// +optional
 	PullSecrets []corev1.LocalObjectReference `json:"pullSecrets,omitempty"`
 }

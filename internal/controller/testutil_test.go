@@ -645,3 +645,10 @@ func ownedBy(owner, obj client.Object) client.Object {
 	}
 	return obj
 }
+
+// specHash hashes a Certificate against its own spec alt names. Tests that do
+// not involve Pools want exactly that; the production path derives the names
+// from the Pools the Servers join.
+func specHash(cert *openvoxv1alpha1.Certificate) string {
+	return signingSpecHash(cert, cert.Spec.DNSAltNames)
+}

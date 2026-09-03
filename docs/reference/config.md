@@ -210,6 +210,15 @@ Controls Puppet Server metrics.conf settings.
 | `Running` | ConfigMap created, ready for use |
 | `Error` | Reconciliation failed |
 
+### Image resolution
+
+`repository` and `tag` on a Server override the Config's values individually;
+an unset field falls back to the Config. `pullPolicy` follows the same rule and
+defaults to `IfNotPresent` when neither sets it. `pullSecrets` is different: a
+non-empty list on the Server *replaces* the Config's rather than extending it,
+so a Server pulling from another registry does not carry the Config's
+credentials along. Secrets for code images are always added on top.
+
 ## Created Resources
 
 | Resource | Name | Description |

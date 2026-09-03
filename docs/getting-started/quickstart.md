@@ -162,6 +162,18 @@ NAME                                        TYPE        ENDPOINTS   AGE
 pool.openvox.voxpupuli.org/puppet           ClusterIP   1           2m
 ```
 
+!!! warning "Without a SigningPolicy nothing gets signed"
+
+    The operator points `autosign` at its own binary as soon as a
+    CertificateAuthority exists, and that binary denies every CSR it has no
+    matching policy for. An empty policy list therefore means deny-all, not
+    off.
+
+    Nothing surfaces this. The servers come up, the Config reports `Running`,
+    and every agent sits in `puppet agent --waitforcert` until it gives up.
+    Check with `kubectl get signingpolicy -n <namespace>`; if the list is
+    empty, see [SigningPolicy](../reference/signingpolicy.md).
+
 ## Next Steps
 
 See the [Examples](../examples/index.md) section for production setups with separate CA, server pools, canary deployments, and code deployment via OCI image volumes.

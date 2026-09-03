@@ -150,14 +150,14 @@ func drain(rec *events.FakeRecorder) int {
 	}
 }
 
-// TestPoolInjectDNSAltName_TriggersResignWithoutStatusWrite is the point of
-// decoupling the two controllers: the Pool changes the Certificate spec and
-// nothing else. The re-signing follows from the Certificate controller noticing
-// its own spec drift, not from a foreign status write.
-func TestPoolInjectDNSAltName_TriggersResignWithoutStatusWrite(t *testing.T) {
+// TestPoolRouteHostname_IsDerivedNotWritten replaces the old injection test.
+// The Pool no longer writes into the Certificate spec: the hostname is derived
+// on read, so the Certificate's spec stays owned by whoever wrote it and a
+// GitOps controller has nothing to revert.
+func TestPoolRouteHostname_IsDerivedNotWritten(t *testing.T) {
 	ca := newCertificateAuthority("production-ca")
 	cert := newCertificate("web-cert", "production-ca", openvoxv1alpha1.CertificatePhaseSigned)
-	cert.Status.SignedSpecHash = signingSpecHash(cert)
+	cert.Status.SignedSpecHash = specHash(cert)
 	notAfter := metav1.NewTime(metav1.Now().Add(365 * 24 * time.Hour))
 	cert.Status.NotAfter = &notAfter
 
@@ -169,25 +169,32 @@ func TestPoolInjectDNSAltName_TriggersResignWithoutStatusWrite(t *testing.T) {
 	pool.Spec.Route.InjectDNSAltName = true
 
 	c := setupTestClient(ca, cert, server, pool)
-	pr := newPoolReconciler(c, true)
 
-	if err := pr.injectDNSAltNames(testCtx(), pool); err != nil {
-		t.Fatalf("injecting alt names: %v", err)
+	if _, err := newPoolReconciler(c, true).Reconcile(testCtx(), testRequest("puppet")); err != nil {
+		t.Fatalf("reconciling the Pool: %v", err)
 	}
 
 	key := types.NamespacedName{Name: "web-cert", Namespace: testNamespace}
-	afterInject := &openvoxv1alpha1.Certificate{}
-	if err := c.Get(testCtx(), key, afterInject); err != nil {
+	after := &openvoxv1alpha1.Certificate{}
+	if err := c.Get(testCtx(), key, after); err != nil {
 		t.Fatalf("reading Certificate: %v", err)
 	}
+	if slices.Contains(after.Spec.DNSAltNames, "puppet.example.com") {
+		t.Error("the Pool must not write into the Certificate spec any more")
+	}
 
-	if !slices.Contains(afterInject.Spec.DNSAltNames, "puppet.example.com") {
-		t.Fatalf("the hostname should have been added to the spec, got %v", afterInject.Spec.DNSAltNames)
+	// The Certificate controller derives the same name instead.
+	cr := newCertificateReconciler(c)
+	names, err := cr.effectiveDNSAltNames(testCtx(), after)
+	if err != nil {
+		t.Fatalf("deriving alt names: %v", err)
 	}
-	if afterInject.Status.Phase != openvoxv1alpha1.CertificatePhaseSigned {
-		t.Errorf("the Pool must not touch the Certificate status, phase is %q", afterInject.Status.Phase)
+	if !slices.Contains(names, "puppet.example.com") {
+		t.Errorf("the route hostname must be part of the effective names, got %v", names)
 	}
-	if afterInject.Status.SignedSpecHash == signingSpecHash(afterInject) {
-		t.Error("the recorded hash should now differ from the spec, which is what makes the controller re-sign")
+
+	// And the drift it causes is what makes the controller re-sign.
+	if after.Status.SignedSpecHash == signingSpecHash(after, names) {
+		t.Error("the recorded hash should differ once the hostname joins the effective names")
 	}
 }

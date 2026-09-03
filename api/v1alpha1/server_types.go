@@ -149,6 +149,19 @@ type ServerSpec struct {
 	// (runAsUser/runAsGroup/fsGroup) applied to the Server pods.
 	// +optional
 	SecurityContext *PodSecurityContextSpec `json:"securityContext,omitempty"`
+
+	// ReadOnlyRootFilesystem overrides the Config's setting for this Server.
+	//
+	// One Config backs several Servers with different roles, typically the CA
+	// and the compilers, and hardening is otherwise a per-Server concern here
+	// alongside securityContext and extraVolumes. Without this override a
+	// single Server that needs a writable root forces the setting off for every
+	// Server under the Config, the CA included.
+	//
+	// Unset inherits from the Config. Deliberately a pointer: with a true
+	// default on the Config, a plain bool could not express false.
+	// +optional
+	ReadOnlyRootFilesystem *bool `json:"readOnlyRootFilesystem,omitempty"`
 }
 
 // PDBSpec defines PodDisruptionBudget settings.

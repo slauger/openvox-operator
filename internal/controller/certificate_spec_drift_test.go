@@ -16,7 +16,7 @@ import (
 func signedCert(name string, notAfter time.Time) *openvoxv1alpha1.Certificate {
 	cert := newCertificate(name, "production-ca", openvoxv1alpha1.CertificatePhaseSigned)
 	cert.Spec.DNSAltNames = []string{"puppet.example.com"}
-	cert.Status.SignedSpecHash = signingSpecHash(cert)
+	cert.Status.SignedSpecHash = specHash(cert)
 	t := metav1.NewTime(notAfter)
 	cert.Status.NotAfter = &t
 	return cert
@@ -26,7 +26,7 @@ func TestSigningSpecHash(t *testing.T) {
 	base := signedCert("web", time.Now().Add(365*24*time.Hour))
 
 	t.Run("stable across equal specs", func(t *testing.T) {
-		if signingSpecHash(base.DeepCopy()) != signingSpecHash(base) {
+		if specHash(base.DeepCopy()) != specHash(base) {
 			t.Error("two certificates with the same spec must hash the same")
 		}
 	})
@@ -36,7 +36,7 @@ func TestSigningSpecHash(t *testing.T) {
 		a.Spec.DNSAltNames = []string{"a.example.com", "b.example.com"}
 		b := base.DeepCopy()
 		b.Spec.DNSAltNames = []string{"b.example.com", "a.example.com"}
-		if signingSpecHash(a) != signingSpecHash(b) {
+		if specHash(a) != specHash(b) {
 			t.Error("reordering dnsAltNames must not change the hash")
 		}
 	})
@@ -44,7 +44,7 @@ func TestSigningSpecHash(t *testing.T) {
 	t.Run("changes with certname", func(t *testing.T) {
 		other := base.DeepCopy()
 		other.Spec.Certname = "different"
-		if signingSpecHash(other) == signingSpecHash(base) {
+		if specHash(other) == specHash(base) {
 			t.Error("certname must affect the hash")
 		}
 	})
@@ -52,7 +52,7 @@ func TestSigningSpecHash(t *testing.T) {
 	t.Run("changes with a new alt name", func(t *testing.T) {
 		other := base.DeepCopy()
 		other.Spec.DNSAltNames = append(other.Spec.DNSAltNames, "extra.example.com")
-		if signingSpecHash(other) == signingSpecHash(base) {
+		if specHash(other) == specHash(base) {
 			t.Error("an added alt name must affect the hash")
 		}
 	})
@@ -60,7 +60,7 @@ func TestSigningSpecHash(t *testing.T) {
 	t.Run("changes with csr extensions", func(t *testing.T) {
 		other := base.DeepCopy()
 		other.Spec.CSRExtensions = &openvoxv1alpha1.CSRExtensionsSpec{PpRole: "compiler"}
-		if signingSpecHash(other) == signingSpecHash(base) {
+		if specHash(other) == specHash(base) {
 			t.Error("csrExtensions must affect the hash")
 		}
 	})
@@ -68,7 +68,7 @@ func TestSigningSpecHash(t *testing.T) {
 	t.Run("ignores renewBefore", func(t *testing.T) {
 		other := base.DeepCopy()
 		other.Spec.RenewBefore = "10d"
-		if signingSpecHash(other) != signingSpecHash(base) {
+		if specHash(other) != specHash(base) {
 			t.Error("renewBefore only moves the renewal point and must not affect the hash")
 		}
 	})
@@ -184,7 +184,7 @@ func TestReconcile_AdoptsMissingHashWithoutResigning(t *testing.T) {
 	if got.Status.Phase != openvoxv1alpha1.CertificatePhaseSigned {
 		t.Errorf("a missing hash must be adopted, not re-signed; phase is %s", got.Status.Phase)
 	}
-	if got.Status.SignedSpecHash != signingSpecHash(got) {
+	if got.Status.SignedSpecHash != specHash(got) {
 		t.Errorf("the current spec hash should have been recorded, got %q", got.Status.SignedSpecHash)
 	}
 }

@@ -124,13 +124,26 @@ type CertificateStatus struct {
 	// +optional
 	SecretName string `json:"secretName,omitempty"`
 
-	// SignedSpecHash digests the spec fields the current certificate was issued
-	// for: certname, dnsAltNames and csrExtensions. When it no longer matches
-	// the spec, the certificate is re-signed. An empty value means the hash was
+	// SignedSpecHash digests what the current certificate was issued for:
+	// certname, the effective alt names and csrExtensions. When it no longer
+	// matches, the certificate is re-signed. An empty value means the hash was
 	// never recorded (certificates issued before this field existed) and is
 	// adopted on the next reconcile rather than triggering a re-sign.
 	// +optional
 	SignedSpecHash string `json:"signedSpecHash,omitempty"`
+
+	// EffectiveDNSAltNames lists the alt names the certificate is actually
+	// issued for: spec.dnsAltNames plus the route hostname of every Pool that
+	// asks for injection and is joined by a Server using this Certificate.
+	//
+	// The Pool used to append its hostname to spec.dnsAltNames directly. Under
+	// GitOps that turned into a loop: the Pool added the name, the source of
+	// truth reverted it, the Pool added it again, and each round changed a
+	// signing-relevant field. Deriving it here writes nothing foreign and is
+	// idempotent.
+	// +listType=set
+	// +optional
+	EffectiveDNSAltNames []string `json:"effectiveDNSAltNames,omitempty"`
 
 	// NotAfter is the expiration time of the signed certificate.
 	// +optional

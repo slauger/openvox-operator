@@ -81,12 +81,14 @@ spec:
 
     - name: Verify DNS alt name injected into Certificate
       description: |
-        The full expected set, in the order the chart and the operator build it:
-        the server name, the certname, then the Service name of every Pool the
-        server joins, and finally the route hostname the Pool controller
-        injects. This server has poolRefs [ca, server], so it is reachable
-        through both Services and needs both names; the ca Pool's Service name
-        equals the server name and is deduplicated away.
+        The spec holds what the chart wrote: the server name, the certname and
+        the Service name of every Pool the server joins. This server has
+        poolRefs [ca, server], so it needs both Service names; the ca Pool's
+        name equals the server name and is deduplicated away.
+
+        The route hostname is no longer written into the spec. It is derived
+        into status.effectiveDNSAltNames, which is what the certificate is
+        actually issued for - sorted, so the signing hash is stable.
       try:
         - assert:
             resource:
@@ -99,6 +101,11 @@ spec:
                   - openvox-stack-gw-ca
                   - puppet
                   - openvox-stack-gw-server
+              status:
+                effectiveDNSAltNames:
+                  - openvox-stack-gw-ca
+                  - openvox-stack-gw-server
+                  - puppet
                   - puppet.e2e.example.com
 
     - name: Verify no TLSRoute for CA pool

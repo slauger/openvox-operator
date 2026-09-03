@@ -519,7 +519,7 @@ chmod 640 /ssl/private_keys/puppet.pem`
 
 	containerSecurityContext := &corev1.SecurityContext{
 		AllowPrivilegeEscalation: boolPtr(false),
-		ReadOnlyRootFilesystem:   boolPtr(openvoxv1alpha1.BoolValue(cfg.Spec.ReadOnlyRootFilesystem, true)),
+		ReadOnlyRootFilesystem:   boolPtr(resolveReadOnlyRootFilesystem(server, cfg)),
 		Capabilities: &corev1.Capabilities{
 			Drop: []corev1.Capability{"ALL"},
 		},

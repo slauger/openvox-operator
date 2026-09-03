@@ -87,7 +87,11 @@ func (r *CertificateAuthorityReconciler) fetchCRL(ctx context.Context, ca *openv
 
 // updateCRLSecret creates or updates the CRL secret with fresh CRL data.
 func (r *CertificateAuthorityReconciler) updateCRLSecret(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, name string, crlPEM []byte) error {
+	// The setup Job writes infra_crl.pem into this same Secret and nothing
+	// refreshes it here, so it has to be carried across. Losing it disables
+	// infrastructure-node revocation for deployments running with
+	// enable-infra-crl, and nothing reports the loss.
 	return createOrUpdateSecret(ctx, r.Client, r.Scheme, ca, name, ca.Namespace, caLabels(ca.Name), map[string][]byte{
 		"ca_crl.pem": crlPEM,
-	})
+	}, "infra_crl.pem")
 }

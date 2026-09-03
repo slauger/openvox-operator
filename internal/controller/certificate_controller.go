@@ -19,6 +19,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
@@ -183,7 +184,10 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// would rewrite the status for no reason. Two things can still make work
 	// necessary: the signing-relevant spec changed, or the renewal window opened.
 	if cert.Status.Phase == openvoxv1alpha1.CertificatePhaseSigned {
-		wantHash := signingSpecHash(cert)
+		wantHash, effective, hashErr := r.signingSpecHashFor(ctx, cert)
+		if hashErr != nil {
+			return ctrl.Result{}, hashErr
+		}
 		switch {
 		case cert.Status.SignedSpecHash == "":
 			// Certificates issued before the hash existed carry no baseline.
@@ -191,6 +195,7 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			// the cluster on the first reconcile after an operator upgrade.
 			if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
 				cert.Status.SignedSpecHash = wantHash
+				cert.Status.EffectiveDNSAltNames = effective
 			}); err != nil {
 				return ctrl.Result{}, fmt.Errorf("recording signed spec hash for Certificate %s: %w", cert.Name, err)
 			}
@@ -219,10 +224,15 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{}, fmt.Errorf("adopting TLS Secret: %w", err)
 		}
 
+		hash, effective, hashErr := r.signingSpecHashFor(ctx, cert)
+		if hashErr != nil {
+			return ctrl.Result{}, hashErr
+		}
 		notAfter := r.extractNotAfter(ctx, tlsSecretName, cert.Namespace)
 		if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
 			cert.Status.ObservedGeneration = cert.Generation
-			cert.Status.SignedSpecHash = signingSpecHash(cert)
+			cert.Status.SignedSpecHash = hash
+			cert.Status.EffectiveDNSAltNames = effective
 			cert.Status.Phase = openvoxv1alpha1.CertificatePhaseSigned
 			cert.Status.SecretName = tlsSecretName
 			cert.Status.NotAfter = notAfter
@@ -258,6 +268,10 @@ func (r *CertificateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&openvoxv1alpha1.Certificate{}).
 		Owns(&corev1.Secret{}).
 		Watches(&corev1.Secret{}, enqueueCertificatesForSecret(mgr.GetClient())).
+		// The effective alt names are derived from the Pools a Server joins, so
+		// a route hostname added later has to reach the Certificate.
+		Watches(&openvoxv1alpha1.Pool{}, handler.EnqueueRequestsFromMapFunc(certificatesForPool(mgr.GetClient()))).
+		Watches(&openvoxv1alpha1.Server{}, handler.EnqueueRequestsFromMapFunc(certificatesForServerPools())).
 		Complete(r)
 }
 
@@ -321,10 +335,15 @@ func (r *CertificateReconciler) reconcileCertSigning(ctx context.Context, cert *
 
 	// Mark as signed
 	tlsSecretName := fmt.Sprintf("%s-tls", cert.Name)
+	hash, effective, hashErr := r.signingSpecHashFor(ctx, cert)
+	if hashErr != nil {
+		return ctrl.Result{}, hashErr
+	}
 	notAfter := r.extractNotAfter(ctx, tlsSecretName, cert.Namespace)
 	if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
 		cert.Status.ObservedGeneration = cert.Generation
-		cert.Status.SignedSpecHash = signingSpecHash(cert)
+		cert.Status.SignedSpecHash = hash
+		cert.Status.EffectiveDNSAltNames = effective
 		cert.Status.Phase = openvoxv1alpha1.CertificatePhaseSigned
 		cert.Status.SecretName = tlsSecretName
 		cert.Status.NotAfter = notAfter
@@ -567,8 +586,8 @@ func (r *CertificateReconciler) handleCertificateCleanup(ctx context.Context, ce
 // renewBefore is deliberately excluded. It only moves the point in time at
 // which renewal happens and says nothing about the certificate's content, so
 // changing it must not cause unnecessary load on the CA.
-func signingSpecHash(cert *openvoxv1alpha1.Certificate) string {
-	names := append([]string(nil), cert.Spec.DNSAltNames...)
+func signingSpecHash(cert *openvoxv1alpha1.Certificate, effectiveNames []string) string {
+	names := append([]string(nil), effectiveNames...)
 	sort.Strings(names)
 
 	fields := map[string]string{
@@ -600,6 +619,17 @@ func (r *CertificateReconciler) renewalDue(cert *openvoxv1alpha1.Certificate) bo
 		return false
 	}
 	return !r.isWithinRenewalCooldown(cert)
+}
+
+// signingSpecHashFor computes the hash over what the certificate is actually
+// issued for, which includes alt names derived from the Pools its Servers join.
+func (r *CertificateReconciler) signingSpecHashFor(ctx context.Context,
+	cert *openvoxv1alpha1.Certificate) (string, []string, error) {
+	names, err := r.effectiveDNSAltNames(ctx, cert)
+	if err != nil {
+		return "", nil, err
+	}
+	return signingSpecHash(cert, names), names, nil
 }
 
 // otherCertificateUsingCertname returns the name of another live Certificate in

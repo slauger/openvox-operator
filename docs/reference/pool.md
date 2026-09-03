@@ -40,7 +40,7 @@ spec:
 | `enabled` | bool | `false` | Activates TLSRoute creation for this Pool |
 | `hostname` | string | - | SNI hostname (required when enabled) |
 | `gatewayRef` | [GatewayReference](#gatewayreference) | - | Gateway to attach the TLSRoute to (required when enabled) |
-| `injectDNSAltName` | bool | `false` | Add hostname to Certificate dnsAltNames of Servers that reference this Pool. **Note:** this modifies the Certificate spec and triggers re-signing, which briefly recreates the TLS Secret. |
+| `injectDNSAltName` | bool | `false` | Take this Pool's hostname into account for the certificates of Servers that reference it. The Certificate controller derives it into `status.effectiveDNSAltNames`; nothing is written to the Certificate spec. Adding it changes the signing-relevant state, so the certificate is re-signed and the TLS Secret briefly recreated. |
 
 ### GatewayReference
 

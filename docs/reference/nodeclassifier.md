@@ -80,8 +80,10 @@ kind: Config
 metadata:
   name: production
 spec:
-  image: ...
   authorityRef: production-ca
+  image:
+    repository: ghcr.io/slauger/openvox-server-8
+    tag: "latest"
   nodeClassifierRef: foreman
 ```
 

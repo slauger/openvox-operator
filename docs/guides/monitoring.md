@@ -114,6 +114,24 @@ Alert when a certificate expires within 30 days:
           description: "{{ $labels.name }} in {{ $labels.namespace }} expires in {{ $value | humanizeDuration }}"
 ```
 
+### Missing CRL series
+
+A stale CRL is alertable only while the series exists. If the operator never
+refreshed the CRL - it crashed early, or the CA never became ready - there is
+no series at all and the staleness rule below stays silent. Alert on the
+absence separately:
+
+```yaml
+      - alert: OpenVoxCRLMetricMissing
+        expr: absent(openvox_crl_last_refresh_timestamp_seconds)
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No CRL refresh has been recorded"
+          description: "The operator has not refreshed any CRL since it started. Revocations are not reaching agents."
+```
+
 ### Stale CRL
 
 A CRL that is no longer refreshed means revoked agents keep being accepted.
@@ -131,6 +149,18 @@ Alert when the last successful refresh is more than a day old:
 ```
 
 ### CA Expiring
+
+!!! note "CAs and certificates share one metric"
+
+    `openvox_certificate_expiry_timestamp_seconds` is written by both the
+    Certificate and the CertificateAuthority controller, with the same
+    `name`/`namespace` labels and nothing that says which kind a series belongs
+    to. Telling them apart in a query means matching on the name.
+
+    The rule below uses `.*-ca`, which is a convention rather than a guarantee:
+    it also catches a Certificate that happens to end in `-ca`, and it misses a
+    CertificateAuthority named otherwise. Replace the matcher with your actual
+    CA names if you rely on the distinction.
 
 Alert when a CA certificate expires within 90 days:
 

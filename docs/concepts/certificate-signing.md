@@ -29,7 +29,7 @@ sequenceDiagram
     Operator->>K8s: Create PVC ({ca}-data)
     Operator->>K8s: Create Service ({ca}-internal)
     Operator->>K8s: Create ServiceAccount + RBAC
-    Operator->>K8s: Create Job ({ca}-setup)
+    Operator->>K8s: Create Job ({ca}-ca-setup)
     Job->>PVC: Run puppetserver ca setup
     Job->>K8s: Create Secret {ca}-ca (public cert)
     Job->>K8s: Create Secret {ca}-ca-key (private key)

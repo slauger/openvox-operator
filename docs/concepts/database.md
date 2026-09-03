@@ -71,10 +71,21 @@ spec:
   databaseRef: production-db   # operator reads Database.status.url
   image:
     repository: ghcr.io/slauger/openvox-server-8
-    tag: "8.12.1"
+    tag: "latest"
 ```
 
-The operator reads `Database.status.url` (e.g. `https://production-db.namespace.svc.cluster.local:8081`) and renders it into `puppetdb.conf`. When the Database is not yet `Running`, the Config controller waits.
+The operator reads `Database.status.url` (e.g. `https://production-db.namespace.svc.cluster.local:8081`) and renders it into `puppetdb.conf`.
+
+When the Database has no URL yet, the Config controller does **not** wait. It
+renders a `puppetdb.conf` without `server_urls` and carries on, so the servers
+start regardless. Combined with `soft_write_failure = true`, which the operator
+always sets, a server in that state compiles catalogs normally while reports
+and exported resources go nowhere and no error is raised.
+
+The Config is re-reconciled when the Database status changes, so this resolves
+by itself during bring-up. It becomes a problem only if the Database never
+reaches `Running`: the symptom is an empty PuppetDB with healthy-looking
+servers, not a failure.
 
 ### Via static `puppetdb.serverUrls`
 

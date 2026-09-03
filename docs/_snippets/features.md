@@ -6,7 +6,7 @@
 - 🔄 **Multi-Version Deployments** - Run different server versions side by side - canary deployments, rolling upgrades
 - 🔒 **Rootless & OpenShift Ready** - Random UID compatible, no root, no ezbake, no privilege escalation
 - 🪶 **Minimal Image** - UBI9-based, no agent Ruby, no ezbake packaging - smaller footprint, fewer updates
-- 🧠 **Auto-tuned JVM** - Heap size calculated from memory limits (90%) - no manual `-Xmx` tuning needed
+- 🧠 **JVM sizing** - Set `javaArgs` per Server or Database; see [Server](reference/server.md) for the current default
 - 📦 **OCI Image Volumes** - Package Puppet code as OCI images, deploy immutably with automatic rollout (K8s 1.35+)
 - 🌐 **Gateway API** - SNI-based TLSRoute support - share a single LoadBalancer across environments via TLS passthrough
 - 🗄️ **Managed OpenVox DB** - Deploy OpenVox DB (PuppetDB) with external PostgreSQL - TLS, config, and credentials managed by the operator

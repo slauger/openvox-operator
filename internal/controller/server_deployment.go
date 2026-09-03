@@ -118,14 +118,6 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 	// SigningPolicy changes. The policy Secret is subPath-mounted, so kubelet does not
 	// live-sync it; hashing it into the pod template rolls the CA pod when the rendered
 	// policy changes, so a SigningPolicy edit applies without a manual restart.
-	// Skipped when a custom autosignCommand disables the SigningPolicy-driven flow.
-	if server.Spec.CA && cfg.Spec.Puppet.AutosignCommand == "" {
-		autosignSecretName := fmt.Sprintf("%s-autosign-policy", ca.Name)
-		if autosignHash, err := r.secretHash(ctx, autosignSecretName, server.Namespace); err == nil {
-			annotations["openvox.voxpupuli.org/autosign-policy-secret-hash"] = autosignHash
-		}
-	}
-
 	deploy := &appsv1.Deployment{}
 	err = r.Get(ctx, types.NamespacedName{Name: deployName, Namespace: server.Namespace}, deploy)
 	if errors.IsNotFound(err) {
@@ -312,10 +304,15 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 		// flow: the command is then responsible for its own signing decision.
 		if cfg.Spec.Puppet.AutosignCommand == "" {
 			autosignSecretName := fmt.Sprintf("%s-autosign-policy", ca.Name)
+			// Mounted as a directory rather than with SubPath: a SubPath mount is
+			// never refreshed by the kubelet, which is why this used to need a
+			// pod restart on every policy change. The CA Deployment uses the
+			// Recreate strategy, so that restart was a short CA outage - no
+			// signing, no CRL - for an edit that changes no running state. The
+			// CRL Secret is mounted the same way for the same reason.
 			volumeMounts = append(volumeMounts, corev1.VolumeMount{
 				Name:      "autosign-policy",
-				MountPath: "/etc/puppetlabs/puppet/autosign-policy.yaml",
-				SubPath:   "autosign-policy.yaml",
+				MountPath: autosignPolicyDir,
 				ReadOnly:  true,
 			})
 			volumes = append(volumes, corev1.Volume{

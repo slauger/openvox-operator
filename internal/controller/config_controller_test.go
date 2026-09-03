@@ -212,6 +212,12 @@ func TestConfigReconcile_PuppetConfWithCA(t *testing.T) {
 	if !strings.Contains(puppetConf, "autosign = ") {
 		t.Errorf("puppet.conf missing autosign\n---\n%s", puppetConf)
 	}
+	// The policy lives in a directory mount, so the binary has to be told where
+	// to look. A wrong path here denies every CSR and would otherwise surface
+	// only in an end-to-end run.
+	if !strings.Contains(puppetConf, "--config "+autosignPolicyPath) {
+		t.Errorf("puppet.conf must point the binary at %s\n---\n%s", autosignPolicyPath, puppetConf)
+	}
 }
 
 func TestConfigReconcile_PuppetConfWithENC(t *testing.T) {

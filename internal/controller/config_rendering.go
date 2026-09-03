@@ -76,12 +76,12 @@ func (r *ConfigReconciler) renderPuppetConf(ctx context.Context, cfg *openvoxv1a
 		}
 
 		// Autosign: by default point to the built-in binary, which reads the policy
-		// Secret (mounted by the server controller) and decides sign/deny. A policy
-		// change rewrites the Secret and the server controller rolls the CA pod via
-		// the autosign-policy-secret-hash annotation, so it applies without a manual
-		// restart. A custom autosignCommand replaces the built-in binary and disables
-		// the SigningPolicy-driven flow (the policy Secret is not mounted).
-		autosignCmd := autosignBinaryPath
+		// Secret (mounted by the server controller as a directory) and decides
+		// sign/deny. The binary re-reads the file on every CSR and the kubelet keeps
+		// the mount in sync, so a policy change applies without restarting the CA.
+		// A custom autosignCommand replaces the built-in binary and disables the
+		// SigningPolicy-driven flow (the policy Secret is not mounted).
+		autosignCmd := fmt.Sprintf("%s --config %s", autosignBinaryPath, autosignPolicyPath)
 		if cfg.Spec.Puppet.AutosignCommand != "" {
 			autosignCmd = cfg.Spec.Puppet.AutosignCommand
 		}

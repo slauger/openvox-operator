@@ -63,10 +63,15 @@ type CertificateSpec struct {
 	// The name is baked into the issued certificate and into the entry the CA
 	// keeps for it. Changing it would leave that entry behind under the old
 	// name, so the finalizer could no longer clean it up on deletion.
-	// +kubebuilder:default="puppet"
+	//
+	// There is deliberately no default. A certname identifies exactly one entry
+	// on the CA, so a shared default made two Certificates collide by default
+	// rather than by mistake. "puppet" is also only the right identity for the
+	// main server: PuppetDB and any further certificate need their own. The
+	// names agents connect through belong in DNSAltNames, not here.
+	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="certname is immutable"
-	// +optional
-	Certname string `json:"certname,omitempty"`
+	Certname string `json:"certname"`
 
 	// DNSAltNames is a list of DNS subject alternative names for the certificate.
 	// Order is irrelevant and duplicates are rejected.
@@ -141,6 +146,10 @@ type CertificateStatus struct {
 // Condition types for Certificate.
 const (
 	ConditionCertSigned = "CertSigned"
+
+	// ConditionCertnameConflict reports that another Certificate already claims
+	// this certname against the same CertificateAuthority.
+	ConditionCertnameConflict = "CertnameConflict"
 )
 
 func init() {

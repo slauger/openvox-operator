@@ -66,22 +66,35 @@ func TestCertificateCertnameIsImmutable(t *testing.T) {
 		}
 	})
 
-	t.Run("the defaulted certname survives an unrelated update", func(t *testing.T) {
+	// The shared "puppet" default used to make two Certificates collide by
+	// default rather than by mistake: a certname identifies exactly one entry
+	// on the CA. There is no default any more, and an omitted certname is a
+	// validation error rather than a silent collision.
+	t.Run("an omitted certname is rejected", func(t *testing.T) {
 		cert := &Certificate{
 			ObjectMeta: metav1.ObjectMeta{GenerateName: "test-cert-", Namespace: "default"},
 			Spec:       CertificateSpec{AuthorityRef: "production-ca"},
 		}
+		err := k8sClient.Create(ctx, cert)
+		if err == nil {
+			t.Cleanup(func() { _ = k8sClient.Delete(ctx, cert) })
+			t.Fatalf("expected a Certificate without a certname to be rejected, got certname %q", cert.Spec.Certname)
+		}
+		if !strings.Contains(err.Error(), "certname") {
+			t.Errorf("expected the error to name the certname field, got: %v", err)
+		}
+	})
+
+	t.Run("an unrelated update leaves the certname alone", func(t *testing.T) {
+		cert := newCert()
 		if err := k8sClient.Create(ctx, cert); err != nil {
 			t.Fatalf("creating Certificate: %v", err)
 		}
 		t.Cleanup(func() { _ = k8sClient.Delete(ctx, cert) })
-		if cert.Spec.Certname != "puppet" {
-			t.Fatalf("expected the default certname, got %q", cert.Spec.Certname)
-		}
 
 		cert.Spec.RenewBefore = "30d"
 		if err := k8sClient.Update(ctx, cert); err != nil {
-			t.Errorf("an update that leaves the defaulted certname alone must pass, got: %v", err)
+			t.Errorf("an update that does not touch the certname must pass, got: %v", err)
 		}
 	})
 }

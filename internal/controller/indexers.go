@@ -21,6 +21,11 @@ const (
 	IndexConfigRef      = "spec.configRef"
 	IndexCertificateRef = "spec.certificateRef"
 	IndexAuthorityRef   = "spec.authorityRef"
+
+	// IndexCertname makes the certname collision check a lookup rather than a
+	// full listing. A certname identifies exactly one entry on the CA, so two
+	// Certificates sharing one against the same CA are indistinguishable to it.
+	IndexCertname = "spec.certname"
 )
 
 // SetupFieldIndexers registers every field index the controllers rely on.
@@ -57,6 +62,10 @@ func fieldIndexes() []fieldIndex {
 		}},
 		{&openvoxv1alpha1.Certificate{}, IndexAuthorityRef, func(o client.Object) []string {
 			return nonEmpty(o.(*openvoxv1alpha1.Certificate).Spec.AuthorityRef)
+		}},
+		{&openvoxv1alpha1.Certificate{}, IndexCertname, func(o client.Object) []string {
+			c := o.(*openvoxv1alpha1.Certificate)
+			return nonEmpty(certnameOf(c))
 		}},
 		{&openvoxv1alpha1.Database{}, IndexCertificateRef, func(o client.Object) []string {
 			return nonEmpty(o.(*openvoxv1alpha1.Database).Spec.CertificateRef)

@@ -2,6 +2,7 @@ package webhook
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"strings"
 
@@ -54,6 +55,17 @@ func (v *CertificateValidator) validate(ctx context.Context, c *openvoxv1alpha1.
 		}
 	}
 
+	// A certname identifies exactly one entry on the CA. Two Certificates
+	// sharing one against the same CA are indistinguishable to it: the second
+	// CSR is rejected, and deleting either one revokes the entry both rely on.
+	// The CRD default is "puppet", so the collision is easy to hit by accident.
+	if other, err := v.otherCertificateUsingCertname(ctx, c); err != nil {
+		errs = append(errs, field.InternalError(specPath.Child("certname"), err))
+	} else if other != "" {
+		errs = append(errs, field.Duplicate(specPath.Child("certname"),
+			certnameOrDefault(c)+" (already claimed by Certificate "+other+" against the same CertificateAuthority)"))
+	}
+
 	if err := validateDuration(c.Spec.RenewBefore, "renewBefore"); err != nil {
 		errs = append(errs, field.Invalid(specPath.Child("renewBefore"), c.Spec.RenewBefore, err.Error()))
 	}
@@ -79,4 +91,45 @@ func (v *CertificateValidator) validate(ctx context.Context, c *openvoxv1alpha1.
 		return nil, errs.ToAggregate()
 	}
 	return nil, nil
+}
+
+// certnameOrDefault resolves the certname the CA will see. Schema validation
+// runs before this webhook, so the field is already non-empty for anything
+// created since the default was removed; the fallback covers resources written
+// before that, which all carry "puppet".
+func certnameOrDefault(c *openvoxv1alpha1.Certificate) string {
+	if c.Spec.Certname != "" {
+		return c.Spec.Certname
+	}
+	return "puppet"
+}
+
+// otherCertificateUsingCertname returns the name of another Certificate in the
+// namespace that claims the same certname against the same
+// CertificateAuthority, or "" when there is none.
+func (v *CertificateValidator) otherCertificateUsingCertname(ctx context.Context, c *openvoxv1alpha1.Certificate) (string, error) {
+	certList := &openvoxv1alpha1.CertificateList{}
+	if err := v.Client.List(ctx, certList, client.InNamespace(c.Namespace)); err != nil {
+		return "", fmt.Errorf("listing Certificates in namespace %s: %w", c.Namespace, err)
+	}
+
+	want := certnameOrDefault(c)
+	for i := range certList.Items {
+		other := &certList.Items[i]
+		if other.Name == c.Name {
+			continue
+		}
+		// A Certificate on its way out releases its claim; its finalizer cleans
+		// the CA entry.
+		if !other.DeletionTimestamp.IsZero() {
+			continue
+		}
+		if other.Spec.AuthorityRef != c.Spec.AuthorityRef {
+			continue
+		}
+		if certnameOrDefault(other) == want {
+			return other.Name, nil
+		}
+	}
+	return "", nil
 }

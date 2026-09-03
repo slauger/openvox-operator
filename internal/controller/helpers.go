@@ -304,6 +304,18 @@ func appendPullSecrets(existing []corev1.LocalObjectReference, add ...corev1.Loc
 	return existing
 }
 
+// certnameOf returns the certname a Certificate is issued under.
+//
+// The field is required and non-empty since the shared "puppet" default was
+// removed. The fallback only covers resources written while that default still
+// existed, which all carry "puppet" anyway.
+func certnameOf(cert *openvoxv1alpha1.Certificate) string {
+	if cert.Spec.Certname != "" {
+		return cert.Spec.Certname
+	}
+	return "puppet"
+}
+
 // serverRoleEnabled reports whether the Server runs the catalog server role.
 // The spec field defaults to true, so an unset value enables the role.
 func serverRoleEnabled(server *openvoxv1alpha1.Server) bool {

@@ -43,6 +43,7 @@ const (
 	EventReasonCertificateRenewed          = "CertificateRenewed"
 	EventReasonCertificateExpiringSoon     = "CertificateExpiringSoon"
 	EventReasonCertificateCleaned          = "CertificateCleaned"
+	EventReasonCertnameConflict            = "CertnameConflict"
 )
 
 // Maximum requeue interval for renewal checks (caps the time-based backoff).
@@ -265,6 +266,17 @@ func (r *CertificateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // and returns RequeueAfter if the cert isn't signed yet.
 func (r *CertificateReconciler) reconcileCertSigning(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
+
+	// The webhook rejects a duplicate certname at admission, but webhooks are
+	// off by default, so the guarantee has to hold here too. Signing under a
+	// certname another Certificate owns cannot succeed -- the CA has one entry
+	// per name -- and deleting either resource would revoke the entry the other
+	// depends on.
+	if other, err := r.otherCertificateUsingCertname(ctx, cert); err != nil {
+		return ctrl.Result{}, err
+	} else if other != "" {
+		return r.reportCertnameConflict(ctx, cert, other)
+	}
 
 	// Resolve CA base URL: external URL or internal CA Service
 	var caBaseURL string
@@ -588,4 +600,81 @@ func (r *CertificateReconciler) renewalDue(cert *openvoxv1alpha1.Certificate) bo
 		return false
 	}
 	return !r.isWithinRenewalCooldown(cert)
+}
+
+// otherCertificateUsingCertname returns the name of another live Certificate in
+// the namespace that claims the same certname against the same
+// CertificateAuthority, or "" when there is none.
+//
+// The CRD defaults certname to "puppet", so two Certificates created without
+// one collide by default rather than by mistake.
+func (r *CertificateReconciler) otherCertificateUsingCertname(ctx context.Context,
+	cert *openvoxv1alpha1.Certificate) (string, error) {
+	certList := &openvoxv1alpha1.CertificateList{}
+	if err := r.List(ctx, certList,
+		client.InNamespace(cert.Namespace),
+		client.MatchingFields{IndexCertname: certnameOf(cert)}); err != nil {
+		return "", fmt.Errorf("listing Certificates by certname in namespace %s: %w", cert.Namespace, err)
+	}
+
+	claimants := make([]string, 0, len(certList.Items))
+	for i := range certList.Items {
+		other := &certList.Items[i]
+		switch {
+		case other.Name == cert.Name:
+			continue
+		// A Certificate on its way out releases the name: its finalizer cleans
+		// the CA entry.
+		case !other.DeletionTimestamp.IsZero():
+			continue
+		case other.Spec.AuthorityRef != cert.Spec.AuthorityRef:
+			continue
+		}
+		claimants = append(claimants, other.Name)
+	}
+	if len(claimants) == 0 {
+		return "", nil
+	}
+
+	// Stable output so the reported conflict does not flip between reconciles.
+	sort.Strings(claimants)
+	return claimants[0], nil
+}
+
+// reportCertnameConflict records the conflict and stops. Retrying cannot help:
+// only a spec change or the removal of the other Certificate frees the name.
+func (r *CertificateReconciler) reportCertnameConflict(ctx context.Context,
+	cert *openvoxv1alpha1.Certificate, other string) (ctrl.Result, error) {
+	msg := fmt.Sprintf("certname %q is already claimed by Certificate %s against CertificateAuthority %s",
+		certnameOf(cert), other, cert.Spec.AuthorityRef)
+
+	existing := meta.FindStatusCondition(cert.Status.Conditions, openvoxv1alpha1.ConditionCertnameConflict)
+	alreadyReported := existing != nil && existing.Status == metav1.ConditionTrue && existing.Message == msg
+
+	if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
+		cert.Status.Phase = openvoxv1alpha1.CertificatePhaseError
+		meta.SetStatusCondition(&cert.Status.Conditions, metav1.Condition{
+			Type:               openvoxv1alpha1.ConditionCertnameConflict,
+			Status:             metav1.ConditionTrue,
+			Reason:             "DuplicateCertname",
+			Message:            msg,
+			ObservedGeneration: cert.Generation,
+		})
+		meta.SetStatusCondition(&cert.Status.Conditions, metav1.Condition{
+			Type:               openvoxv1alpha1.ConditionCertSigned,
+			Status:             metav1.ConditionFalse,
+			Reason:             "CertnameConflict",
+			Message:            msg,
+			ObservedGeneration: cert.Generation,
+		})
+	}); err != nil {
+		return ctrl.Result{}, fmt.Errorf("reporting the certname conflict for %s: %w", cert.Name, err)
+	}
+
+	if !alreadyReported {
+		log.FromContext(ctx).Info("refusing to sign, certname already claimed",
+			"certname", certnameOf(cert), "claimedBy", other)
+		r.Recorder.Eventf(cert, nil, corev1.EventTypeWarning, EventReasonCertnameConflict, "Reconcile", "%s", msg)
+	}
+	return ctrl.Result{}, nil
 }

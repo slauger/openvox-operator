@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -112,11 +111,6 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 					return ctrl.Result{}, fmt.Errorf("reconciling TLSRoute: %w", err)
 				}
 
-				if pool.Spec.Route.InjectDNSAltName {
-					if err := r.injectDNSAltNames(ctx, pool); err != nil {
-						return ctrl.Result{}, fmt.Errorf("injecting DNS alt names: %w", err)
-					}
-				}
 			}
 		}
 	} else if r.GatewayAPIAvailable {
@@ -486,56 +480,5 @@ func (r *PoolReconciler) reconcileTLSRoute(ctx context.Context, pool *openvoxv1a
 	case controllerutil.OperationResultUpdated:
 		r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonTLSRouteUpdated, "Reconcile", "TLSRoute %s updated", pool.Name)
 	}
-	return nil
-}
-
-func (r *PoolReconciler) injectDNSAltNames(ctx context.Context, pool *openvoxv1alpha1.Pool) error {
-	logger := log.FromContext(ctx)
-
-	servers := &openvoxv1alpha1.ServerList{}
-	if err := r.List(ctx, servers, client.InNamespace(pool.Namespace)); err != nil {
-		return fmt.Errorf("listing Servers: %w", err)
-	}
-
-	hostname := pool.Spec.Route.Hostname
-
-	for i := range servers.Items {
-		server := &servers.Items[i]
-
-		if !slices.Contains(server.Spec.PoolRefs, pool.Name) {
-			continue
-		}
-
-		if server.Spec.CertificateRef == "" {
-			continue
-		}
-
-		cert := &openvoxv1alpha1.Certificate{}
-		if err := r.Get(ctx, types.NamespacedName{
-			Name:      server.Spec.CertificateRef,
-			Namespace: pool.Namespace,
-		}, cert); err != nil {
-			if errors.IsNotFound(err) {
-				continue
-			}
-			return fmt.Errorf("getting Certificate %s: %w", server.Spec.CertificateRef, err)
-		}
-
-		if slices.Contains(cert.Spec.DNSAltNames, hostname) {
-			continue
-		}
-
-		logger.Info("injecting DNS alt name into Certificate",
-			"certificate", cert.Name, "hostname", hostname)
-		r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonDNSAltNameInjected, "Reconcile", "Injected DNS alt name %s into Certificate %s (triggers re-signing)", hostname, cert.Name)
-		cert.Spec.DNSAltNames = append(cert.Spec.DNSAltNames, hostname)
-		if err := r.Update(ctx, cert); err != nil {
-			return fmt.Errorf("updating Certificate %s: %w", cert.Name, err)
-		}
-		// The Certificate controller notices the changed alt names through its
-		// signed-spec hash and re-signs on its own. Resetting its phase from
-		// here would race the controller that owns that status.
-	}
-
 	return nil
 }

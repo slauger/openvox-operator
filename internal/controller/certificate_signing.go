@@ -218,7 +218,11 @@ func (r *CertificateReconciler) submitCSR(ctx context.Context, cert *openvoxv1al
 	}
 
 	// Build CSR
-	csrPEM, err := buildCSR(certname, cert.Spec.DNSAltNames, cert.Spec.CSRExtensions, privateKey)
+	altNames, err := r.effectiveDNSAltNames(ctx, cert)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	csrPEM, err := buildCSR(certname, altNames, cert.Spec.CSRExtensions, privateKey)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -617,7 +621,11 @@ func (r *CertificateReconciler) renewCertificate(ctx context.Context, cert *open
 		return fmt.Errorf("parsing existing key: %w", err)
 	}
 
-	csrPEM, err := buildCSR(certname, cert.Spec.DNSAltNames, cert.Spec.CSRExtensions, privateKey)
+	altNames, err := r.effectiveDNSAltNames(ctx, cert)
+	if err != nil {
+		return err
+	}
+	csrPEM, err := buildCSR(certname, altNames, cert.Spec.CSRExtensions, privateKey)
 	if err != nil {
 		return fmt.Errorf("building CSR for %s: %w", certname, err)
 	}
@@ -682,9 +690,14 @@ func (r *CertificateReconciler) renewCertificate(ctx context.Context, cert *open
 	// Certificate phase. Setting Signed first avoids a race where the
 	// Server sees the stale Renewing phase and transitions to Pending.
 	notAfter := parseCertNotAfter(ctx, body)
+	hash, effective, hashErr := r.signingSpecHashFor(ctx, cert)
+	if hashErr != nil {
+		return hashErr
+	}
 	if err := updateStatusWithRetry(ctx, r.Client, cert, func() {
 		cert.Status.ObservedGeneration = cert.Generation
-		cert.Status.SignedSpecHash = signingSpecHash(cert)
+		cert.Status.SignedSpecHash = hash
+		cert.Status.EffectiveDNSAltNames = effective
 		cert.Status.Phase = openvoxv1alpha1.CertificatePhaseSigned
 		cert.Status.SecretName = tlsSecretName
 		cert.Status.NotAfter = notAfter

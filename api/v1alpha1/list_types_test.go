@@ -21,6 +21,7 @@ func TestListSemantics(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{GenerateName: "test-cert-", Namespace: "default"},
 			Spec: CertificateSpec{
 				AuthorityRef: "production-ca",
+				Certname:     "web.example.com",
 				DNSAltNames:  []string{"puppet.example.com", "puppet.example.com"},
 			},
 		}
@@ -39,6 +40,7 @@ func TestListSemantics(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{GenerateName: "test-cert-", Namespace: "default"},
 			Spec: CertificateSpec{
 				AuthorityRef: "production-ca",
+				Certname:     "web.example.com",
 				DNSAltNames:  []string{"a.example.com", "b.example.com"},
 			},
 		}

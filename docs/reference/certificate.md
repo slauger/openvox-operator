@@ -22,7 +22,7 @@ spec:
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `authorityRef` | string | **required** | Reference to the CertificateAuthority |
-| `certname` | string | `puppet` | Certificate common name (CN) |
+| `certname` | string | **required** | Certificate common name (CN) |
 | `dnsAltNames` | []string | - | DNS subject alternative names |
 | `renewBefore` | string | `60d` | Duration before expiration when the certificate should be renewed (e.g. `60d`, `720h`) |
 | `csrExtensions` | CSRExtensionsSpec | - | Puppet CSR extension attributes to embed in the CSR |
@@ -178,8 +178,14 @@ The operator therefore refuses the collision in three places:
 - a certificate returned by the CA is verified against the private key it was
   requested for, so a foreign certificate under the same name is never stored
 
-`certname` defaults to `puppet`, so two Certificates created without one collide
-by default rather than by mistake. Give each Certificate its own certname.
+`certname` is required and has no default. It used to default to `puppet`, which
+made two Certificates created without one collide by default rather than by
+mistake, and `puppet` is only the right identity for the main server anyway --
+PuppetDB and any further certificate need their own.
+
+The names agents connect through, such as a load balancer or a service address,
+belong in `dnsAltNames` rather than here. The chart derives the Service names of
+every Pool a server joins into that list automatically.
 
 ## Created Resources
 

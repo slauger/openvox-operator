@@ -304,9 +304,11 @@ func appendPullSecrets(existing []corev1.LocalObjectReference, add ...corev1.Loc
 	return existing
 }
 
-// certnameOf returns the certname a Certificate is issued under. The CRD
-// defaults it to "puppet", so an unset value is not "none" but a very common
-// collision candidate.
+// certnameOf returns the certname a Certificate is issued under.
+//
+// The field is required and non-empty since the shared "puppet" default was
+// removed. The fallback only covers resources written while that default still
+// existed, which all carry "puppet" anyway.
 func certnameOf(cert *openvoxv1alpha1.Certificate) string {
 	if cert.Spec.Certname != "" {
 		return cert.Spec.Certname

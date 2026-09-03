@@ -93,8 +93,10 @@ func (v *CertificateValidator) validate(ctx context.Context, c *openvoxv1alpha1.
 	return nil, nil
 }
 
-// certnameOrDefault mirrors the CRD default, so the check compares the values
-// the CA will actually see rather than what the manifest happens to spell out.
+// certnameOrDefault resolves the certname the CA will see. Schema validation
+// runs before this webhook, so the field is already non-empty for anything
+// created since the default was removed; the fallback covers resources written
+// before that, which all carry "puppet".
 func certnameOrDefault(c *openvoxv1alpha1.Certificate) string {
 	if c.Spec.Certname != "" {
 		return c.Spec.Certname

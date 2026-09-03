@@ -196,10 +196,7 @@ func buildCSRExtensions(spec *openvoxv1alpha1.CSRExtensionsSpec) ([]pkix.Extensi
 func (r *CertificateReconciler) submitCSR(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, caBaseURL, namespace string) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	certname := cert.Spec.Certname
-	if certname == "" {
-		certname = "puppet"
-	}
+	certname := certnameOf(cert)
 
 	pendingSecretName := fmt.Sprintf("%s-tls-pending", cert.Name)
 
@@ -309,10 +306,7 @@ func parsePrivateKey(der []byte) (*rsa.PrivateKey, error) {
 
 // fetchSignedCert checks if the CA has signed the certificate. Returns the PEM cert or nil.
 func (r *CertificateReconciler) fetchSignedCert(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, caBaseURL, namespace string) ([]byte, error) {
-	certname := cert.Spec.Certname
-	if certname == "" {
-		certname = "puppet"
-	}
+	certname := certnameOf(cert)
 
 	httpClient, err := caHTTPClientForCA(ctx, r.Client, ca, namespace)
 	if err != nil {
@@ -397,10 +391,7 @@ func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openv
 		// Check absolute timeout based on pending Secret creation time
 		elapsed := time.Since(pendingSecret.CreationTimestamp.Time)
 		if !pendingSecret.CreationTimestamp.IsZero() && elapsed >= CSRPollAbsoluteTimeout {
-			certname := cert.Spec.Certname
-			if certname == "" {
-				certname = "puppet"
-			}
+			certname := certnameOf(cert)
 			timeoutMsg := fmt.Sprintf("CSR polling timed out after %s", elapsed.Truncate(time.Minute))
 			if statusErr := updateStatusWithRetry(ctx, r.Client, cert, func() {
 				cert.Status.Phase = openvoxv1alpha1.CertificatePhaseError
@@ -439,10 +430,7 @@ func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openv
 
 		// After threshold, transition to WaitingForSigning phase
 		if attempts >= CSRPollWaitingThreshold {
-			certname := cert.Spec.Certname
-			if certname == "" {
-				certname = "puppet"
-			}
+			certname := certnameOf(cert)
 			waitMsg := fmt.Sprintf("CSR submitted but not yet signed after %d attempts", attempts)
 			if statusErr := updateStatusWithRetry(ctx, r.Client, cert, func() {
 				cert.Status.Phase = openvoxv1alpha1.CertificatePhaseWaitingForSigning
@@ -823,10 +811,7 @@ func (r *CertificateReconciler) cleanCertViaAPI(ctx context.Context, cert *openv
 // signCSRViaAPI signs a pending CSR via the Puppet CA HTTP API using mTLS with the
 // operator-signing certificate (authorized by CN-based auth.conf rules).
 func (r *CertificateReconciler) signCSRViaAPI(ctx context.Context, cert *openvoxv1alpha1.Certificate, ca *openvoxv1alpha1.CertificateAuthority, caBaseURL, namespace string) error {
-	certname := cert.Spec.Certname
-	if certname == "" {
-		certname = "puppet"
-	}
+	certname := certnameOf(cert)
 
 	// Load CA public cert for TLS server verification
 	caCertPEM, err := getCAPublicCert(ctx, r.Client, ca, namespace)

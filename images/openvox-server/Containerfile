@@ -150,13 +150,6 @@ RUN printf '%s\n' \
         > /etc/sysconfig/puppetserver \
     && puppetserver gem install --no-document openvox -v "${OPENVOX_VERSION}"
 
-# Patch openvoxserver-ca to skip cadir symlink and chown (fails rootless)
-RUN find / -path '*/openvoxserver-ca-*/lib/puppetserver/ca/action/setup.rb' \
-         -exec sed -i '/Puppetserver::Ca::Utils::Config\.symlink_to_old_cadir/ s/^/# /' {} + 2>/dev/null \
-    ; find / -path '*/openvoxserver-ca-*/lib/puppetserver/ca/utils/file_system.rb' \
-         -exec sed -i 's/FileUtils\.chown/# FileUtils.chown/' {} + 2>/dev/null \
-    ; true
-
 ################################################################################
 # Stage: autosign — compile the openvox-autosign Go binary
 ################################################################################

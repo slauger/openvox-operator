@@ -1,0 +1,46 @@
+{{- if and .Values.metrics.enabled .Values.metrics.secure }}
+# TokenReview and SubjectAccessReview are cluster-scoped APIs, so this stays a
+# ClusterRole even when the operator itself runs namespace-scoped. Without it
+# the secure metrics endpoint rejects every scrape, since the filter cannot
+# verify the caller.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "openvox-operator.fullname" . }}-metrics-auth
+  labels:
+    {{- include "openvox-operator.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+  - apiGroups: ["authorization.k8s.io"]
+    resources: ["subjectaccessreviews"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "openvox-operator.fullname" . }}-metrics-auth
+  labels:
+    {{- include "openvox-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "openvox-operator.fullname" . }}-metrics-auth
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "openvox-operator.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+---
+# Grants a scraper permission to read /metrics. Bind your Prometheus
+# ServiceAccount to this role; nothing is bound to it by default.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "openvox-operator.fullname" . }}-metrics-reader
+  labels:
+    {{- include "openvox-operator.labels" . | nindent 4 }}
+rules:
+  - nonResourceURLs: ["/metrics"]
+    verbs: ["get"]
+{{- end }}

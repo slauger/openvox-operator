@@ -18,11 +18,11 @@ include:
     # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
     termini: 8.15.0
     # renovate: datasource=github-releases depName=OpenVoxProject/openvox
-    openvox: 8.28.1
+    openvox: 8.29.0
     # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
     db: 8.15.0
     # renovate: datasource=github-releases depName=OpenVoxProject/openvox
-    agent: 8.28.1
+    agent: 8.29.0
   # Re-enable at OpenVox 9.0 GA (also fix server/db to install from RPM, not tarball):
   # - major: "9"
   #   latest: false

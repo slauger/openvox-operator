@@ -20,6 +20,15 @@ import (
 
 const autosignBinaryPath = "/usr/local/bin/openvox-autosign"
 
+// autosignPolicyDir is where the rendered policy Secret is mounted. It is a
+// directory so the kubelet keeps it in sync; see the mount in
+// server_deployment.go.
+const autosignPolicyDir = "/etc/puppetlabs/puppet/autosign-policy"
+
+// autosignPolicyPath is the file inside that directory, passed to the binary
+// with --config.
+const autosignPolicyPath = autosignPolicyDir + "/autosign-policy.yaml"
+
 // findSigningPolicies returns all SigningPolicies referencing the given CA.
 //
 // A list error is returned rather than swallowed: an empty policy set renders

@@ -29,3 +29,9 @@ formatters:
   enable:
     - gofmt
     - goimports
+
+issues:
+  # Report everything instead of capping repeated findings (the defaults hide
+  # issues beyond 3 of the same kind, which makes CI runs non-exhaustive).
+  max-issues-per-linter: 0
+  max-same-issues: 0

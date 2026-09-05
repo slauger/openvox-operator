@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -181,7 +182,7 @@ func (s *server) loadClassificationsFile() error {
 		return err
 	}
 
-	data, err := os.ReadFile(s.classificationsFile)
+	data, err := os.ReadFile(filepath.Clean(s.classificationsFile))
 	if err != nil {
 		return err
 	}

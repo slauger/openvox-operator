@@ -145,7 +145,7 @@ func buildHTTPClient(endpoint EndpointConfig) (*http.Client, error) {
 
 	// Load CA certificate for server verification
 	if endpoint.SSL.CAFile != "" {
-		caCert, err := os.ReadFile(endpoint.SSL.CAFile)
+		caCert, err := os.ReadFile(filepath.Clean(endpoint.SSL.CAFile))
 		if err != nil {
 			return nil, fmt.Errorf("reading CA cert: %w", err)
 		}

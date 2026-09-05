@@ -189,7 +189,7 @@ func buildRequestBody(bodyType, certname string) (string, error) {
 func loadFacts(certname string) map[string]interface{} {
 	safeName := filepath.Base(certname)
 	factsPath := filepath.Join("/opt/puppetlabs/server/data/puppetserver/yaml/facts", safeName+".yaml")
-	data, err := os.ReadFile(factsPath)
+	data, err := os.ReadFile(filepath.Clean(factsPath))
 	if err != nil {
 		return map[string]interface{}{}
 	}
@@ -241,7 +241,7 @@ func buildHTTPClient(cfg *ENCConfig) (*http.Client, error) {
 
 	// Load CA certificate for server verification
 	if cfg.SSL.CAFile != "" {
-		caCert, err := os.ReadFile(cfg.SSL.CAFile)
+		caCert, err := os.ReadFile(filepath.Clean(cfg.SSL.CAFile))
 		if err != nil {
 			return nil, fmt.Errorf("reading CA cert: %w", err)
 		}
@@ -283,7 +283,7 @@ func saveCache(dir, certname, data string) error {
 func readCache(dir, certname string) (string, error) {
 	safeName := filepath.Base(certname)
 	path := filepath.Join(dir, safeName+".yaml")
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return "", err
 	}

@@ -432,7 +432,7 @@ func (r *PoolReconciler) reconcileTLSRoute(ctx context.Context, pool *openvoxv1a
 
 	port := gwapiv1.PortNumber(8140)
 	if pool.Spec.Service.Port > 0 {
-		port = gwapiv1.PortNumber(pool.Spec.Service.Port)
+		port = pool.Spec.Service.Port
 	}
 
 	parentRef := gwapiv1.ParentReference{

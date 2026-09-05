@@ -112,15 +112,20 @@ func main() {
 		if err := s.loadClassificationsFile(); err != nil {
 			log.Printf("WARNING: failed to load classifications file: %v", err)
 		} else {
-			log.Printf("Loaded classifications from %s", s.classificationsFile)
+			log.Printf("Loaded classifications from %s", s.classificationsFile) // #nosec G706 -- path comes from a CLI flag set by the test harness
 		}
 		go s.watchClassificationsFile()
 	}
 
 	mux := newServeMux(s)
 
-	log.Printf("openvox-mock listening on %s", listen)
-	log.Fatal(http.ListenAndServe(listen, mux))
+	log.Printf("openvox-mock listening on %s", listen) // #nosec G706 -- listen address comes from a CLI flag set by the test harness
+	srv := &http.Server{
+		Addr:              listen,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	log.Fatal(srv.ListenAndServe())
 }
 
 func newServeMux(s *server) *http.ServeMux {
@@ -229,7 +234,7 @@ func (s *server) handleENC(w http.ResponseWriter, r *http.Request) {
 	}
 
 	certname := r.PathValue("certname")
-	log.Printf("ENC request for certname=%s", certname)
+	log.Printf("ENC request for certname=%s", certname) // #nosec G706 -- mock server for E2E tests, logs are debug output only
 
 	s.mu.Lock()
 	s.classifications = append(s.classifications, storedClassification{

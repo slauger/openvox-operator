@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -77,13 +78,13 @@ type notFoundError struct{ msg string }
 func (e *notFoundError) Error() string { return e.msg }
 
 func isNotFound(err error) bool {
-	_, ok := err.(*notFoundError)
-	return ok
+	var nfe *notFoundError
+	return errors.As(err, &nfe)
 }
 
 // loadENCConfig reads and parses the ENC config YAML file.
 func loadENCConfig(path string) (*ENCConfig, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return nil, fmt.Errorf("reading ENC config: %w", err)
 	}
@@ -270,12 +271,12 @@ func buildHTTPClient(cfg *ENCConfig) (*http.Client, error) {
 
 // saveCache writes the classification result to a cache file.
 func saveCache(dir, certname, data string) error {
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return err
 	}
 	safeName := filepath.Base(certname)
 	path := filepath.Join(dir, safeName+".yaml")
-	return os.WriteFile(path, []byte(data), 0644)
+	return os.WriteFile(path, []byte(data), 0600)
 }
 
 // readCache reads a cached classification result.

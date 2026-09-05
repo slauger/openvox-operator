@@ -54,7 +54,7 @@ type CSRAttributeConf struct {
 
 // loadPolicyConfig reads and parses the policy YAML file.
 func loadPolicyConfig(path string) (*PolicyConfig, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return nil, fmt.Errorf("reading policy config: %w", err)
 	}

@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"math"
 
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -534,6 +535,11 @@ func (r *ServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func intstrInt(val int) intstr.IntOrString {
+	if val > math.MaxInt32 {
+		val = math.MaxInt32
+	} else if val < math.MinInt32 {
+		val = math.MinInt32
+	}
 	return intstr.FromInt32(int32(val))
 }
 

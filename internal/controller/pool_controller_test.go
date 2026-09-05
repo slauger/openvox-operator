@@ -297,7 +297,7 @@ func TestPoolReconcile_TLSRouteCustomPort(t *testing.T) {
 	if err := c.Get(testCtx(), types.NamespacedName{Name: "puppet", Namespace: testNamespace}, route); err != nil {
 		t.Fatalf("TLSRoute not created: %v", err)
 	}
-	if route.Spec.Rules[0].BackendRefs[0].Port == nil || int32(*route.Spec.Rules[0].BackendRefs[0].Port) != 9140 {
+	if route.Spec.Rules[0].BackendRefs[0].Port == nil || *route.Spec.Rules[0].BackendRefs[0].Port != 9140 {
 		t.Errorf("expected port 9140 on backend ref")
 	}
 }

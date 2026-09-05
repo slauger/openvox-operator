@@ -10,7 +10,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -112,7 +112,7 @@ func parseCertNotAfter(ctx context.Context, certPEM []byte) *metav1.Time {
 func isSecretReady(ctx context.Context, reader client.Reader, name, namespace, requiredKey string) bool {
 	secret := &corev1.Secret{}
 	if err := reader.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, secret); err != nil {
-		if !errors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			log.FromContext(ctx).Error(err, "failed to get Secret", "name", name, "namespace", namespace)
 		}
 		return false

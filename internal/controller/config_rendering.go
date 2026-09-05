@@ -52,7 +52,7 @@ func (r *ConfigReconciler) renderPuppetConf(ctx context.Context, cfg *openvoxv1a
 		if reports == "" {
 			reports = "webhook"
 		} else if !strings.Contains(reports, "webhook") {
-			reports = reports + ",webhook"
+			reports += ",webhook"
 		}
 	}
 	if reports != "" {
@@ -297,11 +297,12 @@ func (r *ConfigReconciler) renderAuthConf(cfg *openvoxv1alpha1.Config, ca *openv
 			}
 		}
 		sb.WriteString("            }\n")
-		if rule.AllowUnauthenticated {
+		switch {
+		case rule.AllowUnauthenticated:
 			sb.WriteString("            allow-unauthenticated: true\n")
-		} else if rule.Allow != "" {
+		case rule.Allow != "":
 			fmt.Fprintf(&sb, "            allow: %q\n", rule.Allow)
-		} else if rule.Deny != "" {
+		case rule.Deny != "":
 			fmt.Fprintf(&sb, "            deny: %q\n", rule.Deny)
 		}
 		sortOrder := rule.SortOrder

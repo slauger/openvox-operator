@@ -82,7 +82,7 @@ func TestConfigReconcile_PuppetConfRendering(t *testing.T) {
 		{
 			name: "storeconfigs enabled",
 			opts: []configOption{withPuppetSpec(openvoxv1alpha1.PuppetSpec{
-				Storeconfigs: boolPtr(true),
+				Storeconfigs: new(true),
 				StoreBackend: "puppetdb",
 				Reports:      "puppetdb",
 			})},
@@ -91,7 +91,7 @@ func TestConfigReconcile_PuppetConfRendering(t *testing.T) {
 		{
 			name: "storeconfigs disabled",
 			opts: []configOption{withPuppetSpec(openvoxv1alpha1.PuppetSpec{
-				Storeconfigs: boolPtr(false),
+				Storeconfigs: new(false),
 				Reports:      "puppetdb",
 			})},
 			excludes: []string{"storeconfigs = true"},
@@ -222,7 +222,7 @@ func TestConfigReconcile_PuppetConfWithCA(t *testing.T) {
 
 func TestConfigReconcile_PuppetConfWithENC(t *testing.T) {
 	nc := newNodeClassifier("my-enc", "https://enc.example.com")
-	cfg := newConfig("production", withNodeClassifierRef("my-enc"))
+	cfg := newConfig("production", withNodeClassifierRef())
 	c := setupTestClient(cfg, nc)
 	r := newConfigReconciler(c)
 
@@ -279,7 +279,7 @@ func TestConfigReconcile_AutosignCommandOverride(t *testing.T) {
 
 func TestConfigReconcile_ExternalNodesCommandOverride(t *testing.T) {
 	cfg := newConfig("production",
-		withNodeClassifierRef("my-enc"),
+		withNodeClassifierRef(),
 		withExternalNodesCommand("/usr/local/bin/custom-enc"),
 	)
 	nc := newNodeClassifier("my-enc", "https://enc.example.com")
@@ -315,7 +315,7 @@ func TestConfigReconcile_ExternalNodesCommandOverride(t *testing.T) {
 
 func TestConfigReconcile_PuppetConfWithReports(t *testing.T) {
 	cfg := newConfig("production")
-	rp := newReportProcessor("webhook-rp", "production", "https://reports.example.com")
+	rp := newReportProcessor("webhook-rp", "https://reports.example.com")
 	c := setupTestClient(cfg, rp)
 	r := newConfigReconciler(c)
 
@@ -365,8 +365,8 @@ func TestConfigReconcile_PuppetserverConf(t *testing.T) {
 			name: "http-client settings",
 			ps: openvoxv1alpha1.PuppetServerSpec{
 				HTTPClient: &openvoxv1alpha1.HTTPClientSpec{
-					ConnectTimeoutMs: int32Ptr(5000),
-					IdleTimeoutMs:    int32Ptr(30000),
+					ConnectTimeoutMs: new(int32(5000)),
+					IdleTimeoutMs:    new(int32(30000)),
 				},
 			},
 			contains: []string{
@@ -587,7 +587,7 @@ func TestConfigReconcile_ENCSecret(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := newConfig("production", withNodeClassifierRef("my-enc"))
+			cfg := newConfig("production", withNodeClassifierRef())
 			c := setupTestClient(cfg, tt.nc)
 			r := newConfigReconciler(c)
 
@@ -612,8 +612,8 @@ func TestConfigReconcile_ENCSecret(t *testing.T) {
 
 func TestConfigReconcile_ReportWebhookSecret(t *testing.T) {
 	cfg := newConfig("production")
-	rp1 := newReportProcessor("beta-webhook", "production", "https://beta.example.com/reports")
-	rp2 := newReportProcessor("alpha-webhook", "production", "https://alpha.example.com/reports")
+	rp1 := newReportProcessor("beta-webhook", "https://beta.example.com/reports")
+	rp2 := newReportProcessor("alpha-webhook", "https://alpha.example.com/reports")
 
 	c := setupTestClient(cfg, rp1, rp2)
 	r := newConfigReconciler(c)
@@ -757,8 +757,4 @@ func TestConfigReconcile_UpdateExistingConfigMap(t *testing.T) {
 	if !strings.Contains(cm.Data["puppet.conf"], "[main]") {
 		t.Error("ConfigMap puppet.conf missing expected content")
 	}
-}
-
-func int32Ptr(v int32) *int32 {
-	return &v
 }

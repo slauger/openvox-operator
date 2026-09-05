@@ -6,7 +6,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -68,7 +68,7 @@ func (r *DatabaseReconciler) reconcileDeployment(ctx context.Context, db *openvo
 
 	deploy := &appsv1.Deployment{}
 	err = r.Get(ctx, types.NamespacedName{Name: deployName, Namespace: db.Namespace}, deploy)
-	if errors.IsNotFound(err) {
+	if apierrors.IsNotFound(err) {
 		logger.Info("creating Database Deployment", "name", deployName, "replicas", replicas)
 
 		deploy = &appsv1.Deployment{
@@ -239,8 +239,8 @@ chmod 640 /ssl/private_keys/%s.pem`, certname, certname, certname)
 	}
 
 	containerSecurityContext := &corev1.SecurityContext{
-		AllowPrivilegeEscalation: boolPtr(false),
-		ReadOnlyRootFilesystem:   boolPtr(true),
+		AllowPrivilegeEscalation: new(false),
+		ReadOnlyRootFilesystem:   new(true),
 		Capabilities: &corev1.Capabilities{
 			Drop: []corev1.Capability{"ALL"},
 		},

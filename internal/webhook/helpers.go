@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/url"
 
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -35,7 +35,7 @@ func validateCodeList(code []openvoxv1alpha1.CodeSpec, path *field.Path) field.E
 func refExists[T client.Object](ctx context.Context, c client.Reader, ns, name string, obj T) error {
 	key := types.NamespacedName{Namespace: ns, Name: name}
 	if err := c.Get(ctx, key, obj); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return fmt.Errorf("referenced %T %q not found", obj, name)
 		}
 		return fmt.Errorf("looking up %T %q: %w", obj, name, err)

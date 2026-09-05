@@ -66,6 +66,7 @@ nav:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quickstart.md
   - Guides:
+      - Connecting Agents: guides/connecting-agents.md
       - CA Import & External CA: guides/ca-import.md
       - Monitoring: guides/monitoring.md
       - Pausing Reconciliation: guides/pausing-reconciliation.md

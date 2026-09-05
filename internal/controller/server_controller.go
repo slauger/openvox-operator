@@ -3,13 +3,14 @@ package controller
 import (
 	"context"
 	"fmt"
+	"math"
 
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -66,7 +67,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	server := &openvoxv1alpha1.Server{}
 	if err := r.Get(ctx, req.NamespacedName, server); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			// The Server carries no finalizer, so this is the only point at
 			// which its gauges can be retired.
 			forgetServerMetrics(req.Name, req.Namespace)
@@ -96,7 +97,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	// Resolve Config
 	cfg := &openvoxv1alpha1.Config{}
 	if err := r.Get(ctx, types.NamespacedName{Name: server.Spec.ConfigRef, Namespace: server.Namespace}, cfg); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			logger.Info("waiting for Config", "configRef", server.Spec.ConfigRef)
 			return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 		}
@@ -106,7 +107,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	// Resolve Certificate -- wait until phase is Signed
 	cert := &openvoxv1alpha1.Certificate{}
 	if err := r.Get(ctx, types.NamespacedName{Name: server.Spec.CertificateRef, Namespace: server.Namespace}, cert); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			logger.Info("waiting for Certificate", "certificateRef", server.Spec.CertificateRef)
 			r.reportSSLBootstrapped(ctx, server, metav1.ConditionFalse, "CertificateNotFound",
 				fmt.Sprintf("Certificate %s does not exist", server.Spec.CertificateRef))
@@ -135,7 +136,7 @@ func (r *ServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	// Resolve CertificateAuthority (needed for CA PVC name when ca: true)
 	ca := &openvoxv1alpha1.CertificateAuthority{}
 	if err := r.Get(ctx, types.NamespacedName{Name: cert.Spec.AuthorityRef, Namespace: server.Namespace}, ca); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			logger.Info("waiting for CertificateAuthority", "authorityRef", cert.Spec.AuthorityRef)
 			return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 		}
@@ -251,11 +252,11 @@ func (r *ServerReconciler) reconcilePDB(ctx context.Context, server *openvoxv1al
 				return guardErr
 			}
 			logger.Info("deleting PDB (disabled)", "name", pdbName)
-			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
+			if err := r.Delete(ctx, existing); err != nil && !apierrors.IsNotFound(err) {
 				return fmt.Errorf("deleting PodDisruptionBudget %s: %w", pdbName, err)
 			}
 			r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonPDBDeleted, "Reconcile", "PodDisruptionBudget %s deleted", pdbName)
-		} else if !errors.IsNotFound(err) {
+		} else if !apierrors.IsNotFound(err) {
 			return fmt.Errorf("getting PodDisruptionBudget %s: %w", pdbName, err)
 		}
 		return nil
@@ -308,11 +309,12 @@ func (r *ServerReconciler) buildPDB(server *openvoxv1alpha1.Server) (*policyv1.P
 			},
 		},
 	}
-	if server.Spec.PDB.MinAvailable != nil {
+	switch {
+	case server.Spec.PDB.MinAvailable != nil:
 		pdb.Spec.MinAvailable = server.Spec.PDB.MinAvailable
-	} else if server.Spec.PDB.MaxUnavailable != nil {
+	case server.Spec.PDB.MaxUnavailable != nil:
 		pdb.Spec.MaxUnavailable = server.Spec.PDB.MaxUnavailable
-	} else {
+	default:
 		// Default: minAvailable: 1
 		minAvailable := intstrInt(DefaultPDBMinAvailable)
 		pdb.Spec.MinAvailable = &minAvailable
@@ -336,11 +338,11 @@ func (r *ServerReconciler) reconcileHPA(ctx context.Context, server *openvoxv1al
 				return guardErr
 			}
 			logger.Info("deleting HPA (disabled)", "name", hpaName)
-			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
+			if err := r.Delete(ctx, existing); err != nil && !apierrors.IsNotFound(err) {
 				return fmt.Errorf("deleting HorizontalPodAutoscaler %s: %w", hpaName, err)
 			}
 			r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonHPADeleted, "Reconcile", "HorizontalPodAutoscaler %s deleted", hpaName)
-		} else if !errors.IsNotFound(err) {
+		} else if !apierrors.IsNotFound(err) {
 			return fmt.Errorf("getting HorizontalPodAutoscaler %s: %w", hpaName, err)
 		}
 		return nil
@@ -436,11 +438,11 @@ func (r *ServerReconciler) reconcileNetworkPolicy(ctx context.Context, server *o
 				return guardErr
 			}
 			logger.Info("deleting NetworkPolicy (disabled)", "name", npName)
-			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
+			if err := r.Delete(ctx, existing); err != nil && !apierrors.IsNotFound(err) {
 				return fmt.Errorf("deleting NetworkPolicy %s: %w", npName, err)
 			}
 			r.Recorder.Eventf(server, nil, corev1.EventTypeNormal, EventReasonNetworkPolicyDeleted, "Reconcile", "NetworkPolicy %s deleted", npName)
-		} else if !errors.IsNotFound(err) {
+		} else if !apierrors.IsNotFound(err) {
 			return fmt.Errorf("getting NetworkPolicy %s: %w", npName, err)
 		}
 		return nil
@@ -534,6 +536,11 @@ func (r *ServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func intstrInt(val int) intstr.IntOrString {
+	if val > math.MaxInt32 {
+		val = math.MaxInt32
+	} else if val < math.MinInt32 {
+		val = math.MinInt32
+	}
 	return intstr.FromInt32(int32(val))
 }
 
@@ -546,7 +553,7 @@ func intstrInt(val int) intstr.IntOrString {
 func (r *ServerReconciler) getReadyReplicas(ctx context.Context, server *openvoxv1alpha1.Server) (int32, error) {
 	deploy := &appsv1.Deployment{}
 	if err := r.Get(ctx, types.NamespacedName{Name: server.Name, Namespace: server.Namespace}, deploy); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return 0, nil
 		}
 		return 0, fmt.Errorf("getting Deployment %s: %w", server.Name, err)

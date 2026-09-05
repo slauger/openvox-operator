@@ -1,0 +1,28 @@
+{{- if and .Values.metrics.enabled .Values.metrics.secure .Values.metrics.certManager.enabled }}
+# Serving certificate for the metrics endpoint, signed by the shared CA issuer.
+#
+# Without it controller-runtime generates a self-signed certificate at startup
+# and a new one on every restart, so scrapers can only skip verification. With
+# it they can verify against the CA the same chain already provides for the
+# webhook.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "openvox-operator.fullname" . }}-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openvox-operator.labels" . | nindent 4 }}
+spec:
+  secretName: {{ include "openvox-operator.fullname" . }}-metrics-cert
+  duration: {{ .Values.metrics.certManager.duration | default "8760h" }}
+  renewBefore: {{ .Values.metrics.certManager.renewBefore | default "720h" }}
+  dnsNames:
+    - {{ include "openvox-operator.fullname" . }}-metrics
+    - {{ include "openvox-operator.fullname" . }}-metrics.{{ .Release.Namespace }}
+    - {{ include "openvox-operator.fullname" . }}-metrics.{{ .Release.Namespace }}.svc
+    - {{ include "openvox-operator.fullname" . }}-metrics.{{ .Release.Namespace }}.svc.cluster.local
+  issuerRef:
+    name: {{ include "openvox-operator.fullname" . }}-ca-issuer
+    kind: Issuer
+    group: cert-manager.io
+{{- end }}

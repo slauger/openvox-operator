@@ -41,14 +41,41 @@ type SigningPolicySpec struct {
 	// +optional
 	Any bool `json:"any,omitempty"`
 
-	// Pattern defines certname glob matching rules.
+	// Certnames defines allowed certname glob patterns. The certname must match
+	// at least one.
 	// +optional
-	Pattern *PatternSpec `json:"pattern,omitempty"`
+	Certnames *PatternSpec `json:"certnames,omitempty"`
 
-	// DNSAltNames defines allowed DNS subject alternative name patterns.
-	// If not set and Any is false, CSRs with SANs are denied by the autosign binary.
+	// DNSAltNames defines allowed DNS subject alternative name patterns (glob).
+	// If a CSR carries DNS SANs and this is not set, the CSR is denied.
 	// +optional
 	DNSAltNames *PatternSpec `json:"dnsAltNames,omitempty"`
+
+	// IPAltNames defines allowed IP subject alternative names as CIDR ranges
+	// (e.g. "10.0.0.0/16", "::1/128"). If a CSR carries IP SANs and this is not
+	// set, the CSR is denied.
+	// +optional
+	IPAltNames *PatternSpec `json:"ipAltNames,omitempty"`
+
+	// URIAltNames defines allowed URI subject alternative name patterns. A "*"
+	// wildcard matches any run of characters, including "/". If a CSR carries URI
+	// SANs and this is not set, the CSR is denied.
+	// +optional
+	URIAltNames *PatternSpec `json:"uriAltNames,omitempty"`
+
+	// EmailAltNames defines allowed email subject alternative name patterns. A "*"
+	// wildcard matches any run of characters, including "@". If a CSR carries email
+	// SANs and this is not set, the CSR is denied.
+	// +optional
+	EmailAltNames *PatternSpec `json:"emailAltNames,omitempty"`
+
+	// Extensions lists Puppet CSR extension names (e.g. pp_cli_auth) that a CSR
+	// matched by this policy is permitted to carry. Privileged authorization
+	// extensions (the 1.3.6.1.4.1.34380.1.3 arc: pp_cli_auth, pp_authorization,
+	// pp_auth_token) are denied unless listed here; this gate applies to every
+	// policy, including one with any=true. Trusted-fact extensions are unaffected.
+	// +optional
+	Extensions *PatternSpec `json:"extensions,omitempty"`
 
 	// CSRAttributes defines CSR extension attributes that must all match (AND logic).
 	// Each entry specifies an attribute name and the expected value (inline or from a Secret).

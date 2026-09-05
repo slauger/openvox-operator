@@ -96,10 +96,57 @@ docs/                      Documentation
 
 ## Documentation
 
-- `README.md` is the primary user-facing doc - update when adding user-visible features
+`docs/` is user-facing reference, not design notes: 35 pages covering every CRD
+field, phase, condition and metric. Treat it as part of the API.
+
+- `README.md` is the entry point - update when adding user-visible features
 - `CONTRIBUTING.md` covers developer setup and workflow
-- `docs/` contains design docs and architecture diagrams
 - No CHANGELOG - release notes are auto-generated from commit messages by semantic-release
+
+### Documentation is part of the change, not a follow-up
+
+**Every change that alters observable behaviour updates the documentation in
+the same commit.** Not in a later pass: drift found afterwards is drift that
+shipped, and a reader cannot tell a stale sentence from a correct one.
+
+What to check, by kind of change:
+
+| Change | Update |
+|---|---|
+| CRD field added, removed or renamed | the field table in `docs/reference/<kind>.md` |
+| A `+kubebuilder:default` added or removed | the table **and** the prose around it - these have contradicted each other |
+| New or changed condition, phase, reason | the conditions table; do not document a phase the controller never sets |
+| New or removed metric | `docs/guides/monitoring.md`, including an alert rule where one makes sense |
+| Behaviour a reader would predict wrongly | the relevant `docs/concepts/` page |
+| New chart value | `values.yaml` comments, then regenerate `README.md` and `values.schema.json` |
+| Resource name, label or selector | anything in `docs/` that names it - troubleshooting commands go stale silently |
+
+### Verify rather than assume
+
+The documentation had never been checked against the code before 2026-09-03,
+and the review that followed found examples the API server rejects, three label
+selectors that match nothing, a phase no controller sets and image tags that
+cannot exist. Each was plausible on the page.
+
+Cheap checks worth running when touching docs:
+
+```bash
+# Manifests in the docs must be accepted by a real API server
+kubectl apply --dry-run=server -f <extracted-block>.yaml
+
+# Selectors must exist in internal/controller/labels.go
+grep -rn "kubectl.*-l " docs/
+
+# Fields documented for a kind must exist in its CRD, and vice versa
+ruby -ryaml -e 'd=YAML.load_file(ARGV[0]);
+  acc=[]; w=lambda{|n| next unless n.is_a?(Hash);
+    (n["properties"]||{}).each{|k,v| acc<<k; w.call(v)}; w.call(n["items"]) if n["items"]};
+  d["spec"]["versions"].each{|v| w.call(v["schema"]["openAPIV3Schema"])};
+  puts acc.uniq.sort' config/crd/bases/openvox.voxpupuli.org_servers.yaml
+```
+
+When a documented claim cannot be verified against the code, say so in the
+text rather than leaving it to look confirmed.
 
 ### Feature List Synchronization
 

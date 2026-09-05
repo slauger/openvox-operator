@@ -43,16 +43,45 @@ condition names it.
 
 **Symptoms:** Certificate never reaches `Signed` phase.
 
+A SigningPolicy is usually *not* the cause here. For an internal CA the
+operator signs its own Certificate resources over the CA API, authenticated
+with the operator signing certificate, so autosign is not involved. Policies
+govern agents, not Certificate resources.
+
 **Possible causes:**
 
-1. **CA not ready:** The CertificateAuthority must be in `Ready` phase.
-2. **No matching SigningPolicy:** No policy exists that would sign this certificate.
+1. **CA not ready.** The CertificateAuthority must report `CAReady`.
 
     ```bash
-    kubectl get signingpolicy -n <namespace>
+    kubectl get certificateauthority <name> -n <namespace> \
+      -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.reason}{"\n"}{end}'
     ```
 
-**Solution:** Check CA status and verify a SigningPolicy with matching criteria exists.
+2. **Operator signing certificate not available yet.** Without it the operator
+   cannot sign and falls back to polling, which only succeeds if something else
+   signs the CSR.
+
+    ```bash
+    kubectl get certificateauthority <name> -n <namespace> \
+      -o jsonpath='{.status.signingSecretName}{"\n"}'
+    ```
+
+    An empty value means the `{ca}-operator-signing` Certificate is not signed
+    yet. During bootstrap this resolves on its own.
+
+3. **Certname already claimed.** Two Certificates cannot share a certname
+   against the same CA. The condition names the holder:
+
+    ```bash
+    kubectl get certificate <name> -n <namespace> \
+      -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.reason}: {.message}{"\n"}{end}'
+    ```
+
+4. **External CA.** With `spec.external` the operator has no admin access and
+   cannot sign. The CSR must be signed on the external CA.
+
+**Agents** stuck in `--waitforcert` are the case where SigningPolicy matters -
+see [Agents cannot connect to server](#agents-cannot-connect-to-server).
 
 ### Server pods not starting
 
@@ -68,7 +97,7 @@ condition names it.
 
 ```bash
 kubectl describe deployment <server-name> -n <namespace>
-kubectl describe pod -l app.kubernetes.io/instance=<server-name> -n <namespace>
+kubectl describe pod -l openvox.voxpupuli.org/server=<server-name> -n <namespace>
 kubectl get events -n <namespace> --sort-by='.lastTimestamp'
 ```
 
@@ -110,14 +139,36 @@ kubectl logs <pod-name> -n <namespace> --previous
 
 ### Agents cannot connect to server
 
-**Symptoms:** Puppet agents fail to connect to the server endpoint.
+**Symptoms:** Puppet agents fail to connect to the server endpoint, or hang in
+`puppet agent --waitforcert`.
 
-**Debugging steps:**
+An agent that reaches the server but hangs waiting for its certificate has a
+signing problem, not a connectivity one. The operator points `autosign` at its
+own binary as soon as a CertificateAuthority exists, and that binary denies
+every CSR no policy matches - so **no SigningPolicy means deny-all, not off**.
+The servers run normally and the Config reports `Running` either way.
+
+```bash
+kubectl get signingpolicy -n <namespace>
+```
+
+An empty list is the common cause on a fresh install. See
+[SigningPolicy](reference/signingpolicy.md) for the available match rules, or
+sign by hand:
+
+```bash
+kubectl exec -n <namespace> deploy/<ca-server> -- \
+  puppetserver ca list --all
+kubectl exec -n <namespace> deploy/<ca-server> -- \
+  puppetserver ca sign --certname <agent-certname>
+```
+
+**Debugging steps for connectivity:**
 
 1. Verify the Pool Service exists:
 
     ```bash
-    kubectl get svc -n <namespace> -l app.kubernetes.io/name=openvox-server
+    kubectl get svc -n <namespace> -l app.kubernetes.io/name=openvox
     ```
 
 2. Check endpoints are populated:

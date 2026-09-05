@@ -29,7 +29,7 @@ sequenceDiagram
     Operator->>K8s: Create PVC ({ca}-data)
     Operator->>K8s: Create Service ({ca}-internal)
     Operator->>K8s: Create ServiceAccount + RBAC
-    Operator->>K8s: Create Job ({ca}-setup)
+    Operator->>K8s: Create Job ({ca}-ca-setup)
     Job->>PVC: Run puppetserver ca setup
     Job->>K8s: Create Secret {ca}-ca (public cert)
     Job->>K8s: Create Secret {ca}-ca-key (private key)
@@ -66,6 +66,11 @@ Once the operator-signing Certificate is itself `Signed`, the controller:
 From this point on, the Certificate controller uses this Secret for mTLS-authenticated CSR signing against the CA HTTP API (see Strategy 2 below). The operator never reuses the CA server's own certificate for signing; the operator signing cert is rotated independently and can be revoked without disrupting CA traffic.
 
 External CAs do not get an operator-signing Certificate: they manage their own signing credentials externally.
+
+
+The certname of this certificate is reserved: the CA `auth.conf` grants admin
+rights to it, so the autosign policy refuses to issue it to anyone else. See
+[Checks that no policy can waive](../reference/signingpolicy.md#checks-that-no-policy-can-waive).
 
 ## Certificate Signing Strategies
 

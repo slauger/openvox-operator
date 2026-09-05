@@ -100,7 +100,7 @@ func main() {
 	}
 
 	if encClasses != "" {
-		for _, c := range strings.Split(encClasses, ",") {
+		for c := range strings.SplitSeq(encClasses, ",") {
 			c = strings.TrimSpace(c)
 			if c != "" {
 				s.encClasses = append(s.encClasses, c)

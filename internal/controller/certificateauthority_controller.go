@@ -8,7 +8,7 @@ import (
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -66,7 +66,7 @@ func (r *CertificateAuthorityReconciler) Reconcile(ctx context.Context, req ctrl
 
 	ca := &openvoxv1alpha1.CertificateAuthority{}
 	if err := r.Get(ctx, req.NamespacedName, ca); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			forgetCertificateAuthorityMetrics(req.Name, req.Namespace)
 			return ctrl.Result{}, nil
 		}
@@ -376,7 +376,7 @@ func (r *CertificateAuthorityReconciler) reconcileExternalCA(ctx context.Context
 		caSecretName = ext.CASecretRef
 		secret := &corev1.Secret{}
 		if err := r.Get(ctx, types.NamespacedName{Name: ext.CASecretRef, Namespace: ca.Namespace}, secret); err != nil {
-			if errors.IsNotFound(err) {
+			if apierrors.IsNotFound(err) {
 				logger.Info("waiting for CA Secret referenced by external CA", "secret", ext.CASecretRef)
 				return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 			}
@@ -433,7 +433,7 @@ func (r *CertificateAuthorityReconciler) reconcileExternalCA(ctx context.Context
 func (r *CertificateAuthorityReconciler) adoptSecret(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority, secretName string) error {
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: ca.Namespace}, secret); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return nil
 		}
 		return fmt.Errorf("getting Secret %s: %w", secretName, err)
@@ -455,7 +455,7 @@ func (r *CertificateAuthorityReconciler) adoptSecret(ctx context.Context, ca *op
 func (r *CertificateAuthorityReconciler) extractCANotAfter(ctx context.Context, secretName, namespace string) *metav1.Time {
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret); err != nil {
-		if !errors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			log.FromContext(ctx).Error(err, "failed to get CA Secret", "name", secretName, "namespace", namespace)
 		}
 		return nil

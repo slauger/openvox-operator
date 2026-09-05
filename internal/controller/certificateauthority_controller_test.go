@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -11,14 +12,13 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
-	"k8s.io/utils/ptr"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
 
-// caPrereqs returns a Config with authorityRef pointing to the given CA name.
-func caPrereqs(caName string) *openvoxv1alpha1.Config {
-	return newConfig("production", withAuthorityRef(caName))
+// caPrereqs returns a Config with authorityRef pointing to the test CA.
+func caPrereqs() *openvoxv1alpha1.Config {
+	return newConfig("production", withAuthorityRef("test-ca"))
 }
 
 func TestCAReconcile_NotFound(t *testing.T) {
@@ -80,7 +80,7 @@ func TestCAReconcile_NoConfig_EmitsEvent(t *testing.T) {
 func TestCAReconcile_PVCCreation(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
 	ca.Status.Phase = ""
-	cfg := caPrereqs("test-ca")
+	cfg := caPrereqs()
 	c := setupTestClient(ca, cfg)
 	r := newCertificateAuthorityReconciler(c)
 
@@ -106,8 +106,8 @@ func TestCAReconcile_PVCCreation(t *testing.T) {
 func TestCAReconcile_PVCCustomStorageClass(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
 	ca.Status.Phase = ""
-	ca.Spec.Storage = &openvoxv1alpha1.StorageSpec{StorageClass: "fast-ssd", Size: ptr.To(resource.MustParse("10Gi"))}
-	cfg := caPrereqs("test-ca")
+	ca.Spec.Storage = &openvoxv1alpha1.StorageSpec{StorageClass: "fast-ssd", Size: new(resource.MustParse("10Gi"))}
+	cfg := caPrereqs()
 	c := setupTestClient(ca, cfg)
 	r := newCertificateAuthorityReconciler(c)
 
@@ -133,7 +133,7 @@ func TestCAReconcile_PVCCustomStorageClass(t *testing.T) {
 func TestCAReconcile_RBACCreation(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
 	ca.Status.Phase = ""
-	cfg := caPrereqs("test-ca")
+	cfg := caPrereqs()
 	c := setupTestClient(ca, cfg)
 	r := newCertificateAuthorityReconciler(c)
 
@@ -166,7 +166,7 @@ func TestCAReconcile_RBACCreation(t *testing.T) {
 func TestCAReconcile_RBACResourceNames(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
 	ca.Status.Phase = ""
-	cfg := caPrereqs("test-ca")
+	cfg := caPrereqs()
 	cert := newCertificate("my-cert", "test-ca", openvoxv1alpha1.CertificatePhasePending)
 	c := setupTestClient(ca, cfg, cert)
 	r := newCertificateAuthorityReconciler(c)
@@ -202,7 +202,7 @@ func TestCAReconcile_RBACResourceNames(t *testing.T) {
 func TestCAReconcile_JobCreation(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
 	ca.Status.Phase = ""
-	cfg := caPrereqs("test-ca")
+	cfg := caPrereqs()
 	c := setupTestClient(ca, cfg)
 	r := newCertificateAuthorityReconciler(c)
 
@@ -253,7 +253,7 @@ func TestCAReconcile_JobCreation(t *testing.T) {
 func TestCAReconcile_PhasePending(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
 	ca.Status.Phase = "" // reset
-	cfg := caPrereqs("test-ca")
+	cfg := caPrereqs()
 	c := setupTestClient(ca, cfg)
 	r := newCertificateAuthorityReconciler(c)
 
@@ -274,7 +274,7 @@ func TestCAReconcile_PhasePending(t *testing.T) {
 func TestCAReconcile_PhaseReady(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
 	ca.Status.Phase = ""
-	cfg := caPrereqs("test-ca")
+	cfg := caPrereqs()
 	caSecret := newSecret("test-ca-ca", map[string][]byte{
 		"ca_crt.pem": []byte("ca-cert"),
 	})
@@ -316,7 +316,7 @@ func TestCAReconcile_PhaseReady(t *testing.T) {
 func TestCAReconcile_NotAfterRequeue(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
 	ca.Status.Phase = ""
-	cfg := caPrereqs("test-ca")
+	cfg := caPrereqs()
 	// CA secret exists but with non-parseable cert data, so NotAfter will be nil
 	caSecret := newSecret("test-ca-ca", map[string][]byte{
 		"ca_crt.pem": []byte("not-a-valid-cert"),
@@ -489,7 +489,7 @@ func TestCAReconcile_ExternalCA_CASecretMissingKey(t *testing.T) {
 func TestCAReconcile_ServiceCreation(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
 	ca.Status.Phase = ""
-	cfg := caPrereqs("test-ca")
+	cfg := caPrereqs()
 	c := setupTestClient(ca, cfg)
 	r := newCertificateAuthorityReconciler(c)
 
@@ -540,7 +540,7 @@ func TestCAReconcile_ServiceCreation(t *testing.T) {
 func TestCAReconcile_JobIncludesServiceFQDN(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
 	ca.Status.Phase = ""
-	cfg := caPrereqs("test-ca")
+	cfg := caPrereqs()
 	server := newServer("ca-server", withCA(true), withServerRole(true))
 	server.Spec.ConfigRef = "production"
 	server.Spec.CertificateRef = "ca-cert"
@@ -593,7 +593,7 @@ func TestCAReconcile_JobIncludesServiceFQDN(t *testing.T) {
 func TestCAReconcile_StatusServiceName(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
 	ca.Status.Phase = ""
-	cfg := caPrereqs("test-ca")
+	cfg := caPrereqs()
 	caSecret := newSecret("test-ca-ca", map[string][]byte{
 		"ca_crt.pem": []byte("ca-cert"),
 	})
@@ -657,7 +657,7 @@ func TestCAReconcile_ExternalCA_SkipsPVCAndJob(t *testing.T) {
 func TestCAReconcile_StatusSigningSecretName(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
 	ca.Status.Phase = ""
-	cfg := caPrereqs("test-ca")
+	cfg := caPrereqs()
 	caSecret := newSecret("test-ca-ca", map[string][]byte{
 		"ca_crt.pem": []byte("ca-cert"),
 	})
@@ -686,7 +686,7 @@ func TestCAReconcile_StatusSigningSecretName(t *testing.T) {
 func TestCAReconcile_StatusSigningSecretName_NoCert(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
 	ca.Status.Phase = ""
-	cfg := caPrereqs("test-ca")
+	cfg := caPrereqs()
 	caSecret := newSecret("test-ca-ca", map[string][]byte{
 		"ca_crt.pem": []byte("ca-cert"),
 	})
@@ -711,7 +711,7 @@ func TestCAReconcile_StatusSigningSecretName_NoCert(t *testing.T) {
 func TestCAReconcile_OperatorSigningCertCreated(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
 	ca.Status.Phase = ""
-	cfg := caPrereqs("test-ca")
+	cfg := caPrereqs()
 	certPEM, _ := generateTestCert(t)
 	caSecret := newSecret("test-ca-ca", map[string][]byte{
 		"ca_crt.pem": certPEM,
@@ -755,7 +755,7 @@ func TestCAReconcile_OperatorSigningCertActivated(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
 	ca.Status.Phase = ""
 	ca.Status.SigningSecretName = "old-init-job-tls"
-	cfg := caPrereqs("test-ca")
+	cfg := caPrereqs()
 
 	certPEM, keyPEM := generateTestCert(t)
 	caSecret := newSecret("test-ca-ca", map[string][]byte{
@@ -808,7 +808,7 @@ func TestCAReconcile_OperatorSigningDoesNotOverwriteInitJobCert(t *testing.T) {
 	// When operator-signing cert is not yet active, the Init-Job cert should still be used
 	ca := newCertificateAuthority("test-ca")
 	ca.Status.Phase = ""
-	cfg := caPrereqs("test-ca")
+	cfg := caPrereqs()
 	caSecret := newSecret("test-ca-ca", map[string][]byte{
 		"ca_crt.pem": []byte("ca-cert"),
 	})
@@ -883,7 +883,7 @@ func TestEnsureCARole_CreateAndUpdate(t *testing.T) {
 	}
 
 	// Update with additional resource names
-	updatedNames := append(resourceNames, "extra-cert-tls")
+	updatedNames := slices.Concat(resourceNames, []string{"extra-cert-tls"})
 	if err := r.ensureCARole(testCtx(), "test-ca-ca-setup", testNamespace, labels, updatedNames, ca); err != nil {
 		t.Fatalf("ensureCARole update: %v", err)
 	}

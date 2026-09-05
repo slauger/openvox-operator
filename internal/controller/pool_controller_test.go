@@ -148,7 +148,7 @@ func TestPoolReconcile_EndpointCount(t *testing.T) {
 }
 
 func TestPoolReconcile_TLSRouteCreation(t *testing.T) {
-	pool := newPool("puppet", withRoute(true, "puppet.example.com", "my-gateway"))
+	pool := newPool("puppet", withRoute("puppet.example.com", "my-gateway"))
 	c := setupTestClient(pool)
 	r := newPoolReconciler(c, true)
 
@@ -187,7 +187,7 @@ func TestPoolReconcile_TLSRouteDisabled(t *testing.T) {
 
 func TestPoolReconcile_TLSRouteHostnameConflict(t *testing.T) {
 	// Create pool-a first and reconcile it
-	pool1 := newPool("puppet-a", withRoute(true, "puppet.example.com", "gw"))
+	pool1 := newPool("puppet-a", withRoute("puppet.example.com", "gw"))
 	c := setupTestClient(pool1)
 	r := newPoolReconciler(c, true)
 
@@ -196,7 +196,7 @@ func TestPoolReconcile_TLSRouteHostnameConflict(t *testing.T) {
 	}
 
 	// Now add pool-b with the same hostname
-	pool2 := newPool("puppet-b", withRoute(true, "puppet.example.com", "gw"))
+	pool2 := newPool("puppet-b", withRoute("puppet.example.com", "gw"))
 	if err := c.Create(testCtx(), pool2); err != nil {
 		t.Fatalf("failed to create pool-b: %v", err)
 	}
@@ -241,7 +241,7 @@ func TestPoolReconcile_UpdateExistingService(t *testing.T) {
 }
 
 func TestPoolReconcile_TLSRouteDirectUpdate(t *testing.T) {
-	pool := newPool("puppet", withRoute(true, "puppet.example.com", "my-gateway"))
+	pool := newPool("puppet", withRoute("puppet.example.com", "my-gateway"))
 	c := setupTestClient(pool)
 	r := newPoolReconciler(c, true)
 
@@ -266,7 +266,7 @@ func TestPoolReconcile_TLSRouteDirectUpdate(t *testing.T) {
 }
 
 func TestPoolReconcile_TLSRouteWithSectionName(t *testing.T) {
-	pool := newPool("puppet", withRoute(true, "puppet.example.com", "my-gateway"))
+	pool := newPool("puppet", withRoute("puppet.example.com", "my-gateway"))
 	pool.Spec.Route.GatewayRef.SectionName = "https"
 	c := setupTestClient(pool)
 	r := newPoolReconciler(c, true)
@@ -285,7 +285,7 @@ func TestPoolReconcile_TLSRouteWithSectionName(t *testing.T) {
 }
 
 func TestPoolReconcile_TLSRouteCustomPort(t *testing.T) {
-	pool := newPool("puppet", withRoute(true, "puppet.example.com", "my-gateway"), withServicePort(9140))
+	pool := newPool("puppet", withRoute("puppet.example.com", "my-gateway"), withServicePort(9140))
 	c := setupTestClient(pool)
 	r := newPoolReconciler(c, true)
 

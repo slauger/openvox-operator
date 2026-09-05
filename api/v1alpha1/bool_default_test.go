@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 )
 
 // TestDefaultedBooleansRoundTrip pins the behaviour of the optional boolean
@@ -27,7 +26,7 @@ func TestDefaultedBooleansRoundTrip(t *testing.T) {
 				ConfigRef:      "production",
 				CertificateRef: "production-cert",
 				CA:             true,
-				Server:         ptr.To(false),
+				Server:         new(false),
 			},
 		}
 		if err := k8sClient.Create(ctx, s); err != nil {
@@ -63,8 +62,8 @@ func TestDefaultedBooleansRoundTrip(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{GenerateName: "test-config-", Namespace: "default"},
 			Spec: ConfigSpec{
 				Image:                  ImageSpec{Repository: "example.invalid/openvox-server", Tag: "latest"},
-				ReadOnlyRootFilesystem: ptr.To(false),
-				Puppet:                 PuppetSpec{Storeconfigs: ptr.To(false)},
+				ReadOnlyRootFilesystem: new(false),
+				Puppet:                 PuppetSpec{Storeconfigs: new(false)},
 			},
 		}
 		if err := k8sClient.Create(ctx, c); err != nil {
@@ -84,10 +83,10 @@ func TestDefaultedBooleansRoundTrip(t *testing.T) {
 		ca := &CertificateAuthority{
 			ObjectMeta: metav1.ObjectMeta{GenerateName: "test-ca-", Namespace: "default"},
 			Spec: CertificateAuthoritySpec{
-				AllowSubjectAltNames:         ptr.To(false),
-				AllowAuthorizationExtensions: ptr.To(false),
-				EnableInfraCRL:               ptr.To(false),
-				AllowAutoRenewal:             ptr.To(false),
+				AllowSubjectAltNames:         new(false),
+				AllowAuthorizationExtensions: new(false),
+				EnableInfraCRL:               new(false),
+				AllowAutoRenewal:             new(false),
 			},
 		}
 		if err := k8sClient.Create(ctx, ca); err != nil {

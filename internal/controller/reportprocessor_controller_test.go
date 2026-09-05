@@ -18,7 +18,7 @@ func TestReportProcessorReconcile_NotFound(t *testing.T) {
 }
 
 func TestReportProcessorReconcile_BasicReconcile(t *testing.T) {
-	rp := newReportProcessor("test-rp", "production", "https://reports.example.com")
+	rp := newReportProcessor("test-rp", "https://reports.example.com")
 	c := setupTestClient(rp)
 	r := newReportProcessorReconciler(c)
 

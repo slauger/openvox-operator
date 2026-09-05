@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -55,7 +55,7 @@ func (r *CertificateAuthorityReconciler) reconcileOperatorSigningCert(ctx contex
 		}
 
 		if err := r.Create(ctx, newCert); err != nil {
-			if errors.IsAlreadyExists(err) {
+			if apierrors.IsAlreadyExists(err) {
 				// Already exists, requeue to pick it up next time
 				return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 			}

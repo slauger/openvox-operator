@@ -67,9 +67,9 @@ type SSLConfig struct {
 
 // ENCResult represents a Puppet ENC response.
 type ENCResult struct {
-	Classes     interface{}            `yaml:"classes" json:"classes"`
-	Parameters  map[string]interface{} `yaml:"parameters,omitempty" json:"parameters,omitempty"`
-	Environment string                 `yaml:"environment,omitempty" json:"environment,omitempty"`
+	Classes     any            `yaml:"classes" json:"classes"`
+	Parameters  map[string]any `yaml:"parameters,omitempty" json:"parameters,omitempty"`
+	Environment string         `yaml:"environment,omitempty" json:"environment,omitempty"`
 }
 
 // notFoundError indicates a 404 response.
@@ -175,7 +175,7 @@ func buildRequestBody(bodyType, certname string) (string, error) {
 		return string(data), err
 	case "facts":
 		facts := loadFacts(certname)
-		data, err := json.Marshal(map[string]interface{}{
+		data, err := json.Marshal(map[string]any{
 			"certname": certname,
 			"facts":    facts,
 		})
@@ -186,22 +186,22 @@ func buildRequestBody(bodyType, certname string) (string, error) {
 }
 
 // loadFacts reads Puppet facts for a certname from the YAML facts cache.
-func loadFacts(certname string) map[string]interface{} {
+func loadFacts(certname string) map[string]any {
 	safeName := filepath.Base(certname)
 	factsPath := filepath.Join("/opt/puppetlabs/server/data/puppetserver/yaml/facts", safeName+".yaml")
 	data, err := os.ReadFile(filepath.Clean(factsPath))
 	if err != nil {
-		return map[string]interface{}{}
+		return map[string]any{}
 	}
 
 	var factsFile struct {
-		Values map[string]interface{} `yaml:"values"`
+		Values map[string]any `yaml:"values"`
 	}
 	if err := yaml.Unmarshal(data, &factsFile); err != nil {
-		return map[string]interface{}{}
+		return map[string]any{}
 	}
 	if factsFile.Values == nil {
-		return map[string]interface{}{}
+		return map[string]any{}
 	}
 	return factsFile.Values
 }
@@ -225,7 +225,7 @@ func normalizeResponse(body []byte, format string) (string, error) {
 
 	// Ensure classes is never nil
 	if result.Classes == nil {
-		result.Classes = map[string]interface{}{}
+		result.Classes = map[string]any{}
 	}
 
 	out, err := yaml.Marshal(&result)

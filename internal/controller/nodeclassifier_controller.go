@@ -141,25 +141,32 @@ func (r *NodeClassifierReconciler) observe(ctx context.Context,
 		}
 	}
 
+	// A Secret that exists but does not match this NodeClassifier's current
+	// generation means a server is running something else -- an earlier
+	// generation, another classifier, or content of unknown vintage. All three
+	// outrank a Config that did render the current spec: reporting Ready while
+	// one server is demonstrably not on it is the claim this controller exists
+	// to avoid, and a healthy Config must not mask a broken one.
+	//
+	// A Config with no Secret at all is different. Nothing is mounted there, so
+	// it contradicts nothing and does not hold the resource back.
 	switch {
-	// Stale outranks rendered: while any server still runs an earlier spec, the
-	// current one is not in effect, and reporting Ready for a generation that
-	// has not fully landed is the claim this controller exists to avoid.
 	case len(stale) > 0:
 		return openvoxv1alpha1.NodeClassifierPhaseError, "RenderedConfigStale",
 			fmt.Sprintf("Secret %s was rendered from an earlier generation of NodeClassifier %s; "+
 				"the current spec has not reached a server", strings.Join(stale, ", "), nc.Name)
-	case len(rendered) > 0:
-		return openvoxv1alpha1.NodeClassifierPhaseActive, "Rendered",
-			fmt.Sprintf("Endpoint is present in Secret %s", strings.Join(rendered, ", "))
+	case len(foreign) > 0:
+		return openvoxv1alpha1.NodeClassifierPhaseError, "NotRendered",
+			fmt.Sprintf("Secret %s was rendered from a different NodeClassifier, so NodeClassifier %s "+
+				"is not in effect for every Config referencing it", strings.Join(foreign, ", "), nc.Name)
 	case len(unrecorded) > 0:
 		return openvoxv1alpha1.NodeClassifierPhaseError, "RenderSourceUnknown",
 			fmt.Sprintf("Secret %s does not record which resources it was rendered from, so the Config "+
 				"controller has not re-rendered it yet; its contents are unchanged in the meantime",
 				strings.Join(unrecorded, ", "))
-	case len(foreign) > 0:
-		return openvoxv1alpha1.NodeClassifierPhaseError, "NotRendered",
-			fmt.Sprintf("Secret %s was rendered from a different NodeClassifier", strings.Join(foreign, ", "))
+	case len(rendered) > 0:
+		return openvoxv1alpha1.NodeClassifierPhaseActive, "Rendered",
+			fmt.Sprintf("Endpoint is present in Secret %s", strings.Join(rendered, ", "))
 	}
 
 	return openvoxv1alpha1.NodeClassifierPhaseError, "NotRendered",

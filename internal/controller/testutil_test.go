@@ -44,9 +44,10 @@ func setupTestClient(objs ...client.Object) client.Client {
 // is genuinely not ready. Checking the reason alone would let a condition that
 // names the failure while still reporting Ready=True pass unnoticed.
 //
-// The condition type is not a parameter because every resource with a
-// readiness condition names it "Ready"; see ConditionSigningPolicyReady and
-// its siblings.
+// The condition type is not a parameter because the resources this is used on
+// -- SigningPolicy and NodeClassifier -- both name their readiness condition
+// "Ready". Others do not (ConditionCAReady, ConditionConfigReady), so a caller
+// from elsewhere fails at the Fatalf below rather than asserting nothing.
 func requireErrorCondition(t *testing.T, conditions []metav1.Condition, reason string) {
 	t.Helper()
 	const condType = openvoxv1alpha1.ConditionSigningPolicyReady

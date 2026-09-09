@@ -197,8 +197,11 @@ well-formed. The `Ready` condition carries the reason:
 back to this NodeClassifier and to the generation it was rendered at. That also
 catches a Secret left over from a previous `nodeClassifierRef`, which would
 otherwise read as active. Where several Configs reference the same classifier,
-one Config still on an earlier generation holds the whole resource at
-`RenderedConfigStale`: the current spec is not in effect everywhere yet.
+any one of them holding a Secret that does not match the current generation --
+an earlier generation, a different classifier, or one that records no source at
+all -- holds the whole resource out of `Ready`: the current spec is not in
+effect everywhere yet. A Config that has rendered no Secret at all is the
+exception, since nothing is mounted there to contradict it.
 
 Rendering failures -- an unresolvable auth Secret, for example -- are reported
 on the Config that owns the Secret, as an `ENCRenderFailed` event, and the

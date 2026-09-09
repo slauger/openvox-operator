@@ -183,9 +183,20 @@ Each rendered Secret carries an `openvox.voxpupuli.org/rendered-from`
 annotation listing the resources its content was built from and the
 `metadata.generation` each had at the time. That is what a policy resource
 matches itself against, so `Ready` distinguishes "my current spec is in effect"
-from "an earlier version of it is". A re-render that fails leaves the previous
-Secret in place; the resource then reports `RenderedConfigStale` rather than
-claiming the new spec reached a server.
+from "an earlier version of it is": a spec edit whose re-render fails leaves the
+previous Secret in place, and the resource reports `RenderedConfigStale` rather
+than claiming the new spec reached a server.
+
+Because the annotation records the generation, this only covers failures a spec
+edit caused. A render that starts failing under an *unchanged* spec -- a
+referenced credential Secret rotated out from under it -- leaves the generation
+matching, so the resource keeps reporting `Ready`. The render failure is an
+event on the Config, which is where that case is visible.
+
+A Secret rendered before this mechanism existed carries no annotation at all,
+which is not the same as being rendered from nothing. Those resources report
+`RenderSourceUnknown` until the Config controller re-renders, rather than
+claiming they were left out.
 
 Any resource can additionally carry `Paused` -- see
 [Pausing Reconciliation](../guides/pausing-reconciliation.md).

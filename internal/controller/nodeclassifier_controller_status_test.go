@@ -178,6 +178,50 @@ func TestNodeClassifierReconcile_Status(t *testing.T) {
 		}
 	})
 
+	// A healthy Config must not mask a broken one. Both cases below are a server
+	// demonstrably running something that is not this generation, exactly like a
+	// stale render, so neither may be hidden behind a Config that is current.
+	t.Run("an unrecorded render in one Config outranks a current one in another", func(t *testing.T) {
+		second := newConfig("staging", withNodeClassifierRef())
+		legacy := encSecret("staging", encURL)
+		delete(legacy.Annotations, AnnotationRenderedFrom)
+		c := setupTestClient(nc.DeepCopy(), cfg.DeepCopy(), second,
+			encSecret("production", encURL, current), legacy)
+		r := newNodeClassifierReconciler(c)
+		if _, err := r.Reconcile(testCtx(), testRequest("my-enc")); err != nil {
+			t.Fatalf("reconcile: %v", err)
+		}
+		got := &openvoxv1alpha1.NodeClassifier{}
+		if err := c.Get(testCtx(), key, got); err != nil {
+			t.Fatalf("reading NodeClassifier: %v", err)
+		}
+		requireErrorCondition(t, got.Status.Conditions, "RenderSourceUnknown")
+		cond := meta.FindStatusCondition(got.Status.Conditions, openvoxv1alpha1.ConditionNodeClassifierReady)
+		if cond != nil && !strings.Contains(cond.Message, "staging-enc") {
+			t.Errorf("message = %q, want it to name the Secret that is holding the classifier back", cond.Message)
+		}
+	})
+
+	t.Run("a foreign render in one Config outranks a current one in another", func(t *testing.T) {
+		second := newConfig("staging", withNodeClassifierRef())
+		c := setupTestClient(nc.DeepCopy(), cfg.DeepCopy(), second,
+			encSecret("production", encURL, current),
+			encSecret("staging", encURL, renderSource{Name: "someone-else", Generation: 1}))
+		r := newNodeClassifierReconciler(c)
+		if _, err := r.Reconcile(testCtx(), testRequest("my-enc")); err != nil {
+			t.Fatalf("reconcile: %v", err)
+		}
+		got := &openvoxv1alpha1.NodeClassifier{}
+		if err := c.Get(testCtx(), key, got); err != nil {
+			t.Fatalf("reading NodeClassifier: %v", err)
+		}
+		requireErrorCondition(t, got.Status.Conditions, "NotRendered")
+		cond := meta.FindStatusCondition(got.Status.Conditions, openvoxv1alpha1.ConditionNodeClassifierReady)
+		if cond != nil && !strings.Contains(cond.Message, "staging-enc") {
+			t.Errorf("message = %q, want it to name the Secret that is holding the classifier back", cond.Message)
+		}
+	})
+
 	// Where several Configs render the same classifier, one still on an earlier
 	// generation holds the whole resource back -- the current spec is not in
 	// effect everywhere yet. Without that rule the verdict would depend on which

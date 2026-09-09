@@ -125,7 +125,7 @@ func (r *SigningPolicyReconciler) observe(ctx context.Context,
 	// before the override was set still exists, and calling that "active" would
 	// claim an effect this policy no longer has.
 	if allOverride(configs, overrideAutosign) {
-		return openvoxv1alpha1.SigningPolicyPhaseError, "OverriddenByAutosignCommand",
+		return openvoxv1alpha1.SigningPolicyPhaseDisabled, "OverriddenByAutosignCommand",
 			fmt.Sprintf("spec.puppet.autosignCommand is set on every Config referencing CertificateAuthority %s, "+
 				"which bypasses SigningPolicy resources", caName)
 	}
@@ -141,7 +141,7 @@ func (r *SigningPolicyReconciler) observe(ctx context.Context,
 	}
 
 	if !renderedSourceRecorded(secret.Annotations) {
-		return openvoxv1alpha1.SigningPolicyPhaseError, "RenderSourceUnknown",
+		return openvoxv1alpha1.SigningPolicyPhaseError, "RenderedConfigSourceUnknown",
 			fmt.Sprintf("Secret %s does not record which resources it was rendered from, so the Config "+
 				"controller has not re-rendered it yet; its contents are unchanged in the meantime", secretName)
 	}

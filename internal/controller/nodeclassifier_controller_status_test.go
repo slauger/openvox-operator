@@ -65,7 +65,7 @@ func TestNodeClassifierReconcile_Status(t *testing.T) {
 		if err := c.Get(testCtx(), key, got); err != nil {
 			t.Fatalf("reading NodeClassifier: %v", err)
 		}
-		requireErrorCondition(t, got.Status.Conditions, "NotReferenced")
+		requireErrorCondition(t, got.Status.Conditions, "NoConfig")
 	})
 
 	t.Run("error while the secret has not been rendered", func(t *testing.T) {
@@ -128,7 +128,7 @@ func TestNodeClassifierReconcile_Status(t *testing.T) {
 	t.Run("error when externalNodesCommand bypasses the classifier", func(t *testing.T) {
 		overridden := newConfig("production",
 			withNodeClassifierRef(),
-			withExternalNodesCommand("/usr/local/bin/custom-enc"))
+			withExternalNodesCommand())
 		c := setupTestClient(nc.DeepCopy(), overridden, encSecret("production", encURL, current))
 		r := newNodeClassifierReconciler(c)
 		if _, err := r.Reconcile(testCtx(), testRequest("my-enc")); err != nil {
@@ -156,7 +156,7 @@ func TestNodeClassifierReconcile_Status(t *testing.T) {
 		if err := c.Get(testCtx(), key, got); err != nil {
 			t.Fatalf("reading NodeClassifier: %v", err)
 		}
-		requireErrorCondition(t, got.Status.Conditions, "RenderSourceUnknown")
+		requireErrorCondition(t, got.Status.Conditions, "RenderedConfigSourceUnknown")
 	})
 
 	// A Config that has not rendered anything yet says nothing about the
@@ -195,7 +195,7 @@ func TestNodeClassifierReconcile_Status(t *testing.T) {
 		if err := c.Get(testCtx(), key, got); err != nil {
 			t.Fatalf("reading NodeClassifier: %v", err)
 		}
-		requireErrorCondition(t, got.Status.Conditions, "RenderSourceUnknown")
+		requireErrorCondition(t, got.Status.Conditions, "RenderedConfigSourceUnknown")
 		cond := meta.FindStatusCondition(got.Status.Conditions, openvoxv1alpha1.ConditionNodeClassifierReady)
 		if cond != nil && !strings.Contains(cond.Message, "staging-enc") {
 			t.Errorf("message = %q, want it to name the Secret that is holding the classifier back", cond.Message)

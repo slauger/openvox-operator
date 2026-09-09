@@ -280,7 +280,7 @@ func TestConfigReconcile_AutosignCommandOverride(t *testing.T) {
 func TestConfigReconcile_ExternalNodesCommandOverride(t *testing.T) {
 	cfg := newConfig("production",
 		withNodeClassifierRef(),
-		withExternalNodesCommand("/usr/local/bin/custom-enc"),
+		withExternalNodesCommand(),
 	)
 	nc := newNodeClassifier("my-enc", "https://enc.example.com")
 	c := setupTestClient(cfg, nc)

@@ -185,7 +185,10 @@ annotation listing the resources its content was built from and the
 matches itself against, so `Ready` distinguishes "my current spec is in effect"
 from "an earlier version of it is": a spec edit whose re-render fails leaves the
 previous Secret in place, and the resource reports `RenderedConfigStale` rather
-than claiming the new spec reached a server.
+than claiming the new spec reached a server. A Secret rendered before this
+mechanism existed carries no annotation at all, which is not the same as being
+rendered from nothing; those resources report `RenderedConfigSourceUnknown`
+until the Config controller re-renders.
 
 Because the annotation records the generation, this only covers failures a spec
 edit caused. A render that starts failing under an *unchanged* spec -- a
@@ -193,10 +196,11 @@ referenced credential Secret rotated out from under it -- leaves the generation
 matching, so the resource keeps reporting `Ready`. The render failure is an
 event on the Config, which is where that case is visible.
 
-A Secret rendered before this mechanism existed carries no annotation at all,
-which is not the same as being rendered from nothing. Those resources report
-`RenderSourceUnknown` until the Config controller re-renders, rather than
-claiming they were left out.
+A resource that is deliberately bypassed reports `phase: Disabled` rather than
+`Error` -- an `autosignCommand` or `externalNodesCommand` override replaces the
+built-in binary, which is a configuration choice, not a fault. `Ready` is still
+`False`, because the resource genuinely is not in effect. Everything else that
+is not `Active` is `Error`.
 
 Any resource can additionally carry `Paused` -- see
 [Pausing Reconciliation](../guides/pausing-reconciliation.md).

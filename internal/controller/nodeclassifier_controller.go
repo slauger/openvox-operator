@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -96,7 +97,7 @@ func (r *NodeClassifierReconciler) observe(ctx context.Context,
 		return "", reasonLookupFailed, fmt.Sprintf("listing Configs for NodeClassifier %s: %v", nc.Name, err)
 	}
 	if len(configs) == 0 {
-		return openvoxv1alpha1.NodeClassifierPhaseError, "NotReferenced",
+		return openvoxv1alpha1.NodeClassifierPhaseError, "NoConfig",
 			fmt.Sprintf("no Config sets nodeClassifierRef to %s, so no ENC configuration is rendered", nc.Name)
 	}
 
@@ -105,7 +106,7 @@ func (r *NodeClassifierReconciler) observe(ctx context.Context,
 	// Secret rendered before the override was set still exists, and calling that
 	// "active" would claim an effect this NodeClassifier no longer has.
 	if allOverride(configs, overrideExternalNodes) {
-		return openvoxv1alpha1.NodeClassifierPhaseError, "OverriddenByExternalNodesCommand",
+		return openvoxv1alpha1.NodeClassifierPhaseDisabled, "OverriddenByExternalNodesCommand",
 			fmt.Sprintf("spec.puppet.externalNodesCommand is set on every Config referencing NodeClassifier %s, "+
 				"which bypasses NodeClassifier resources", nc.Name)
 	}
@@ -141,6 +142,16 @@ func (r *NodeClassifierReconciler) observe(ctx context.Context,
 		}
 	}
 
+	// The Configs come back in the field index's map iteration order, so the
+	// slices are sorted before they reach a message. An unsorted join makes the
+	// condition Message a non-deterministic function of the same state, and each
+	// reordering is a real status write that re-enqueues this controller and
+	// fans a Config re-render out behind it.
+	sort.Strings(rendered)
+	sort.Strings(stale)
+	sort.Strings(unrecorded)
+	sort.Strings(foreign)
+
 	// A Secret that exists but does not match this NodeClassifier's current
 	// generation means a server is running something else -- an earlier
 	// generation, another classifier, or content of unknown vintage. All three
@@ -160,7 +171,7 @@ func (r *NodeClassifierReconciler) observe(ctx context.Context,
 			fmt.Sprintf("Secret %s was rendered from a different NodeClassifier, so NodeClassifier %s "+
 				"is not in effect for every Config referencing it", strings.Join(foreign, ", "), nc.Name)
 	case len(unrecorded) > 0:
-		return openvoxv1alpha1.NodeClassifierPhaseError, "RenderSourceUnknown",
+		return openvoxv1alpha1.NodeClassifierPhaseError, "RenderedConfigSourceUnknown",
 			fmt.Sprintf("Secret %s does not record which resources it was rendered from, so the Config "+
 				"controller has not re-rendered it yet; its contents are unchanged in the meantime",
 				strings.Join(unrecorded, ", "))

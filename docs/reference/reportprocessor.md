@@ -183,8 +183,30 @@ Either `value` or `valueFrom` may be set, not both.
 
 | Phase | Description |
 |---|---|
-| `Active` | Report processor configuration is rendered and active |
-| `Error` | Configuration error (e.g. referenced Secret not found) |
+| `Active` | The endpoint is rendered and active |
+| `Error` | The endpoint is not in effect -- see the `Ready` condition for which case |
+
+The status is derived from the rendered report-webhook Secret, so it reports
+whether this processor actually reached a server rather than whether the
+resource itself is well-formed. The `Ready` condition carries the reason:
+
+| Reason | Meaning |
+|---|---|
+| `Rendered` | The endpoint is present in the rendered Secret, at this processor's current generation |
+| `ConfigRefMissing` | `spec.configRef` is empty, so the processor is bound to no Config |
+| `ConfigNotFound` | `spec.configRef` points at a [Config](config.md) that does not exist |
+| `NotRendered` | The Secret does not (yet) contain an endpoint for this processor |
+| `RenderedConfigStale` | The Secret contains this processor, but as it was at an earlier generation |
+| `RenderedConfigSourceUnknown` | The Secret predates this mechanism and does not record what it was rendered from; it resolves once the Config controller re-renders |
+
+The Secret's `openvox.voxpupuli.org/rendered-from` annotation names the
+processors its content was built from and the generation each was rendered at,
+which is what separates `Rendered` from `RenderedConfigStale`. Rendering
+failures are reported on the Config that owns the Secret, as a
+`ReportWebhookRenderFailed` event; as with the other policy resources, a render
+that fails under an unchanged spec leaves the generation matching, so the
+processor keeps reporting `Active`. See the
+[shared mechanism](index.md#status-phases-and-conditions).
 
 ## Processor Types
 

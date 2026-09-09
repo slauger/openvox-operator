@@ -221,7 +221,7 @@ func TestBuildPodSpec_AutosignCommandSkipsPolicyMount(t *testing.T) {
 func TestBuildPodSpec_ExternalNodesCommandSkipsENCMount(t *testing.T) {
 	cfg := newConfig("production",
 		withNodeClassifierRef(),
-		withExternalNodesCommand("/usr/local/bin/custom-enc"),
+		withExternalNodesCommand(),
 	)
 	server := newServer("test-server", withServerRole(true))
 

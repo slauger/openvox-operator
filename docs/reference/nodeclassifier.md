@@ -177,6 +177,7 @@ At most one authentication method may be configured.
 | Phase | Description |
 |---|---|
 | `Active` | Classifier configuration is rendered and active |
+| `Disabled` | Deliberately bypassed by an [`externalNodesCommand`](config.md) override -- a configuration choice, not a fault |
 | `Error` | The classifier is not in effect -- see the `Ready` condition for which case |
 
 The status is derived from the rendered ENC Secret, so it reports whether this
@@ -186,11 +187,15 @@ well-formed. The `Ready` condition carries the reason:
 | Reason | Meaning |
 |---|---|
 | `Rendered` | The endpoint is present in the rendered Secret, at the classifier's current generation |
-| `NotReferenced` | No [Config](config.md) sets `nodeClassifierRef` to this NodeClassifier, so nothing renders it |
+| `NoConfig` | No [Config](config.md) sets `nodeClassifierRef` to this NodeClassifier, so nothing renders it |
 | `OverriddenByExternalNodesCommand` | Every Config referencing it sets [`spec.puppet.externalNodesCommand`](config.md), which replaces the built-in binary and bypasses NodeClassifier resources |
 | `NotRendered` | No Secret rendered from this NodeClassifier exists, or the one that exists was rendered from a different one |
 | `RenderedConfigStale` | A Secret was rendered from this NodeClassifier, but from an earlier generation |
-| `RenderSourceUnknown` | The Secret predates this mechanism and does not record what it was rendered from; it resolves once the Config controller re-renders |
+| `RenderedConfigSourceUnknown` | The Secret predates this mechanism and does not record what it was rendered from; it resolves once the Config controller re-renders |
+
+Automation upgrading from an earlier operator version should note that these
+reasons replace the previous two: `ConfigRendered` became `Rendered`, and a
+single catch-all `Error` reason was split into the specific cases above.
 
 `enc.yaml` carries no resource name, so the Secret's
 `openvox.voxpupuli.org/rendered-from` annotation is what ties the rendered file

@@ -114,3 +114,36 @@ func TestSigningPolicyReconcile_ObservedGenerationPredatesTheEdit(t *testing.T) 
 		t.Errorf("condition observedGeneration = %d, want %d", cond.ObservedGeneration, observed)
 	}
 }
+
+// ReportProcessor matches by endpoint name rather than by annotation, but the
+// generation it stamps has to be captured the same way -- the re-read inside
+// updateStatusWithRetry is identical for all three.
+func TestReportProcessorReconcile_ObservedGenerationPredatesTheEdit(t *testing.T) {
+	const observed int64 = 2
+	rp := newReportProcessor("beta", "https://beta.example.invalid/reports")
+	rp.Generation = observed
+
+	c, reads := generationBumpingClient(t, 7,
+		func(o client.Object) bool { _, ok := o.(*openvoxv1alpha1.ReportProcessor); return ok },
+		rp, newConfig("production"),
+		webhookSecret("production", renderSource{Name: "beta", Generation: observed}))
+
+	if _, err := newReportProcessorReconciler(c).Reconcile(testCtx(), testRequest("beta")); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if reads() < 2 {
+		t.Fatalf("only %d read(s) of the ReportProcessor, so no re-read happened and this test proves nothing", reads())
+	}
+
+	got := &openvoxv1alpha1.ReportProcessor{}
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "beta", Namespace: testNamespace}, got); err != nil {
+		t.Fatalf("reading ReportProcessor: %v", err)
+	}
+	if got.Status.Phase != openvoxv1alpha1.ReportProcessorPhaseActive {
+		cond := meta.FindStatusCondition(got.Status.Conditions, openvoxv1alpha1.ConditionReportProcessorReady)
+		t.Fatalf("phase = %q, want Active (condition %+v)", got.Status.Phase, cond)
+	}
+	if got.Status.ObservedGeneration != observed {
+		t.Errorf("observedGeneration = %d, want %d -- the generation the verdict was derived from", got.Status.ObservedGeneration, observed)
+	}
+}

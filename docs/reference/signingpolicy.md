@@ -215,6 +215,7 @@ Either `value` or `valueFrom` must be set.
 | Phase | Description |
 |---|---|
 | `Active` | Policy is rendered and active |
+| `Disabled` | Deliberately bypassed by an [`autosignCommand`](config.md) override -- a configuration choice, not a fault |
 | `Error` | Policy is not in effect -- see the `Ready` condition for which case |
 
 The status is derived from the rendered autosign policy Secret, so it reports
@@ -230,7 +231,11 @@ itself is well-formed. The `Ready` condition carries the reason:
 | `OverriddenByAutosignCommand` | Every Config referencing the CA sets [`spec.puppet.autosignCommand`](config.md), which replaces the built-in binary and bypasses SigningPolicy resources |
 | `NotRendered` | The Secret does not (yet) contain this policy |
 | `RenderedConfigStale` | The Secret contains this policy, but as it was at an earlier generation |
-| `RenderSourceUnknown` | The Secret predates this mechanism and does not record what it was rendered from; it resolves once the Config controller re-renders |
+| `RenderedConfigSourceUnknown` | The Secret predates this mechanism and does not record what it was rendered from; it resolves once the Config controller re-renders |
+
+Automation upgrading from an earlier operator version should note that these
+reasons replace the previous two: `PolicyRendered` became `Rendered`, and a
+single catch-all `Error` reason was split into the specific cases above.
 
 The Secret's `openvox.voxpupuli.org/rendered-from` annotation names the
 policies its content was built from and the generation each was rendered at,

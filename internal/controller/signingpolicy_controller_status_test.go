@@ -132,7 +132,7 @@ func TestSigningPolicyReconcile_Status(t *testing.T) {
 		if err := c.Get(testCtx(), key, got); err != nil {
 			t.Fatalf("reading SigningPolicy: %v", err)
 		}
-		requireErrorCondition(t, got.Status.Conditions, "RenderSourceUnknown")
+		requireErrorCondition(t, got.Status.Conditions, "RenderedConfigSourceUnknown")
 	})
 
 	t.Run("error when certificateAuthorityRef is empty", func(t *testing.T) {

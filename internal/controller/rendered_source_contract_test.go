@@ -8,6 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
@@ -167,4 +168,95 @@ func TestRenderedFromRoundTrip_SigningPolicy(t *testing.T) {
 	if got.Status.ObservedGeneration != 4 {
 		t.Errorf("observedGeneration = %d, want 4", got.Status.ObservedGeneration)
 	}
+}
+
+// The upgrade path: a Secret the previous operator version wrote carries no
+// annotation, so the resource cannot tell whether it is in it. It must report
+// that rather than claim it was left out, and the first Config reconcile must
+// adopt the Secret and clear the state.
+func TestRenderedFromAdoptsAnUnannotatedSecret(t *testing.T) {
+	nc := newNodeClassifier("my-enc", "https://foreman.example.invalid")
+	nc.Generation = 3
+	cfg := newConfig("production", withNodeClassifierRef())
+
+	// As the previous operator version left it: owned by the Config, holding the
+	// right content, but with no record of what it was rendered from.
+	legacy := encSecret("production", "https://foreman.example.invalid")
+	delete(legacy.Annotations, AnnotationRenderedFrom)
+	if err := controllerutil.SetControllerReference(cfg, legacy, testScheme()); err != nil {
+		t.Fatalf("setting owner reference: %v", err)
+	}
+	c := setupTestClient(cfg, nc, legacy)
+
+	key := types.NamespacedName{Name: "my-enc", Namespace: testNamespace}
+	got := &openvoxv1alpha1.NodeClassifier{}
+
+	if _, err := newNodeClassifierReconciler(c).Reconcile(testCtx(), testRequest("my-enc")); err != nil {
+		t.Fatalf("nodeclassifier reconcile before adoption: %v", err)
+	}
+	if err := c.Get(testCtx(), key, got); err != nil {
+		t.Fatalf("reading NodeClassifier: %v", err)
+	}
+	requireErrorCondition(t, got.Status.Conditions, "RenderedConfigSourceUnknown")
+
+	// The Config controller re-renders on its first pass and stamps the source.
+	if _, err := newConfigReconciler(c).Reconcile(testCtx(), testRequest("production")); err != nil {
+		t.Fatalf("config reconcile: %v", err)
+	}
+	if want := "my-enc=3"; renderedFrom(t, c, "production-enc") != want {
+		t.Fatalf("rendered-from = %q, want %q after adoption", renderedFrom(t, c, "production-enc"), want)
+	}
+
+	if _, err := newNodeClassifierReconciler(c).Reconcile(testCtx(), testRequest("my-enc")); err != nil {
+		t.Fatalf("nodeclassifier reconcile after adoption: %v", err)
+	}
+	if err := c.Get(testCtx(), key, got); err != nil {
+		t.Fatalf("re-reading NodeClassifier: %v", err)
+	}
+	if got.Status.Phase != openvoxv1alpha1.NodeClassifierPhaseActive {
+		cond := meta.FindStatusCondition(got.Status.Conditions, openvoxv1alpha1.ConditionNodeClassifierReady)
+		t.Errorf("phase = %q, want Active once the Secret is adopted (condition %+v)", got.Status.Phase, cond)
+	}
+}
+
+// A deliberate override is a configuration choice, not a fault, so it must not
+// land in the Error phase where it would trip phase-based alerting.
+func TestOverriddenResourcesReportDisabledNotError(t *testing.T) {
+	t.Run("SigningPolicy", func(t *testing.T) {
+		sp := newSigningPolicy("test-policy", testCAName)
+		sp.Generation = 1
+		c := setupTestClient(sp, newCertificateAuthority(testCAName),
+			newConfig("production", withAuthorityRef(testCAName), withAutosignCommand()),
+			autosignPolicySecret(renderSource{Name: "test-policy", Generation: 1}))
+		if _, err := newSigningPolicyReconciler(c).Reconcile(testCtx(), testRequest("test-policy")); err != nil {
+			t.Fatalf("reconcile: %v", err)
+		}
+		got := &openvoxv1alpha1.SigningPolicy{}
+		if err := c.Get(testCtx(), types.NamespacedName{Name: "test-policy", Namespace: testNamespace}, got); err != nil {
+			t.Fatalf("reading SigningPolicy: %v", err)
+		}
+		if got.Status.Phase != openvoxv1alpha1.SigningPolicyPhaseDisabled {
+			t.Errorf("phase = %q, want Disabled", got.Status.Phase)
+		}
+		requireErrorCondition(t, got.Status.Conditions, "OverriddenByAutosignCommand")
+	})
+
+	t.Run("NodeClassifier", func(t *testing.T) {
+		nc := newNodeClassifier("my-enc", "https://foreman.example.invalid")
+		nc.Generation = 1
+		c := setupTestClient(nc,
+			newConfig("production", withNodeClassifierRef(), withExternalNodesCommand()),
+			encSecret("production", "https://foreman.example.invalid", renderSource{Name: "my-enc", Generation: 1}))
+		if _, err := newNodeClassifierReconciler(c).Reconcile(testCtx(), testRequest("my-enc")); err != nil {
+			t.Fatalf("reconcile: %v", err)
+		}
+		got := &openvoxv1alpha1.NodeClassifier{}
+		if err := c.Get(testCtx(), types.NamespacedName{Name: "my-enc", Namespace: testNamespace}, got); err != nil {
+			t.Fatalf("reading NodeClassifier: %v", err)
+		}
+		if got.Status.Phase != openvoxv1alpha1.NodeClassifierPhaseDisabled {
+			t.Errorf("phase = %q, want Disabled", got.Status.Phase)
+		}
+		requireErrorCondition(t, got.Status.Conditions, "OverriddenByExternalNodesCommand")
+	})
 }

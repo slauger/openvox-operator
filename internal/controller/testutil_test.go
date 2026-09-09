@@ -162,9 +162,9 @@ func withAutosignCommand() configOption {
 	}
 }
 
-func withExternalNodesCommand(cmd string) configOption {
+func withExternalNodesCommand() configOption {
 	return func(c *openvoxv1alpha1.Config) {
-		c.Spec.Puppet.ExternalNodesCommand = cmd
+		c.Spec.Puppet.ExternalNodesCommand = "/usr/local/bin/custom-enc"
 	}
 }
 

@@ -18,9 +18,10 @@ import (
 // Indexes are scoped per type, so the same field name is reused where the
 // reference means the same thing on different resources.
 const (
-	IndexConfigRef      = "spec.configRef"
-	IndexCertificateRef = "spec.certificateRef"
-	IndexAuthorityRef   = "spec.authorityRef"
+	IndexConfigRef         = "spec.configRef"
+	IndexCertificateRef    = "spec.certificateRef"
+	IndexAuthorityRef      = "spec.authorityRef"
+	IndexNodeClassifierRef = "spec.nodeClassifierRef"
 
 	// IndexCertname makes the certname collision check a lookup rather than a
 	// full listing. A certname identifies exactly one entry on the CA, so two
@@ -59,6 +60,9 @@ func fieldIndexes() []fieldIndex {
 		}},
 		{&openvoxv1alpha1.Config{}, IndexAuthorityRef, func(o client.Object) []string {
 			return nonEmpty(o.(*openvoxv1alpha1.Config).Spec.AuthorityRef)
+		}},
+		{&openvoxv1alpha1.Config{}, IndexNodeClassifierRef, func(o client.Object) []string {
+			return nonEmpty(o.(*openvoxv1alpha1.Config).Spec.NodeClassifierRef)
 		}},
 		{&openvoxv1alpha1.Certificate{}, IndexAuthorityRef, func(o client.Object) []string {
 			return nonEmpty(o.(*openvoxv1alpha1.Certificate).Spec.AuthorityRef)

@@ -201,7 +201,7 @@ func TestBuildPodSpec_MultipleCodeVolumes(t *testing.T) {
 }
 
 func TestBuildPodSpec_AutosignCommandSkipsPolicyMount(t *testing.T) {
-	cfg := newConfig("production", withAutosignCommand("/usr/local/bin/custom-autosign"))
+	cfg := newConfig("production", withAutosignCommand())
 	server := newServer("test-ca", withCA(true), withServerRole(false))
 
 	podSpec := testBuildPodSpec(server, cfg)

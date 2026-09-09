@@ -215,7 +215,32 @@ Either `value` or `valueFrom` must be set.
 | Phase | Description |
 |---|---|
 | `Active` | Policy is rendered and active |
-| `Error` | Policy has a configuration error (e.g. referenced Secret not found) |
+| `Error` | Policy is not in effect -- see the `Ready` condition for which case |
+
+The status is derived from the rendered autosign policy Secret, so it reports
+whether this policy actually reached the CA rather than whether the resource
+itself is well-formed. The `Ready` condition carries the reason:
+
+| Reason | Meaning |
+|---|---|
+| `Rendered` | The policy is present in the rendered Secret, at its current generation |
+| `CertificateAuthorityRefMissing` | `spec.certificateAuthorityRef` is empty, so the policy is bound to no CA |
+| `CertificateAuthorityNotFound` | `spec.certificateAuthorityRef` points at a CertificateAuthority that does not exist |
+| `NoConfig` | No [Config](config.md) references that CertificateAuthority, so nothing renders the policy |
+| `OverriddenByAutosignCommand` | Every Config referencing the CA sets [`spec.puppet.autosignCommand`](config.md), which replaces the built-in binary and bypasses SigningPolicy resources |
+| `NotRendered` | The Secret does not (yet) contain this policy |
+| `RenderedConfigStale` | The Secret contains this policy, but as it was at an earlier generation |
+
+The Secret's `openvox.voxpupuli.org/rendered-from` annotation names the
+policies its content was built from and the generation each was rendered at,
+which is what separates `Rendered` from `RenderedConfigStale`.
+
+Rendering failures -- an unresolvable `csrAttributes` Secret, for example --
+are reported on the Config that owns the Secret, as an
+`AutosignPolicyRenderFailed` event. Since the failed render leaves the previous
+Secret untouched, the policy reports `RenderedConfigStale` until the edit that
+broke it is corrected: the CA is still signing under the last policy that
+rendered cleanly.
 
 ## How It Works
 

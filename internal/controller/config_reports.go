@@ -69,7 +69,7 @@ func (r *ConfigReconciler) reconcileReportWebhookSecret(ctx context.Context, cfg
 		"report-webhook.yaml": []byte(webhookYAML),
 	}
 
-	return r.reconcileSecret(ctx, cfg, secretName, data)
+	return r.reconcileSecret(ctx, cfg, secretName, data, nil)
 }
 
 // reportWebhookConfig mirrors the YAML structure read by openvox-report.

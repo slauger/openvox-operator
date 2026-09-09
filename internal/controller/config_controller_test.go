@@ -247,7 +247,7 @@ func TestConfigReconcile_PuppetConfWithENC(t *testing.T) {
 func TestConfigReconcile_AutosignCommandOverride(t *testing.T) {
 	cfg := newConfig("production",
 		withAuthorityRef("production-ca"),
-		withAutosignCommand("/usr/local/bin/custom-autosign"),
+		withAutosignCommand(),
 	)
 	ca := newCertificateAuthority("production-ca")
 	c := setupTestClient(cfg, ca)

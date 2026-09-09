@@ -182,6 +182,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&controller.SigningPolicyReconciler{
+		Client: mgr.GetClient(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "SigningPolicy")
+		os.Exit(1)
+	}
+
+	if err = (&controller.NodeClassifierReconciler{
+		Client: mgr.GetClient(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "NodeClassifier")
+		os.Exit(1)
+	}
+
 	if enableWebhooks {
 		if err := webhook.SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to set up webhooks")

@@ -177,7 +177,34 @@ At most one authentication method may be configured.
 | Phase | Description |
 |---|---|
 | `Active` | Classifier configuration is rendered and active |
-| `Error` | Configuration error (e.g. referenced Secret not found) |
+| `Error` | The classifier is not in effect -- see the `Ready` condition for which case |
+
+The status is derived from the rendered ENC Secret, so it reports whether this
+classifier actually reached a server rather than whether the resource itself is
+well-formed. The `Ready` condition carries the reason:
+
+| Reason | Meaning |
+|---|---|
+| `Rendered` | The endpoint is present in the rendered Secret, at the classifier's current generation |
+| `NotReferenced` | No [Config](config.md) sets `nodeClassifierRef` to this NodeClassifier, so nothing renders it |
+| `OverriddenByExternalNodesCommand` | Every Config referencing it sets [`spec.puppet.externalNodesCommand`](config.md), which replaces the built-in binary and bypasses NodeClassifier resources |
+| `NotRendered` | No Secret rendered from this NodeClassifier exists yet |
+| `RenderedConfigStale` | A Secret was rendered from this NodeClassifier, but from an earlier generation |
+
+`enc.yaml` carries no resource name, so the Secret's
+`openvox.voxpupuli.org/rendered-from` annotation is what ties the rendered file
+back to this NodeClassifier and to the generation it was rendered at. That also
+catches a Secret left over from a previous `nodeClassifierRef`, which would
+otherwise read as active. Where several Configs reference the same classifier,
+one Config still on an earlier generation holds the whole resource at
+`RenderedConfigStale`: the current spec is not in effect everywhere yet.
+
+Rendering failures -- an unresolvable auth Secret, for example -- are reported
+on the Config that owns the Secret, as an `ENCRenderFailed` event. Since the
+failed render leaves the previous Secret untouched, the classifier reports
+`RenderedConfigStale` until the edit that broke it is corrected: the servers
+are still classifying against the last configuration that rendered cleanly,
+which for a rotated credential is the old one.
 
 ## How It Works
 

@@ -126,9 +126,9 @@ func withReadOnlyRootFS(v bool) configOption {
 	}
 }
 
-func withAutosignCommand(cmd string) configOption {
+func withAutosignCommand() configOption {
 	return func(c *openvoxv1alpha1.Config) {
-		c.Spec.Puppet.AutosignCommand = cmd
+		c.Spec.Puppet.AutosignCommand = "/usr/local/bin/custom-autosign"
 	}
 }
 
@@ -555,6 +555,14 @@ func newReportProcessorReconciler(c client.Client) *ReportProcessorReconciler {
 		Scheme:   testScheme(),
 		Recorder: testRecorder(),
 	}
+}
+
+func newSigningPolicyReconciler(c client.Client) *SigningPolicyReconciler {
+	return &SigningPolicyReconciler{Client: c}
+}
+
+func newNodeClassifierReconciler(c client.Client) *NodeClassifierReconciler {
+	return &NodeClassifierReconciler{Client: c}
 }
 
 type databaseOption func(*openvoxv1alpha1.Database)

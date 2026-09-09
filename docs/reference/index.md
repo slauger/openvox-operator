@@ -169,5 +169,23 @@ of the status has not caught up with the current spec yet.
 | `Pool` | `Ready` | At least one ready endpoint is behind the Service |
 | `SigningPolicy`, `NodeClassifier`, `ReportProcessor` | `Ready` | The resource was rendered into the configuration the servers mount |
 
+These three are policy resources: the Config controller renders them into the
+ConfigMaps and Secrets it owns, and each one derives its own `Ready` from
+whether it ended up in that rendered output. So a failure to render is reported
+as an event on the Config, while the policy resource reports only whether it is
+in effect -- including the cases where nothing references it, or where an
+`autosignCommand` / `externalNodesCommand` override bypasses it entirely. The
+condition's `reason` names the case; see
+[SigningPolicy](signingpolicy.md#phases) and
+[NodeClassifier](nodeclassifier.md#phases).
+
+Each rendered Secret carries an `openvox.voxpupuli.org/rendered-from`
+annotation listing the resources its content was built from and the
+`metadata.generation` each had at the time. That is what a policy resource
+matches itself against, so `Ready` distinguishes "my current spec is in effect"
+from "an earlier version of it is". A re-render that fails leaves the previous
+Secret in place; the resource then reports `RenderedConfigStale` rather than
+claiming the new spec reached a server.
+
 Any resource can additionally carry `Paused` -- see
 [Pausing Reconciliation](../guides/pausing-reconciliation.md).

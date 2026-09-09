@@ -1,0 +1,137 @@
+# EXPERIMENTAL rootless native (no-JVM) OpenVox Server on UBI9.
+#
+# A drop-in-shaped alternative to images/openvox-server: same rootless/OpenShift
+# conventions and :8140 mTLS surface, but the JRuby pool + JVM are replaced by
+#   Go edge (mTLS + config-driven auth)  -->  Puma/CRuby + the openvox gem
+# for the SERVER role (catalog compilation). The CA role stays on the JVM
+# puppetserver image, so this can be swapped in for server-only pods.
+#
+# No RPM install of OpenVox: the Ruby interpreter comes from the ubi ruby module
+# (interpreter only, exactly like images/openvox-server), and OpenVox itself is
+# installed as the openvox gem into a self-contained GEM_HOME -- the CRuby analogue
+# of the server tarball.
+#
+# Build (from repo root):
+#   podman build -t openvox-server-native:latest -f images/openvox-server-native/Containerfile .
+
+ARG OPENVOX_VERSION=8.28.1
+ARG RUBY_STREAM=3.3
+
+################################################################################
+# Stage: base — CRuby runtime deps only (no JDK, no JRuby)
+################################################################################
+FROM registry.access.redhat.com/ubi9/ubi:9.8-1785906690 AS base
+
+ARG RUBY_STREAM
+
+RUN dnf module enable ruby:${RUBY_STREAM} -y \
+    && dnf install -y --allowerasing --setopt=install_weak_deps=False \
+        ruby \
+        rubygems \
+        rubygem-json \
+        rubygem-psych \
+        rubygem-bigdecimal \
+        rubygem-io-console \
+        rubygem-racc \
+        bash \
+        curl \
+        openssl \
+        tar \
+        gzip \
+        findutils \
+        hostname \
+    && dnf clean all
+
+################################################################################
+# Stage: gems — install OpenVox + Puma into a self-contained GEM_HOME
+################################################################################
+FROM base AS gems
+
+ARG OPENVOX_VERSION
+
+ENV GEM_HOME=/opt/openvox-native \
+    GEM_PATH=/opt/openvox-native
+
+# Build toolchain is only needed here to compile native gem extensions (Puma);
+# it never lands in the final image.
+RUN dnf install -y --setopt=install_weak_deps=False \
+        ruby-devel gcc make redhat-rpm-config \
+    && dnf clean all \
+    && gem install --no-document \
+        openvox --version "${OPENVOX_VERSION}" \
+    && gem install --no-document \
+        puma rack
+
+################################################################################
+# Stage: edge — compile the openvox-edge Go binary
+################################################################################
+FROM docker.io/library/golang:1.26.5 AS edge
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd/edge/ cmd/edge/
+RUN CGO_ENABLED=0 go build -o /openvox-edge ./cmd/edge/
+
+################################################################################
+# Stage: final — rootless runtime image
+################################################################################
+FROM base AS final
+
+ARG OPENVOX_VERSION
+
+LABEL org.opencontainers.image.title="OpenVox Server (native, experimental)" \
+      org.opencontainers.image.description="Experimental non-JVM OpenVox Server: Go edge + CRuby/Puma catalog compilation" \
+      org.opencontainers.image.vendor="slauger" \
+      org.opencontainers.image.url="https://github.com/slauger/openvox-operator" \
+      org.opencontainers.image.source="https://github.com/slauger/openvox-operator" \
+      org.opencontainers.image.version="${OPENVOX_VERSION}" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
+ENV GEM_HOME=/opt/openvox-native \
+    GEM_PATH=/opt/openvox-native \
+    PATH=/opt/openvox-native/bin:/opt/puppetlabs/bin:/opt/puppetlabs/puppet/bin:$PATH \
+    CODEDIR=/etc/puppetlabs/code \
+    PUMA_WORKERS=2 \
+    HOME=/opt/puppetlabs/server/data/puppetserver
+
+# OpenVox gems (incl. compiled Puma extension) from the gems stage.
+COPY --from=gems /opt/openvox-native /opt/openvox-native
+
+# The compile backend, edge binary, auth rules and a demo control repo.
+COPY --from=edge /openvox-edge /usr/local/bin/openvox-edge
+COPY images/openvox-server-native/backend/          /opt/openvox-native/backend/
+COPY images/openvox-server-native/auth-rules.json   /etc/edge/auth-rules.json
+COPY images/openvox-server-native/code/             /etc/puppetlabs/code/
+COPY images/openvox-server-native/entrypoint.sh     /entrypoint.sh
+COPY images/openvox-server-native/healthcheck.sh    /healthcheck.sh
+
+RUN install -d -m 0755 \
+        /etc/puppetlabs/puppet/ssl \
+        /var/log/puppetlabs \
+        /var/run/puppetlabs \
+        /opt/puppetlabs/server/data/puppetserver \
+    && chmod +x /entrypoint.sh /healthcheck.sh /usr/local/bin/openvox-edge
+
+# OpenShift random-UID pattern: group root(0), mirror user perms to group,
+# SGID on directories so new files inherit the group.
+RUN for d in \
+        /etc/puppetlabs \
+        /etc/edge \
+        /opt/openvox-native \
+        /var/log/puppetlabs \
+        /var/run/puppetlabs \
+        /opt/puppetlabs \
+    ; do \
+        chgrp -R 0 "$d"; \
+        chmod -R g=u "$d"; \
+        find "$d" -type d -exec chmod g+s {} +; \
+    done
+
+USER 1001:0
+
+HEALTHCHECK --interval=20s --timeout=15s --retries=12 --start-period=2m CMD ["/healthcheck.sh"]
+
+EXPOSE 8140
+
+ENTRYPOINT ["/entrypoint.sh"]

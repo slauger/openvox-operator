@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -64,10 +65,7 @@ func TestNodeClassifierReconcile_Status(t *testing.T) {
 		if err := c.Get(testCtx(), key, got); err != nil {
 			t.Fatalf("reading NodeClassifier: %v", err)
 		}
-		cond := meta.FindStatusCondition(got.Status.Conditions, openvoxv1alpha1.ConditionNodeClassifierReady)
-		if cond == nil || cond.Reason != "NotReferenced" {
-			t.Errorf("expected reason NotReferenced, got %+v", cond)
-		}
+		requireErrorCondition(t, got.Status.Conditions, "NotReferenced")
 	})
 
 	t.Run("error while the secret has not been rendered", func(t *testing.T) {
@@ -80,10 +78,7 @@ func TestNodeClassifierReconcile_Status(t *testing.T) {
 		if err := c.Get(testCtx(), key, got); err != nil {
 			t.Fatalf("reading NodeClassifier: %v", err)
 		}
-		cond := meta.FindStatusCondition(got.Status.Conditions, openvoxv1alpha1.ConditionNodeClassifierReady)
-		if cond == nil || cond.Reason != "NotRendered" {
-			t.Errorf("expected reason NotRendered, got %+v", cond)
-		}
+		requireErrorCondition(t, got.Status.Conditions, "NotRendered")
 	})
 
 	// A Secret left over from a previous nodeClassifierRef would otherwise read
@@ -100,9 +95,10 @@ func TestNodeClassifierReconcile_Status(t *testing.T) {
 		if err := c.Get(testCtx(), key, got); err != nil {
 			t.Fatalf("reading NodeClassifier: %v", err)
 		}
+		requireErrorCondition(t, got.Status.Conditions, "NotRendered")
 		cond := meta.FindStatusCondition(got.Status.Conditions, openvoxv1alpha1.ConditionNodeClassifierReady)
-		if cond == nil || cond.Reason != "NotRendered" {
-			t.Errorf("expected reason NotRendered, got %+v", cond)
+		if cond != nil && !strings.Contains(cond.Message, "different NodeClassifier") {
+			t.Errorf("message = %q, want it to say the Secret belongs to another classifier rather than that none exists", cond.Message)
 		}
 	})
 
@@ -120,10 +116,7 @@ func TestNodeClassifierReconcile_Status(t *testing.T) {
 		if err := c.Get(testCtx(), key, got); err != nil {
 			t.Fatalf("reading NodeClassifier: %v", err)
 		}
-		cond := meta.FindStatusCondition(got.Status.Conditions, openvoxv1alpha1.ConditionNodeClassifierReady)
-		if cond == nil || cond.Reason != "RenderedConfigStale" {
-			t.Errorf("expected reason RenderedConfigStale, got %+v", cond)
-		}
+		requireErrorCondition(t, got.Status.Conditions, "RenderedConfigStale")
 		if got.Status.ObservedGeneration != nc.Generation {
 			t.Errorf("observedGeneration = %d, want the generation that is not in effect (%d)",
 				got.Status.ObservedGeneration, nc.Generation)
@@ -145,10 +138,25 @@ func TestNodeClassifierReconcile_Status(t *testing.T) {
 		if err := c.Get(testCtx(), key, got); err != nil {
 			t.Fatalf("reading NodeClassifier: %v", err)
 		}
-		cond := meta.FindStatusCondition(got.Status.Conditions, openvoxv1alpha1.ConditionNodeClassifierReady)
-		if cond == nil || cond.Reason != "OverriddenByExternalNodesCommand" {
-			t.Errorf("expected reason OverriddenByExternalNodesCommand, got %+v", cond)
+		requireErrorCondition(t, got.Status.Conditions, "OverriddenByExternalNodesCommand")
+	})
+
+	// On upgrade the rendered Secret exists but predates the annotation. Reading
+	// that as "this classifier is not in it" would flip every classifier to
+	// NotRendered, and for a paused Config it would stay there.
+	t.Run("secret from before the annotation reports an unknown source", func(t *testing.T) {
+		legacy := encSecret("production", encURL)
+		delete(legacy.Annotations, AnnotationRenderedFrom)
+		c := setupTestClient(nc.DeepCopy(), cfg.DeepCopy(), legacy)
+		r := newNodeClassifierReconciler(c)
+		if _, err := r.Reconcile(testCtx(), testRequest("my-enc")); err != nil {
+			t.Fatalf("reconcile: %v", err)
 		}
+		got := &openvoxv1alpha1.NodeClassifier{}
+		if err := c.Get(testCtx(), key, got); err != nil {
+			t.Fatalf("reading NodeClassifier: %v", err)
+		}
+		requireErrorCondition(t, got.Status.Conditions, "RenderSourceUnknown")
 	})
 
 	// A Config that has not rendered anything yet says nothing about the
@@ -187,10 +195,7 @@ func TestNodeClassifierReconcile_Status(t *testing.T) {
 		if err := c.Get(testCtx(), key, got); err != nil {
 			t.Fatalf("reading NodeClassifier: %v", err)
 		}
-		cond := meta.FindStatusCondition(got.Status.Conditions, openvoxv1alpha1.ConditionNodeClassifierReady)
-		if cond == nil || cond.Reason != "RenderedConfigStale" {
-			t.Errorf("expected reason RenderedConfigStale, got %+v", cond)
-		}
+		requireErrorCondition(t, got.Status.Conditions, "RenderedConfigStale")
 	})
 }
 

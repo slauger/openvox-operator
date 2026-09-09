@@ -49,6 +49,16 @@ func renderedFromAnnotation(sources []renderSource) map[string]string {
 	return map[string]string{AnnotationRenderedFrom: strings.Join(parts, ",")}
 }
 
+// renderedSourceRecorded reports whether a Secret records its render sources at
+// all. renderedFromAnnotation always writes the key, empty source set included,
+// so a Secret without it was rendered by an operator that predates the
+// annotation -- which is not the same as being rendered from nothing, and must
+// not be read as "this resource is not in it".
+func renderedSourceRecorded(annotations map[string]string) bool {
+	_, ok := annotations[AnnotationRenderedFrom]
+	return ok
+}
+
 // renderedGeneration returns the generation the named resource had when the
 // file was rendered, and whether it contributed to it at all.
 func renderedGeneration(annotations map[string]string, name string) (int64, bool) {

@@ -33,7 +33,7 @@ func autosignPolicySecret(sources ...renderSource) *corev1.Secret {
 }
 
 func TestSigningPolicyReconcile_Status(t *testing.T) {
-	sp := newSigningPolicy("test-policy", testCAName, true)
+	sp := newSigningPolicy("test-policy", testCAName)
 	sp.Generation = 2
 	current := renderSource{Name: "test-policy", Generation: 2}
 	ca := newCertificateAuthority(testCAName)
@@ -69,10 +69,7 @@ func TestSigningPolicyReconcile_Status(t *testing.T) {
 		if err := c.Get(testCtx(), key, got); err != nil {
 			t.Fatalf("reading SigningPolicy: %v", err)
 		}
-		cond := meta.FindStatusCondition(got.Status.Conditions, openvoxv1alpha1.ConditionSigningPolicyReady)
-		if cond == nil || cond.Reason != "CertificateAuthorityNotFound" {
-			t.Errorf("expected reason CertificateAuthorityNotFound, got %+v", cond)
-		}
+		requireErrorCondition(t, got.Status.Conditions, "CertificateAuthorityNotFound")
 	})
 
 	// A policy only reaches the CA through a Config. Without one it is inert, and
@@ -87,10 +84,7 @@ func TestSigningPolicyReconcile_Status(t *testing.T) {
 		if err := c.Get(testCtx(), key, got); err != nil {
 			t.Fatalf("reading SigningPolicy: %v", err)
 		}
-		cond := meta.FindStatusCondition(got.Status.Conditions, openvoxv1alpha1.ConditionSigningPolicyReady)
-		if cond == nil || cond.Reason != "NoConfig" {
-			t.Errorf("expected reason NoConfig, got %+v", cond)
-		}
+		requireErrorCondition(t, got.Status.Conditions, "NoConfig")
 	})
 
 	t.Run("error while the secret has not been rendered", func(t *testing.T) {
@@ -103,10 +97,7 @@ func TestSigningPolicyReconcile_Status(t *testing.T) {
 		if err := c.Get(testCtx(), key, got); err != nil {
 			t.Fatalf("reading SigningPolicy: %v", err)
 		}
-		cond := meta.FindStatusCondition(got.Status.Conditions, openvoxv1alpha1.ConditionSigningPolicyReady)
-		if cond == nil || cond.Reason != "NotRendered" {
-			t.Errorf("expected reason NotRendered, got %+v", cond)
-		}
+		requireErrorCondition(t, got.Status.Conditions, "NotRendered")
 	})
 
 	// A failed re-render -- an unresolvable csrAttributes Secret, say -- leaves
@@ -123,10 +114,25 @@ func TestSigningPolicyReconcile_Status(t *testing.T) {
 		if err := c.Get(testCtx(), key, got); err != nil {
 			t.Fatalf("reading SigningPolicy: %v", err)
 		}
-		cond := meta.FindStatusCondition(got.Status.Conditions, openvoxv1alpha1.ConditionSigningPolicyReady)
-		if cond == nil || cond.Reason != "RenderedConfigStale" {
-			t.Errorf("expected reason RenderedConfigStale, got %+v", cond)
+		requireErrorCondition(t, got.Status.Conditions, "RenderedConfigStale")
+	})
+
+	// On upgrade the rendered Secret exists but predates the annotation. Reading
+	// that as "this policy is not in it" would flip every policy to NotRendered,
+	// and for a paused Config it would stay there.
+	t.Run("secret from before the annotation reports an unknown source", func(t *testing.T) {
+		legacy := autosignPolicySecret(current)
+		delete(legacy.Annotations, AnnotationRenderedFrom)
+		c := setupTestClient(sp.DeepCopy(), ca.DeepCopy(), cfg.DeepCopy(), legacy)
+		r := newSigningPolicyReconciler(c)
+		if _, err := r.Reconcile(testCtx(), testRequest("test-policy")); err != nil {
+			t.Fatalf("reconcile: %v", err)
 		}
+		got := &openvoxv1alpha1.SigningPolicy{}
+		if err := c.Get(testCtx(), key, got); err != nil {
+			t.Fatalf("reading SigningPolicy: %v", err)
+		}
+		requireErrorCondition(t, got.Status.Conditions, "RenderSourceUnknown")
 	})
 
 	t.Run("error when certificateAuthorityRef is empty", func(t *testing.T) {
@@ -141,10 +147,7 @@ func TestSigningPolicyReconcile_Status(t *testing.T) {
 		if err := c.Get(testCtx(), key, got); err != nil {
 			t.Fatalf("reading SigningPolicy: %v", err)
 		}
-		cond := meta.FindStatusCondition(got.Status.Conditions, openvoxv1alpha1.ConditionSigningPolicyReady)
-		if cond == nil || cond.Reason != "CertificateAuthorityRefMissing" {
-			t.Errorf("expected reason CertificateAuthorityRefMissing, got %+v", cond)
-		}
+		requireErrorCondition(t, got.Status.Conditions, "CertificateAuthorityRefMissing")
 	})
 
 	t.Run("error when another policy was rendered but not this one", func(t *testing.T) {
@@ -158,9 +161,10 @@ func TestSigningPolicyReconcile_Status(t *testing.T) {
 		if err := c.Get(testCtx(), key, got); err != nil {
 			t.Fatalf("reading SigningPolicy: %v", err)
 		}
-		if got.Status.Phase != openvoxv1alpha1.SigningPolicyPhaseError {
-			t.Errorf("phase = %q, want Error", got.Status.Phase)
-		}
+		// The reason is asserted, not just the phase: a policy the Secret was
+		// never rendered from and one rendered at an older generation are both
+		// Error, so the phase alone cannot tell which branch produced it.
+		requireErrorCondition(t, got.Status.Conditions, "NotRendered")
 	})
 
 	// A stale Secret from before the override was set must not read as active:
@@ -179,10 +183,7 @@ func TestSigningPolicyReconcile_Status(t *testing.T) {
 		if err := c.Get(testCtx(), key, got); err != nil {
 			t.Fatalf("reading SigningPolicy: %v", err)
 		}
-		cond := meta.FindStatusCondition(got.Status.Conditions, openvoxv1alpha1.ConditionSigningPolicyReady)
-		if cond == nil || cond.Reason != "OverriddenByAutosignCommand" {
-			t.Errorf("expected reason OverriddenByAutosignCommand, got %+v", cond)
-		}
+		requireErrorCondition(t, got.Status.Conditions, "OverriddenByAutosignCommand")
 	})
 
 	// One Config opting out does not disable the policy for the Config that did

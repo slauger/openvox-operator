@@ -532,7 +532,7 @@ func TestConfigReconcile_LogbackXML(t *testing.T) {
 func TestConfigReconcile_AutosignPolicy(t *testing.T) {
 	cfg := newConfig("production", withAuthorityRef("production-ca"))
 	ca := newCertificateAuthority("production-ca")
-	sp := newSigningPolicy("allow-all", "production-ca", true)
+	sp := newSigningPolicy("allow-all", "production-ca")
 
 	c := setupTestClient(cfg, ca, sp)
 	r := newConfigReconciler(c)

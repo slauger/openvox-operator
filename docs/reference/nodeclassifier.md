@@ -188,8 +188,9 @@ well-formed. The `Ready` condition carries the reason:
 | `Rendered` | The endpoint is present in the rendered Secret, at the classifier's current generation |
 | `NotReferenced` | No [Config](config.md) sets `nodeClassifierRef` to this NodeClassifier, so nothing renders it |
 | `OverriddenByExternalNodesCommand` | Every Config referencing it sets [`spec.puppet.externalNodesCommand`](config.md), which replaces the built-in binary and bypasses NodeClassifier resources |
-| `NotRendered` | No Secret rendered from this NodeClassifier exists yet |
+| `NotRendered` | No Secret rendered from this NodeClassifier exists, or the one that exists was rendered from a different one |
 | `RenderedConfigStale` | A Secret was rendered from this NodeClassifier, but from an earlier generation |
+| `RenderSourceUnknown` | The Secret predates this mechanism and does not record what it was rendered from; it resolves once the Config controller re-renders |
 
 `enc.yaml` carries no resource name, so the Secret's
 `openvox.voxpupuli.org/rendered-from` annotation is what ties the rendered file
@@ -200,11 +201,17 @@ one Config still on an earlier generation holds the whole resource at
 `RenderedConfigStale`: the current spec is not in effect everywhere yet.
 
 Rendering failures -- an unresolvable auth Secret, for example -- are reported
-on the Config that owns the Secret, as an `ENCRenderFailed` event. Since the
-failed render leaves the previous Secret untouched, the classifier reports
-`RenderedConfigStale` until the edit that broke it is corrected: the servers
-are still classifying against the last configuration that rendered cleanly,
-which for a rotated credential is the old one.
+on the Config that owns the Secret, as an `ENCRenderFailed` event, and the
+failed render leaves the previous Secret untouched.
+
+What the classifier reports then depends on whether its own spec changed. If a
+spec edit triggered the failing render, the generation moved on and the
+classifier reports `RenderedConfigStale`. If the spec did not change -- the
+referenced auth Secret was rotated or deleted underneath it -- the generation
+is unchanged, the previous Secret still matches it, and the classifier keeps
+reporting `Active` while the servers classify against the old credential. Watch
+the Config's `ENCRenderFailed` events for that case; the classifier's own
+status cannot see it.
 
 ## How It Works
 

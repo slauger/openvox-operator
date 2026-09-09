@@ -110,7 +110,7 @@ func (r *NodeClassifierReconciler) observe(ctx context.Context,
 				"which bypasses NodeClassifier resources", nc.Name)
 	}
 
-	var rendered, stale []string
+	var rendered, stale, unrecorded, foreign []string
 	for _, cfg := range configs {
 		if cfg.Spec.Puppet.ExternalNodesCommand != "" {
 			continue
@@ -123,13 +123,17 @@ func (r *NodeClassifierReconciler) observe(ctx context.Context,
 			}
 			return "", reasonLookupFailed, fmt.Sprintf("getting Secret %s: %v", secretName, err)
 		}
+		if !renderedSourceRecorded(secret.Annotations) {
+			unrecorded = append(unrecorded, secretName)
+			continue
+		}
 		// The annotation names the NodeClassifier the content was rendered from,
 		// which a Secret left over from a previous nodeClassifierRef does not
 		// match, and carries the generation it was rendered at.
 		generation, ok := renderedGeneration(secret.Annotations, nc.Name)
 		switch {
 		case !ok:
-			continue
+			foreign = append(foreign, secretName)
 		case generation != nc.Generation:
 			stale = append(stale, secretName)
 		default:
@@ -137,21 +141,29 @@ func (r *NodeClassifierReconciler) observe(ctx context.Context,
 		}
 	}
 
+	switch {
 	// Stale outranks rendered: while any server still runs an earlier spec, the
 	// current one is not in effect, and reporting Ready for a generation that
 	// has not fully landed is the claim this controller exists to avoid.
-	if len(stale) > 0 {
+	case len(stale) > 0:
 		return openvoxv1alpha1.NodeClassifierPhaseError, "RenderedConfigStale",
 			fmt.Sprintf("Secret %s was rendered from an earlier generation of NodeClassifier %s; "+
 				"the current spec has not reached a server", strings.Join(stale, ", "), nc.Name)
-	}
-	if len(rendered) == 0 {
+	case len(rendered) > 0:
+		return openvoxv1alpha1.NodeClassifierPhaseActive, "Rendered",
+			fmt.Sprintf("Endpoint is present in Secret %s", strings.Join(rendered, ", "))
+	case len(unrecorded) > 0:
+		return openvoxv1alpha1.NodeClassifierPhaseError, "RenderSourceUnknown",
+			fmt.Sprintf("Secret %s does not record which resources it was rendered from, so the Config "+
+				"controller has not re-rendered it yet; its contents are unchanged in the meantime",
+				strings.Join(unrecorded, ", "))
+	case len(foreign) > 0:
 		return openvoxv1alpha1.NodeClassifierPhaseError, "NotRendered",
-			fmt.Sprintf("no Secret rendered from NodeClassifier %s exists yet", nc.Name)
+			fmt.Sprintf("Secret %s was rendered from a different NodeClassifier", strings.Join(foreign, ", "))
 	}
 
-	return openvoxv1alpha1.NodeClassifierPhaseActive, "Rendered",
-		fmt.Sprintf("Endpoint is present in Secret %s", strings.Join(rendered, ", "))
+	return openvoxv1alpha1.NodeClassifierPhaseError, "NotRendered",
+		fmt.Sprintf("no Secret rendered from NodeClassifier %s exists yet", nc.Name)
 }
 
 // configsReferencingNodeClassifier returns the Configs in a namespace whose

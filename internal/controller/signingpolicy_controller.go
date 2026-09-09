@@ -140,6 +140,12 @@ func (r *SigningPolicyReconciler) observe(ctx context.Context,
 		return "", reasonLookupFailed, fmt.Sprintf("getting Secret %s: %v", secretName, err)
 	}
 
+	if !renderedSourceRecorded(secret.Annotations) {
+		return openvoxv1alpha1.SigningPolicyPhaseError, "RenderSourceUnknown",
+			fmt.Sprintf("Secret %s does not record which resources it was rendered from, so the Config "+
+				"controller has not re-rendered it yet; its contents are unchanged in the meantime", secretName)
+	}
+
 	// The annotation names the policies the content was rendered from and the
 	// generation each was rendered at. Reading it rather than the rendered
 	// policy list is what separates "my current spec is in effect" from "some

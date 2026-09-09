@@ -230,6 +230,7 @@ itself is well-formed. The `Ready` condition carries the reason:
 | `OverriddenByAutosignCommand` | Every Config referencing the CA sets [`spec.puppet.autosignCommand`](config.md), which replaces the built-in binary and bypasses SigningPolicy resources |
 | `NotRendered` | The Secret does not (yet) contain this policy |
 | `RenderedConfigStale` | The Secret contains this policy, but as it was at an earlier generation |
+| `RenderSourceUnknown` | The Secret predates this mechanism and does not record what it was rendered from; it resolves once the Config controller re-renders |
 
 The Secret's `openvox.voxpupuli.org/rendered-from` annotation names the
 policies its content was built from and the generation each was rendered at,
@@ -237,10 +238,17 @@ which is what separates `Rendered` from `RenderedConfigStale`.
 
 Rendering failures -- an unresolvable `csrAttributes` Secret, for example --
 are reported on the Config that owns the Secret, as an
-`AutosignPolicyRenderFailed` event. Since the failed render leaves the previous
-Secret untouched, the policy reports `RenderedConfigStale` until the edit that
-broke it is corrected: the CA is still signing under the last policy that
-rendered cleanly.
+`AutosignPolicyRenderFailed` event, and the failed render leaves the previous
+Secret untouched.
+
+What the policy reports then depends on whether its own spec changed. If a spec
+edit triggered the failing render, the generation moved on and the policy
+reports `RenderedConfigStale`. If the spec did not change -- the referenced
+`csrAttributes` Secret was rotated or deleted underneath it -- the generation is
+unchanged, the previous Secret still matches it, and the policy keeps reporting
+`Active` while the CA signs under the last policy that rendered cleanly. Watch
+the Config's `AutosignPolicyRenderFailed` events for that case; the policy's own
+status cannot see it.
 
 ## How It Works
 

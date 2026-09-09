@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"testing"
 
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -36,6 +37,34 @@ func testScheme() *runtime.Scheme {
 // setupTestClient creates a fake client pre-loaded with the given objects.
 // StatusSubresource is enabled for all CRD types that use status updates.
 func setupTestClient(objs ...client.Object) client.Client {
+	return testClientBuilder(objs...).Build()
+}
+
+// requireErrorCondition asserts a resource reports the given failure reason and
+// is genuinely not ready. Checking the reason alone would let a condition that
+// names the failure while still reporting Ready=True pass unnoticed.
+//
+// The condition type is not a parameter because every resource with a
+// readiness condition names it "Ready"; see ConditionSigningPolicyReady and
+// its siblings.
+func requireErrorCondition(t *testing.T, conditions []metav1.Condition, reason string) {
+	t.Helper()
+	const condType = openvoxv1alpha1.ConditionSigningPolicyReady
+	cond := meta.FindStatusCondition(conditions, condType)
+	if cond == nil {
+		t.Fatalf("expected a %s condition, got none", condType)
+	}
+	if cond.Reason != reason {
+		t.Errorf("reason = %q, want %q", cond.Reason, reason)
+	}
+	if cond.Status != metav1.ConditionFalse {
+		t.Errorf("status = %q for reason %q, want False", cond.Status, reason)
+	}
+}
+
+// testClientBuilder is setupTestClient stopping short of Build, for tests that
+// need to add interceptors on top of the same scheme, subresources and indexes.
+func testClientBuilder(objs ...client.Object) *fake.ClientBuilder {
 	b := fake.NewClientBuilder().
 		WithScheme(testScheme()).
 		WithObjects(objs...).
@@ -55,7 +84,7 @@ func setupTestClient(objs ...client.Object) client.Client {
 	for _, idx := range fieldIndexes() {
 		b = b.WithIndex(idx.obj, idx.field, idx.extract)
 	}
-	return b.Build()
+	return b
 }
 
 // testRecorder returns a fake event recorder.
@@ -416,7 +445,7 @@ func newCertificateAuthority(name string, opts ...caOption) *openvoxv1alpha1.Cer
 	return ca
 }
 
-func newSigningPolicy(name, caRef string, any bool) *openvoxv1alpha1.SigningPolicy {
+func newSigningPolicy(name, caRef string) *openvoxv1alpha1.SigningPolicy {
 	return &openvoxv1alpha1.SigningPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -424,7 +453,7 @@ func newSigningPolicy(name, caRef string, any bool) *openvoxv1alpha1.SigningPoli
 		},
 		Spec: openvoxv1alpha1.SigningPolicySpec{
 			CertificateAuthorityRef: caRef,
-			Any:                     any,
+			Any:                     true,
 		},
 	}
 }

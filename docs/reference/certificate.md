@@ -31,9 +31,12 @@ spec:
 
 | Field | Type | Description |
 |---|---|---|
+| `observedGeneration` | int64 | The `.metadata.generation` the status was last derived from. A value below `.metadata.generation` means the rest of this status has not caught up with the current spec yet |
 | `phase` | string | Current lifecycle phase |
 | `secretName` | string | Name of the Secret containing `cert.pem` and `key.pem` |
 | `notAfter` | time | Expiry time of the signed certificate |
+| `signedSpecHash` | string | Digest of what the current certificate was issued for: certname, effective alt names and CSR extensions. A mismatch triggers re-signing; empty means the hash was never recorded and is adopted rather than triggering one |
+| `effectiveDNSAltNames` | []string | The alt names the certificate is actually issued for: `spec.dnsAltNames` plus the route hostname of every Pool with `injectDNSAltName` that a Server using this Certificate joins |
 | `conditions` | []Condition | `CertSigned` |
 
 ## Deletion
@@ -88,6 +91,17 @@ renewal happens and does not change the certificate itself.
 Certificates issued before this field existed carry an empty hash. The
 controller adopts the current spec as the baseline for them rather than
 re-signing every certificate after an operator upgrade.
+
+### Renewal reuses the private key
+
+A renewal submits a CSR for the key the certificate already has
+(`certificate_signing.go`: the existing `key.pem` is read from the TLS Secret
+and reused). The CA renews for the same public key, so the key material must
+not change between the old and the new certificate.
+
+The consequence is worth stating: renewal extends validity, it does not rotate
+the key. A key that must be replaced needs a new Certificate under a different
+name, since `certname` is immutable and the CA keeps one entry per name.
 
 ### CSR Poll Backoff
 

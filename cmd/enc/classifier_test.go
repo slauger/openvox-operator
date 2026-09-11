@@ -151,8 +151,8 @@ func TestClassify_GET_JSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(ENCResult{
-			Classes:     map[string]interface{}{"nginx": nil},
-			Parameters:  map[string]interface{}{"role": "proxy"},
+			Classes:     map[string]any{"nginx": nil},
+			Parameters:  map[string]any{"role": "proxy"},
 			Environment: "staging",
 		})
 	}))
@@ -733,7 +733,7 @@ func TestBuildRequestBody_Facts(t *testing.T) {
 		t.Fatalf("buildRequestBody: %v", err)
 	}
 
-	var data map[string]interface{}
+	var data map[string]any
 	if err := json.Unmarshal([]byte(body), &data); err != nil {
 		t.Fatalf("parsing body: %v", err)
 	}
@@ -760,9 +760,10 @@ func TestNormalizeResponse_InvalidJSON(t *testing.T) {
 }
 
 func TestNormalizeResponse_InvalidYAML(t *testing.T) {
+	// The YAML parser is lenient, so this may or may not error; the test
+	// ensures normalizeResponse does not panic on garbage input.
 	_, err := normalizeResponse([]byte(":\n  :\n    - :\n  invalid"), "yaml")
-	// YAML parser is lenient, so this may or may not error; just ensure no panic
-	_ = err
+	t.Logf("normalizeResponse on invalid YAML returned err=%v", err)
 }
 
 func TestLoadENCConfig_InvalidYAML(t *testing.T) {

@@ -17,6 +17,48 @@ metrics:
 
 This passes `--metrics-bind-address=0` to the operator and removes the metrics port from the Deployment.
 
+## Securing the endpoint
+
+By default the metrics endpoint serves plaintext HTTP to anything that can
+reach the pod. It carries no key material, but it does list every certificate
+the operator manages and when each expires - a ready-made inventory. Turn on
+authentication with:
+
+```yaml
+metrics:
+  secure: true
+```
+
+Each scrape then has to present a bearer token, which the operator verifies
+against the API server with a TokenReview and a SubjectAccessReview. The chart
+creates a `{release}-metrics-reader` ClusterRole granting `get` on `/metrics`;
+bind your scraper's ServiceAccount to it. Nothing is bound by default:
+
+```bash
+kubectl create clusterrolebinding prometheus-openvox-metrics \
+  --clusterrole=<release>-openvox-operator-metrics-reader \
+  --serviceaccount=monitoring:prometheus
+```
+
+### The serving certificate
+
+| `metrics.certManager.enabled` | Result |
+|---|---|
+| `true` (default) | cert-manager issues the certificate from the chart's CA issuer, and the bundled ServiceMonitor verifies against it |
+| `false` | the operator generates a self-signed certificate at startup and a new one on every restart, so scrapers must skip verification |
+| `metrics.tls.certSecret` set | your own Secret with `tls.crt` and `tls.key` is mounted instead |
+
+The protection comes from the authentication filter, not from the
+certificate - which is why the self-signed path is usable and why
+`insecureSkipVerify` against an in-cluster endpoint that exposes no secrets is
+not the problem it looks like.
+
+!!! warning "Turning this on breaks existing scrape configurations"
+
+    The endpoint switches to HTTPS and starts requiring a token. Prometheus
+    reports the target as down without saying why. The bundled ServiceMonitor
+    is updated automatically; hand-written scrape configs are not.
+
 ## Custom Metrics
 
 | Metric | Type | Labels | Description |
@@ -114,6 +156,24 @@ Alert when a certificate expires within 30 days:
           description: "{{ $labels.name }} in {{ $labels.namespace }} expires in {{ $value | humanizeDuration }}"
 ```
 
+### Missing CRL series
+
+A stale CRL is alertable only while the series exists. If the operator never
+refreshed the CRL - it crashed early, or the CA never became ready - there is
+no series at all and the staleness rule below stays silent. Alert on the
+absence separately:
+
+```yaml
+      - alert: OpenVoxCRLMetricMissing
+        expr: absent(openvox_crl_last_refresh_timestamp_seconds)
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No CRL refresh has been recorded"
+          description: "The operator has not refreshed any CRL since it started. Revocations are not reaching agents."
+```
+
 ### Stale CRL
 
 A CRL that is no longer refreshed means revoked agents keep being accepted.
@@ -131,6 +191,18 @@ Alert when the last successful refresh is more than a day old:
 ```
 
 ### CA Expiring
+
+!!! note "CAs and certificates share one metric"
+
+    `openvox_certificate_expiry_timestamp_seconds` is written by both the
+    Certificate and the CertificateAuthority controller, with the same
+    `name`/`namespace` labels and nothing that says which kind a series belongs
+    to. Telling them apart in a query means matching on the name.
+
+    The rule below uses `.*-ca`, which is a convention rather than a guarantee:
+    it also catches a Certificate that happens to end in `-ca`, and it misses a
+    CertificateAuthority named otherwise. Replace the matcher with your actual
+    CA names if you rely on the distinction.
 
 Alert when a CA certificate expires within 90 days:
 

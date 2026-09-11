@@ -60,12 +60,17 @@ See [Installation](https://slauger.github.io/openvox-operator/getting-started/in
 | image.tag | string | `""` | Image tag. Defaults to the chart appVersion. Ignored if digest is set. |
 | imagePullSecrets | list | `[]` | Image pull secrets for private registries. |
 | leaderElect | bool | `true` | Enable leader election for controller manager. |
+| metrics.certManager.duration | string | `"8760h"` | Certificate validity. |
+| metrics.certManager.enabled | bool | `true` | Issue the metrics serving certificate with cert-manager. Only used when `secure` is true. Without it the operator generates a self-signed certificate at startup, which scrapers can only skip verifying. |
+| metrics.certManager.renewBefore | string | `"720h"` | Renew this long before expiry. |
 | metrics.enabled | bool | `true` | Enable the metrics endpoint. |
 | metrics.port | int | `8080` | Port for the metrics endpoint. |
+| metrics.secure | bool | `false` | Serve metrics over HTTPS and require an authenticated, authorized client. Off by default so existing scrape configurations keep working; expected to become the default in a later release. Leaving it off serves the metrics as plaintext to anything that can reach the pod. |
 | metrics.service.enabled | bool | `true` | Create a Service for the metrics endpoint. |
 | metrics.serviceMonitor.enabled | bool | `false` | Create a Prometheus ServiceMonitor resource. |
 | metrics.serviceMonitor.interval | string | `"30s"` | Scrape interval for the ServiceMonitor. |
 | metrics.serviceMonitor.labels | object | `{}` | Additional labels for the ServiceMonitor. |
+| metrics.tls.certSecret | string | `""` | Secret holding `tls.crt` and `tls.key` for the metrics endpoint. Set this to bring your own certificate instead of the cert-manager issued one. |
 | nodeSelector | object | `{}` | Node selector for pod scheduling. |
 | podAnnotations | object | `{}` | Annotations applied to the operator Pod template (e.g. for log collectors, Prometheus scraping, or forcing rollouts via a checksum annotation). |
 | replicaCount | int | `1` | Number of operator pod replicas. |

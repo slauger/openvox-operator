@@ -107,6 +107,10 @@ spec:
 
 The `openvox-stack` chart provides a `gateway` section for shared Gateway settings:
 
+A Pool does not name its servers. The relationship runs the other way: each
+entry under `servers` lists the pools it joins via `poolRefs`, and the Pool
+selects those pods through its Service.
+
 ```yaml
 gateway:
   name: puppet-gateway
@@ -114,7 +118,6 @@ gateway:
 
 pools:
   - name: puppet
-    serverRef: ca
     service:
       type: ClusterIP
       port: 8140

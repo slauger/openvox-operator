@@ -10,7 +10,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -112,7 +112,7 @@ func parseCertNotAfter(ctx context.Context, certPEM []byte) *metav1.Time {
 func isSecretReady(ctx context.Context, reader client.Reader, name, namespace, requiredKey string) bool {
 	secret := &corev1.Secret{}
 	if err := reader.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, secret); err != nil {
-		if !errors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			log.FromContext(ctx).Error(err, "failed to get Secret", "name", name, "namespace", namespace)
 		}
 		return false
@@ -340,6 +340,16 @@ func resolveReadOnlyRootFilesystem(server *openvoxv1alpha1.Server, cfg *openvoxv
 		return *server.Spec.ReadOnlyRootFilesystem
 	}
 	return openvoxv1alpha1.BoolValue(cfg.Spec.ReadOnlyRootFilesystem, true)
+}
+
+// operatorSigningCertname is the certname the operator issues to itself for
+// mTLS against the CA API.
+//
+// The CA auth.conf grants admin rights to this name, so it is also the name the
+// autosign policy reserves. Both derive from here: a drift between them would
+// reserve one name while granting admin to another.
+func operatorSigningCertname(caName string) string {
+	return fmt.Sprintf("%s-operator", caName)
 }
 
 // serverRoleEnabled reports whether the Server runs the catalog server role.

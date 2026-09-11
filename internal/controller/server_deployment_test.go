@@ -220,7 +220,7 @@ func TestBuildPodSpec_AutosignCommandSkipsPolicyMount(t *testing.T) {
 
 func TestBuildPodSpec_ExternalNodesCommandSkipsENCMount(t *testing.T) {
 	cfg := newConfig("production",
-		withNodeClassifierRef("my-enc"),
+		withNodeClassifierRef(),
 		withExternalNodesCommand("/usr/local/bin/custom-enc"),
 	)
 	server := newServer("test-server", withServerRole(true))
@@ -465,7 +465,7 @@ func TestBuildPodSpec_SecurityContextOverride(t *testing.T) {
 }
 
 func TestBuildPodSpec_ENCVolumes(t *testing.T) {
-	cfg := newConfig("production", withNodeClassifierRef("my-enc"))
+	cfg := newConfig("production", withNodeClassifierRef())
 	server := newServer("test-server", withServerRole(true))
 
 	podSpec := testBuildPodSpec(server, cfg)

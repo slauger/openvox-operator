@@ -52,7 +52,7 @@ func (r *ConfigReconciler) renderPuppetConf(ctx context.Context, cfg *openvoxv1a
 		if reports == "" {
 			reports = "webhook"
 		} else if !strings.Contains(reports, "webhook") {
-			reports = reports + ",webhook"
+			reports += ",webhook"
 		}
 	}
 	if reports != "" {
@@ -76,12 +76,12 @@ func (r *ConfigReconciler) renderPuppetConf(ctx context.Context, cfg *openvoxv1a
 		}
 
 		// Autosign: by default point to the built-in binary, which reads the policy
-		// Secret (mounted by the server controller) and decides sign/deny. A policy
-		// change rewrites the Secret and the server controller rolls the CA pod via
-		// the autosign-policy-secret-hash annotation, so it applies without a manual
-		// restart. A custom autosignCommand replaces the built-in binary and disables
-		// the SigningPolicy-driven flow (the policy Secret is not mounted).
-		autosignCmd := autosignBinaryPath
+		// Secret (mounted by the server controller as a directory) and decides
+		// sign/deny. The binary re-reads the file on every CSR and the kubelet keeps
+		// the mount in sync, so a policy change applies without restarting the CA.
+		// A custom autosignCommand replaces the built-in binary and disables the
+		// SigningPolicy-driven flow (the policy Secret is not mounted).
+		autosignCmd := fmt.Sprintf("%s --config %s", autosignBinaryPath, autosignPolicyPath)
 		if cfg.Spec.Puppet.AutosignCommand != "" {
 			autosignCmd = cfg.Spec.Puppet.AutosignCommand
 		}
@@ -270,7 +270,7 @@ func (r *ConfigReconciler) renderAuthConf(cfg *openvoxv1alpha1.Config, ca *openv
 	// Derive the operator-signing certname when an internal CA exists.
 	var operatorCertname string
 	if ca != nil && ca.Spec.External == nil {
-		operatorCertname = fmt.Sprintf("%s-operator", ca.Name)
+		operatorCertname = operatorSigningCertname(ca.Name)
 	}
 
 	var sb strings.Builder
@@ -297,11 +297,12 @@ func (r *ConfigReconciler) renderAuthConf(cfg *openvoxv1alpha1.Config, ca *openv
 			}
 		}
 		sb.WriteString("            }\n")
-		if rule.AllowUnauthenticated {
+		switch {
+		case rule.AllowUnauthenticated:
 			sb.WriteString("            allow-unauthenticated: true\n")
-		} else if rule.Allow != "" {
+		case rule.Allow != "":
 			fmt.Fprintf(&sb, "            allow: %q\n", rule.Allow)
-		} else if rule.Deny != "" {
+		case rule.Deny != "":
 			fmt.Fprintf(&sb, "            deny: %q\n", rule.Deny)
 		}
 		sortOrder := rule.SortOrder

@@ -27,7 +27,7 @@ func TestFindConfigForCA_Deterministic(t *testing.T) {
 	)
 	r := newCertificateAuthorityReconciler(c)
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		cfg, err := r.findConfigForCA(testCtx(), ca)
 		if err != nil {
 			t.Fatalf("lookup %d: %v", i, err)

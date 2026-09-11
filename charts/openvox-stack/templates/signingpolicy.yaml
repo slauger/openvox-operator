@@ -9,8 +9,8 @@ spec:
   {{- if $entry.any }}
   any: true
   {{- end }}
-  {{- with $entry.pattern }}
-  pattern:
+  {{- with $entry.certnames }}
+  certnames:
     allow:
       {{- range .allow }}
       - {{ . | quote }}
@@ -18,6 +18,34 @@ spec:
   {{- end }}
   {{- with $entry.dnsAltNames }}
   dnsAltNames:
+    allow:
+      {{- range .allow }}
+      - {{ . | quote }}
+      {{- end }}
+  {{- end }}
+  {{- with $entry.ipAltNames }}
+  ipAltNames:
+    allow:
+      {{- range .allow }}
+      - {{ . | quote }}
+      {{- end }}
+  {{- end }}
+  {{- with $entry.uriAltNames }}
+  uriAltNames:
+    allow:
+      {{- range .allow }}
+      - {{ . | quote }}
+      {{- end }}
+  {{- end }}
+  {{- with $entry.emailAltNames }}
+  emailAltNames:
+    allow:
+      {{- range .allow }}
+      - {{ . | quote }}
+      {{- end }}
+  {{- end }}
+  {{- with $entry.extensions }}
+  extensions:
     allow:
       {{- range .allow }}
       - {{ . | quote }}

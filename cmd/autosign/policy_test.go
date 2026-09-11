@@ -8,12 +8,48 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/pem"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/slauger/openvox-operator/internal/puppet"
 )
+
+// generateCSRWithSANs creates a test CSR carrying the given SAN sets.
+func generateCSRWithSANs(t *testing.T, cn string, dns []string, ips []net.IP, uris []*url.URL, emails []string) *x509.CertificateRequest {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generating key: %v", err)
+	}
+	template := &x509.CertificateRequest{
+		Subject:        pkix.Name{CommonName: cn},
+		DNSNames:       dns,
+		IPAddresses:    ips,
+		URIs:           uris,
+		EmailAddresses: emails,
+	}
+	csrDER, err := x509.CreateCertificateRequest(rand.Reader, template, key)
+	if err != nil {
+		t.Fatalf("creating CSR: %v", err)
+	}
+	csr, err := x509.ParseCertificateRequest(csrDER)
+	if err != nil {
+		t.Fatalf("parsing CSR: %v", err)
+	}
+	return csr
+}
+
+func mustURL(t *testing.T, raw string) *url.URL {
+	t.Helper()
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("parsing URL %q: %v", raw, err)
+	}
+	return u
+}
 
 // generateCSR creates a test CSR with optional SANs and extensions.
 func generateCSR(t *testing.T, cn string, dnsNames []string, extensions []pkix.Extension) *x509.CertificateRequest {
@@ -73,7 +109,7 @@ func TestLoadPolicyConfig(t *testing.T) {
 - name: allow-all
   any: true
 - name: pattern-match
-  pattern:
+  certnames:
     allow:
       - "*.example.com"
 `
@@ -91,7 +127,7 @@ func TestLoadPolicyConfig(t *testing.T) {
 	if !cfg.Policies[0].Any {
 		t.Error("expected first policy to have any=true")
 	}
-	if cfg.Policies[1].Pattern == nil {
+	if cfg.Policies[1].Certnames == nil {
 		t.Error("expected second policy to have pattern")
 	}
 }
@@ -164,8 +200,8 @@ func TestEvaluatePolicies_NoPolicies(t *testing.T) {
 
 func TestEvaluatePolicy_PatternMatch(t *testing.T) {
 	policy := Policy{
-		Name:    "pattern",
-		Pattern: &PatternConf{Allow: []string{"*.example.com"}},
+		Name:      "pattern",
+		Certnames: &PatternConf{Allow: []string{"*.example.com"}},
 	}
 	csr := generateCSR(t, "node1.example.com", nil, nil)
 
@@ -180,8 +216,8 @@ func TestEvaluatePolicy_PatternMatch(t *testing.T) {
 
 func TestEvaluatePolicy_PatternMultiple(t *testing.T) {
 	policy := Policy{
-		Name:    "multi-pattern",
-		Pattern: &PatternConf{Allow: []string{"*.prod.com", "*.staging.com"}},
+		Name:      "multi-pattern",
+		Certnames: &PatternConf{Allow: []string{"*.prod.com", "*.staging.com"}},
 	}
 	csr := generateCSR(t, "node1.staging.com", nil, nil)
 
@@ -205,8 +241,8 @@ func TestEvaluatePolicy_CSRAttributes(t *testing.T) {
 	csr := generateCSR(t, "node1", nil, []pkix.Extension{ext})
 
 	policy := Policy{
-		Name:    "env-check",
-		Pattern: &PatternConf{Allow: []string{"*"}},
+		Name:      "env-check",
+		Certnames: &PatternConf{Allow: []string{"*"}},
 		CSRAttributes: []CSRAttributeConf{
 			{Name: "pp_environment", Value: "production"},
 		},
@@ -226,8 +262,8 @@ func TestEvaluatePolicy_CSRAttributeNotPresent(t *testing.T) {
 	csr := generateCSR(t, "node1", nil, nil)
 
 	policy := Policy{
-		Name:    "env-check",
-		Pattern: &PatternConf{Allow: []string{"*"}},
+		Name:      "env-check",
+		Certnames: &PatternConf{Allow: []string{"*"}},
 		CSRAttributes: []CSRAttributeConf{
 			{Name: "pp_environment", Value: "production"},
 		},
@@ -244,7 +280,7 @@ func TestEvaluatePolicy_DNSAltNames(t *testing.T) {
 	// Policy allows the SANs
 	policy := Policy{
 		Name:        "with-sans",
-		Pattern:     &PatternConf{Allow: []string{"puppet"}},
+		Certnames:   &PatternConf{Allow: []string{"puppet"}},
 		DNSAltNames: &PatternConf{Allow: []string{"*.example.com", "*.local"}},
 	}
 	if !evaluatePolicy(policy, "puppet", csr) {
@@ -263,8 +299,8 @@ func TestEvaluatePolicy_DNSAltNamesNotAllowed(t *testing.T) {
 
 	// Policy has no dnsAltNames field but CSR has SANs -> deny
 	policy := Policy{
-		Name:    "no-sans",
-		Pattern: &PatternConf{Allow: []string{"*"}},
+		Name:      "no-sans",
+		Certnames: &PatternConf{Allow: []string{"*"}},
 	}
 	if evaluatePolicy(policy, "node1", csr) {
 		t.Error("expected CSR with SANs but no SAN policy to deny")
@@ -277,8 +313,8 @@ func TestEvaluatePolicy_ANDLogic(t *testing.T) {
 	csr := generateCSR(t, "web1.prod.com", nil, []pkix.Extension{ext})
 
 	policy := Policy{
-		Name:    "and-logic",
-		Pattern: &PatternConf{Allow: []string{"*.prod.com"}},
+		Name:      "and-logic",
+		Certnames: &PatternConf{Allow: []string{"*.prod.com"}},
 		CSRAttributes: []CSRAttributeConf{
 			{Name: "pp_role", Value: "webserver"},
 		},
@@ -301,8 +337,8 @@ func TestEvaluatePolicies_ORLogic(t *testing.T) {
 
 	cfg := &PolicyConfig{
 		Policies: []Policy{
-			{Name: "prod-only", Pattern: &PatternConf{Allow: []string{"*.prod.com"}}},
-			{Name: "staging-only", Pattern: &PatternConf{Allow: []string{"*.staging.com"}}},
+			{Name: "prod-only", Certnames: &PatternConf{Allow: []string{"*.prod.com"}}},
+			{Name: "staging-only", Certnames: &PatternConf{Allow: []string{"*.staging.com"}}},
 		},
 	}
 
@@ -438,5 +474,205 @@ func TestGlobMatch_InvalidPattern(t *testing.T) {
 	// filepath.Match returns error for patterns with unclosed bracket
 	if globMatch("[invalid", "test") {
 		t.Error("expected false for invalid glob pattern")
+	}
+}
+
+func ppCliAuthExt(t *testing.T) []pkix.Extension {
+	t.Helper()
+	oid, ok := puppet.OIDByName("pp_cli_auth")
+	if !ok {
+		t.Fatal("pp_cli_auth OID not found")
+	}
+	return []pkix.Extension{makeExtension(t, oid, "true")}
+}
+
+// A privileged authorization extension must be denied even by an any:true policy
+// unless the policy explicitly allows it.
+func TestGuardExtensions_AnyTrueStillGated(t *testing.T) {
+	csr := generateCSR(t, "node.example.com", nil, ppCliAuthExt(t))
+
+	deny := Policy{Name: "bootstrap", Any: true}
+	if evaluatePolicy(deny, "node.example.com", csr) {
+		t.Error("any:true must not sign a CSR carrying pp_cli_auth without extensions.allow")
+	}
+
+	allow := Policy{Name: "bootstrap", Any: true, Extensions: &PatternConf{Allow: []string{"pp_cli_auth"}}}
+	if !evaluatePolicy(allow, "node.example.com", csr) {
+		t.Error("any:true with extensions.allow [pp_cli_auth] should sign")
+	}
+}
+
+// A certname-matching policy without extensions.allow must deny a pp_cli_auth CSR.
+func TestGuardExtensions_PatternPolicyDenies(t *testing.T) {
+	csr := generateCSR(t, "worker-1", nil, ppCliAuthExt(t))
+	p := Policy{Name: "workers", Certnames: &PatternConf{Allow: []string{"worker-*"}}}
+	if evaluatePolicy(p, "worker-1", csr) {
+		t.Error("pattern policy without extensions.allow must deny pp_cli_auth CSR")
+	}
+}
+
+// Trusted-fact extensions (...1.1.* arc) are not gated.
+func TestGuardExtensions_TrustedFactNotGated(t *testing.T) {
+	oid, _ := puppet.OIDByName("pp_role")
+	csr := generateCSR(t, "worker-1", nil, []pkix.Extension{makeExtension(t, oid, "web")})
+	p := Policy{Name: "workers", Certnames: &PatternConf{Allow: []string{"worker-*"}}}
+	if !evaluatePolicy(p, "worker-1", csr) {
+		t.Error("trusted-fact extension pp_role must not be gated")
+	}
+}
+
+// An authorization-arc OID with no known name cannot be allow-listed and is denied.
+func TestGuardExtensions_UnknownAuthzOIDDenied(t *testing.T) {
+	unknown := asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 34380, 1, 3, 999}
+	csr := generateCSR(t, "node", nil, []pkix.Extension{makeExtension(t, unknown, "x")})
+	p := Policy{Name: "any", Any: true, Extensions: &PatternConf{Allow: []string{"pp_cli_auth"}}}
+	if evaluatePolicy(p, "node", csr) {
+		t.Error("unknown authorization-arc OID must be denied, not allow-listable")
+	}
+}
+
+func TestGuardSANs_IPCIDR(t *testing.T) {
+	csr := generateCSRWithSANs(t, "svc", nil, []net.IP{net.ParseIP("10.0.5.4")}, nil, nil)
+
+	allow := Policy{Name: "svc", Any: true, IPAltNames: &PatternConf{Allow: []string{"10.0.0.0/16"}}}
+	if !evaluatePolicy(allow, "svc", csr) {
+		t.Error("IP within allowed CIDR should sign")
+	}
+
+	outside := Policy{Name: "svc", Any: true, IPAltNames: &PatternConf{Allow: []string{"192.168.0.0/16"}}}
+	if evaluatePolicy(outside, "svc", csr) {
+		t.Error("IP outside allowed CIDR must be denied")
+	}
+
+	// IP SAN present but no ipAltNames → deny, even for any:true.
+	none := Policy{Name: "svc", Any: true}
+	if evaluatePolicy(none, "svc", csr) {
+		t.Error("IP SAN without ipAltNames must be denied")
+	}
+}
+
+func TestGuardSANs_URIWildcard(t *testing.T) {
+	csr := generateCSRWithSANs(t, "svc", nil, nil,
+		[]*url.URL{mustURL(t, "spiffe://example.com/workload/db")}, nil)
+
+	allow := Policy{Name: "svc", Any: true, URIAltNames: &PatternConf{Allow: []string{"spiffe://example.com/workload/*"}}}
+	if !evaluatePolicy(allow, "svc", csr) {
+		t.Error("URI matching wildcard (across '/') should sign")
+	}
+
+	deny := Policy{Name: "svc", Any: true, URIAltNames: &PatternConf{Allow: []string{"spiffe://other.com/*"}}}
+	if evaluatePolicy(deny, "svc", csr) {
+		t.Error("URI not matching allow must be denied")
+	}
+}
+
+func TestGuardSANs_EmailWildcard(t *testing.T) {
+	csr := generateCSRWithSANs(t, "svc", nil, nil, nil, []string{"ops@example.com"})
+	allow := Policy{Name: "svc", Any: true, EmailAltNames: &PatternConf{Allow: []string{"*@example.com"}}}
+	if !evaluatePolicy(allow, "svc", csr) {
+		t.Error("email matching *@example.com should sign")
+	}
+	deny := Policy{Name: "svc", Any: true, EmailAltNames: &PatternConf{Allow: []string{"*@other.com"}}}
+	if evaluatePolicy(deny, "svc", csr) {
+		t.Error("email not matching allow must be denied")
+	}
+}
+
+func TestWildcardMatch(t *testing.T) {
+	cases := []struct {
+		pattern, name string
+		want          bool
+	}{
+		{"spiffe://example.com/workload/*", "spiffe://example.com/workload/db", true},
+		{"spiffe://example.com/*", "spiffe://example.com/a/b/c", true},
+		{"*@example.com", "ops@example.com", true},
+		{"*@example.com", "ops@other.com", false},
+		{"exact", "exact", true},
+		{"exact", "other", false},
+		{"*", "anything/at@all", true},
+		{"a*b*c", "axxbyyc", true},
+		{"a*b*c", "axxc", false},
+	}
+	for _, c := range cases {
+		if got := wildcardMatch(c.pattern, c.name); got != c.want {
+			t.Errorf("wildcardMatch(%q, %q) = %v, want %v", c.pattern, c.name, got, c.want)
+		}
+	}
+}
+
+// --- reserved certnames and subject binding ---
+
+// TestReservedCertname_DeniedEvenByAnyPolicy is the point of the reservation.
+// The CA auth.conf grants admin rights by certname as well as by extension, so
+// a policy must never be able to hand that name to an agent - and any: true
+// would otherwise approve unconditionally once the guards pass, and the guards
+// inspect the CSR, not the name.
+func TestReservedCertname_DeniedEvenByAnyPolicy(t *testing.T) {
+	cfg := &PolicyConfig{
+		ReservedCertnames: []string{"production-ca-operator"},
+		Policies:          []Policy{{Name: "open", Any: true}},
+	}
+	csr := generateCSR(t, "production-ca-operator", nil, nil)
+
+	if evaluatePolicies(cfg, "production-ca-operator", csr) {
+		t.Error("a reserved certname must never be signed, not even under any: true")
+	}
+}
+
+// TestReservedCertname_CaseInsensitive closes the obvious way around it, since
+// Puppet lowercases certnames.
+func TestReservedCertname_CaseInsensitive(t *testing.T) {
+	cfg := &PolicyConfig{
+		ReservedCertnames: []string{"production-ca-operator"},
+		Policies:          []Policy{{Name: "open", Any: true}},
+	}
+	csr := generateCSR(t, "Production-CA-Operator", nil, nil)
+
+	if evaluatePolicies(cfg, "Production-CA-Operator", csr) {
+		t.Error("the reservation must not depend on capitalisation")
+	}
+}
+
+// TestReservedCertname_LeavesOtherNamesAlone bounds the rule.
+func TestReservedCertname_LeavesOtherNamesAlone(t *testing.T) {
+	cfg := &PolicyConfig{
+		ReservedCertnames: []string{"production-ca-operator"},
+		Policies:          []Policy{{Name: "open", Any: true}},
+	}
+	csr := generateCSR(t, "web01.example.com", nil, nil)
+
+	if !evaluatePolicies(cfg, "web01.example.com", csr) {
+		t.Error("an ordinary agent must still be signed")
+	}
+}
+
+// TestSubjectMustMatchCertname covers the second half of the same escalation.
+// puppetserver takes the certname from the request path and passes it as the
+// argument; the CN lives in the CSR subject. Judging the argument while signing
+// the document means the policy can approve a name the certificate will not
+// carry - here a harmless one, while the CSR asks for the reserved name.
+func TestSubjectMustMatchCertname(t *testing.T) {
+	cfg := &PolicyConfig{
+		ReservedCertnames: []string{"production-ca-operator"},
+		Policies:          []Policy{{Name: "open", Any: true}},
+	}
+	csr := generateCSR(t, "production-ca-operator", nil, nil)
+
+	if evaluatePolicies(cfg, "harmless-node", csr) {
+		t.Error("a CSR whose subject differs from the requested certname must be refused")
+	}
+}
+
+// TestSubjectMatchesCertname_AcceptsTheNormalCase makes sure the check does not
+// reject everyday enrolment.
+func TestSubjectMatchesCertname_AcceptsTheNormalCase(t *testing.T) {
+	cfg := &PolicyConfig{Policies: []Policy{{Name: "open", Any: true}}}
+	csr := generateCSR(t, "web01.example.com", nil, nil)
+
+	if !evaluatePolicies(cfg, "web01.example.com", csr) {
+		t.Error("matching subject and certname must pass")
+	}
+	if !evaluatePolicies(cfg, "WEB01.example.com", csr) {
+		t.Error("the comparison must ignore capitalisation")
 	}
 }

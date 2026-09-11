@@ -86,7 +86,7 @@ func newConfig(name string, opts ...configOption) *openvoxv1alpha1.Config {
 			Namespace: testNamespace,
 		},
 		Spec: openvoxv1alpha1.ConfigSpec{
-			ReadOnlyRootFilesystem: boolPtr(true),
+			ReadOnlyRootFilesystem: new(true),
 			Image: openvoxv1alpha1.ImageSpec{
 				Repository: "ghcr.io/slauger/openvox-server-8",
 				Tag:        "latest",
@@ -96,7 +96,7 @@ func newConfig(name string, opts ...configOption) *openvoxv1alpha1.Config {
 				EnvironmentTimeout: "unlimited",
 				EnvironmentPath:    "/etc/puppetlabs/code/environments",
 				HieraConfig:        "$confdir/hiera.yaml",
-				Storeconfigs:       boolPtr(true),
+				Storeconfigs:       new(true),
 				StoreBackend:       "puppetdb",
 				Reports:            "puppetdb",
 			},
@@ -114,15 +114,15 @@ func withAuthorityRef(ref string) configOption {
 	}
 }
 
-func withNodeClassifierRef(ref string) configOption {
+func withNodeClassifierRef() configOption {
 	return func(c *openvoxv1alpha1.Config) {
-		c.Spec.NodeClassifierRef = ref
+		c.Spec.NodeClassifierRef = "my-enc"
 	}
 }
 
 func withReadOnlyRootFS(v bool) configOption {
 	return func(c *openvoxv1alpha1.Config) {
-		c.Spec.ReadOnlyRootFilesystem = boolPtr(v)
+		c.Spec.ReadOnlyRootFilesystem = new(v)
 	}
 }
 
@@ -201,7 +201,7 @@ func newServer(name string, opts ...serverOption) *openvoxv1alpha1.Server {
 		Spec: openvoxv1alpha1.ServerSpec{
 			ConfigRef:      "production",
 			CertificateRef: "production-cert",
-			Server:         boolPtr(true),
+			Server:         new(true),
 			CA:             false,
 			Replicas:       &replicas,
 		},
@@ -216,14 +216,14 @@ func withCA(ca bool) serverOption {
 	return func(s *openvoxv1alpha1.Server) {
 		s.Spec.CA = ca
 		if ca && !serverRoleEnabled(s) {
-			s.Spec.Server = boolPtr(false)
+			s.Spec.Server = new(false)
 		}
 	}
 }
 
 func withServerRole(server bool) serverOption {
 	return func(s *openvoxv1alpha1.Server) {
-		s.Spec.Server = boolPtr(server)
+		s.Spec.Server = new(server)
 	}
 }
 
@@ -320,10 +320,10 @@ func withServiceAnnotations(a map[string]string) poolOption {
 	}
 }
 
-func withRoute(enabled bool, hostname, gwName string) poolOption {
+func withRoute(hostname, gwName string) poolOption {
 	return func(p *openvoxv1alpha1.Pool) {
 		p.Spec.Route = &openvoxv1alpha1.PoolRouteSpec{
-			Enabled:  enabled,
+			Enabled:  true,
 			Hostname: hostname,
 			GatewayRef: openvoxv1alpha1.GatewayReference{
 				Name: gwName,
@@ -395,10 +395,10 @@ func newCertificateAuthority(name string, opts ...caOption) *openvoxv1alpha1.Cer
 		},
 		Spec: openvoxv1alpha1.CertificateAuthoritySpec{
 			TTL:                          "5y",
-			AllowSubjectAltNames:         boolPtr(true),
-			AllowAuthorizationExtensions: boolPtr(true),
-			EnableInfraCRL:               boolPtr(true),
-			AllowAutoRenewal:             boolPtr(true),
+			AllowSubjectAltNames:         new(true),
+			AllowAuthorizationExtensions: new(true),
+			EnableInfraCRL:               new(true),
+			AllowAutoRenewal:             new(true),
 			AutoRenewalCertTTL:           "90d",
 		},
 	}
@@ -449,14 +449,14 @@ func newNodeClassifier(name, url string) *openvoxv1alpha1.NodeClassifier {
 	}
 }
 
-func newReportProcessor(name, configRef, url string) *openvoxv1alpha1.ReportProcessor {
+func newReportProcessor(name, url string) *openvoxv1alpha1.ReportProcessor {
 	return &openvoxv1alpha1.ReportProcessor{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: testNamespace,
 		},
 		Spec: openvoxv1alpha1.ReportProcessorSpec{
-			ConfigRef:      configRef,
+			ConfigRef:      "production",
 			URL:            url,
 			TimeoutSeconds: 30,
 		},
@@ -495,7 +495,7 @@ func newEndpointSlice(name, serviceName string, readyCount int) *discoveryv1.End
 		AddressType: discoveryv1.AddressTypeIPv4,
 	}
 	ready := true
-	for i := 0; i < readyCount; i++ {
+	for range readyCount {
 		eps.Endpoints = append(eps.Endpoints, discoveryv1.Endpoint{
 			Conditions: discoveryv1.EndpointConditions{
 				Ready: &ready,

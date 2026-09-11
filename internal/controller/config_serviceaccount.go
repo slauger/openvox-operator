@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -19,7 +19,7 @@ func (r *ConfigReconciler) reconcileServerServiceAccount(ctx context.Context, cf
 
 	sa := &corev1.ServiceAccount{}
 	err := r.Get(ctx, types.NamespacedName{Name: saName, Namespace: cfg.Namespace}, sa)
-	if errors.IsNotFound(err) {
+	if apierrors.IsNotFound(err) {
 		sa = &corev1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      saName,

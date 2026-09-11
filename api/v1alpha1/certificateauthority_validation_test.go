@@ -9,7 +9,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/utils/ptr"
 )
 
 func validCA() *CertificateAuthority {
@@ -44,7 +43,7 @@ func TestCertificateAuthorityStorageExclusivity(t *testing.T) {
 		{
 			name: "storage without external accepted",
 			mutate: func(ca *CertificateAuthority) {
-				ca.Spec.Storage = &StorageSpec{Size: ptr.To(resource.MustParse("10Gi"))}
+				ca.Spec.Storage = &StorageSpec{Size: new(resource.MustParse("10Gi"))}
 			},
 		},
 		{
@@ -57,7 +56,7 @@ func TestCertificateAuthorityStorageExclusivity(t *testing.T) {
 			name: "external with custom storage rejected",
 			mutate: func(ca *CertificateAuthority) {
 				ca.Spec.External = external
-				ca.Spec.Storage = &StorageSpec{Size: ptr.To(resource.MustParse("10Gi"))}
+				ca.Spec.Storage = &StorageSpec{Size: new(resource.MustParse("10Gi"))}
 			},
 			wantErr: "external and storage are mutually exclusive",
 		},
@@ -65,7 +64,7 @@ func TestCertificateAuthorityStorageExclusivity(t *testing.T) {
 			name: "external with storage at the default size rejected",
 			mutate: func(ca *CertificateAuthority) {
 				ca.Spec.External = external
-				ca.Spec.Storage = &StorageSpec{Size: ptr.To(resource.MustParse("1Gi"))}
+				ca.Spec.Storage = &StorageSpec{Size: new(resource.MustParse("1Gi"))}
 			},
 			wantErr: "external and storage are mutually exclusive",
 		},
@@ -136,15 +135,15 @@ func TestCertificateAuthorityStorageSizeValidation(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("invalid quantity rejected", func(t *testing.T) {
-		raw := &unstructured.Unstructured{Object: map[string]interface{}{
+		raw := &unstructured.Unstructured{Object: map[string]any{
 			"apiVersion": GroupVersion.String(),
 			"kind":       "CertificateAuthority",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"generateName": "test-ca-",
 				"namespace":    "default",
 			},
-			"spec": map[string]interface{}{
-				"storage": map[string]interface{}{"size": "1Gib"},
+			"spec": map[string]any{
+				"storage": map[string]any{"size": "1Gib"},
 			},
 		}}
 		err := k8sClient.Create(ctx, raw)
@@ -159,7 +158,7 @@ func TestCertificateAuthorityStorageSizeValidation(t *testing.T) {
 
 	t.Run("valid quantity accepted", func(t *testing.T) {
 		ca := validCA()
-		ca.Spec.Storage = &StorageSpec{Size: ptr.To(resource.MustParse("500Mi"))}
+		ca.Spec.Storage = &StorageSpec{Size: new(resource.MustParse("500Mi"))}
 		if err := k8sClient.Create(ctx, ca); err != nil {
 			t.Fatalf("a valid quantity must be accepted, got: %v", err)
 		}

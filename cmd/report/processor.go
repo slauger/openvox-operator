@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -55,7 +56,7 @@ type HeaderConfig struct {
 
 // loadReportConfig reads and parses the report config YAML file.
 func loadReportConfig(path string) (*ReportConfig, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return nil, fmt.Errorf("reading report config: %w", err)
 	}
@@ -144,7 +145,7 @@ func buildHTTPClient(endpoint EndpointConfig) (*http.Client, error) {
 
 	// Load CA certificate for server verification
 	if endpoint.SSL.CAFile != "" {
-		caCert, err := os.ReadFile(endpoint.SSL.CAFile)
+		caCert, err := os.ReadFile(filepath.Clean(endpoint.SSL.CAFile))
 		if err != nil {
 			return nil, fmt.Errorf("reading CA cert: %w", err)
 		}

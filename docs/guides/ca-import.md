@@ -28,7 +28,7 @@ If you have an existing CA and want the operator to manage it going forward, you
 
     ```bash
     # Find the PVC
-    kubectl get pvc -l openvox.voxpupuli.org/certificate-authority=production-ca
+    kubectl get pvc -l openvox.voxpupuli.org/certificateauthority=production-ca
 
     # Create a temporary pod to copy data
     kubectl run ca-import --image=busybox --restart=Never \

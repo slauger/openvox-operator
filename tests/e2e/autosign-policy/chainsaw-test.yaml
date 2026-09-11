@@ -124,6 +124,83 @@ spec:
               kubectl wait --for=jsonpath='{.status.failed}'=1 job/puppet-agent-nomatch \
                 -n e2e-autosign-policy --timeout=120s
 
+    - name: Agent requesting the reserved operator certname (expect failure)
+      description: |
+        The CA auth.conf grants admin rights to the operator-signing certname as
+        well as to the pp_cli_auth extension, so an agent that obtained a
+        certificate under that name would be a CA admin.
+
+        This agent presents the *correct* preshared key, so the policy itself
+        would approve it.
+
+        What this step can and cannot show: the operator already holds a
+        certificate under that name, so puppetserver would refuse a second CSR
+        for it regardless. The job failing is therefore a regression guard, not
+        proof of the reservation. The reservation matters for the window before
+        the operator issues its own certificate, and after that certificate is
+        removed - neither of which is reachable from a chainsaw step. It is
+        proven by unit tests in cmd/autosign; what is asserted end to end here
+        is that the operator wires the reservation into the rendered policy.
+      try:
+        - apply:
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: puppet-agent-reserved
+                namespace: e2e-autosign-policy
+              spec:
+                activeDeadlineSeconds: 60
+                backoffLimit: 0
+                template:
+                  spec:
+                    restartPolicy: Never
+                    containers:
+                      - name: puppet-agent
+                        image: (join('', [$registry, '/openvox-agent-', $major, ':', $imageTag]))
+                        imagePullPolicy: Always
+                        command: ["sh", "-c"]
+                        args:
+                          - |
+                            mkdir -p /etc/puppetlabs/puppet
+                            cat > /etc/puppetlabs/puppet/csr_attributes.yaml << 'CSRATTR'
+                            extension_requests:
+                              pp_preshared_key: e2e-correct-key
+                            CSRATTR
+                            puppet agent --test \
+                              --server e2e-autosign-policy-server \
+                              --waitforcert 5 \
+                              --certname e2e-autosign-policy-ca-operator;
+                            EXIT=$?;
+                            if [ $EXIT -eq 0 ] || [ $EXIT -eq 2 ]; then exit 0; else exit $EXIT; fi
+                        securityContext:
+                          runAsUser: 0
+        - script:
+            timeout: 3m
+            content: |
+              kubectl wait --for=jsonpath='{.status.failed}'=1 job/puppet-agent-reserved \
+                -n e2e-autosign-policy --timeout=120s
+        - script:
+            timeout: 1m
+            content: |
+              set -eu
+              # Assert the operator actually wired the reservation into the
+              # policy the autosign binary reads. Checking the CA's signed
+              # directory would prove nothing here: the operator legitimately
+              # holds a certificate under this name, so the file exists either
+              # way - and because the name is taken, puppetserver would refuse a
+              # second CSR for it even without the reservation.
+              POLICY=$(kubectl get secret e2e-autosign-policy-ca-autosign-policy \
+                -n e2e-autosign-policy -o jsonpath='{.data.autosign-policy\.yaml}' | base64 -d)
+
+              echo "${POLICY}" | grep -q "reservedCertnames:" \
+                || { echo "ERROR: the rendered policy carries no reservation"; echo "${POLICY}"; exit 1; }
+              echo "${POLICY}" | grep -q "e2e-autosign-policy-ca-operator" \
+                || { echo "ERROR: the operator certname is not reserved"; echo "${POLICY}"; exit 1; }
+              echo "OK: the operator certname is reserved in the rendered policy"
+      catch:
+        - events: {}
+
     - name: Change the SigningPolicy and assert the CA pod rolls
       try:
         - script:

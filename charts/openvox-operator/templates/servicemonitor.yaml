@@ -16,4 +16,23 @@ spec:
   endpoints:
     - port: metrics
       interval: {{ .Values.metrics.serviceMonitor.interval | default "30s" }}
+      {{- if .Values.metrics.secure }}
+      scheme: https
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tlsConfig:
+        {{- if .Values.metrics.certManager.enabled }}
+        # Verified against the CA that issued the serving certificate.
+        serverName: {{ include "openvox-operator.fullname" . }}-metrics.{{ .Release.Namespace }}.svc
+        ca:
+          secret:
+            name: {{ include "openvox-operator.fullname" . }}-ca-cert
+            key: ca.crt
+        {{- else }}
+        # Without cert-manager the operator generates a self-signed certificate
+        # at startup and a new one on every restart, so there is nothing stable
+        # to verify against. The endpoint is protected by the authentication
+        # filter rather than by this certificate.
+        insecureSkipVerify: true
+        {{- end }}
+      {{- end }}
 {{- end }}

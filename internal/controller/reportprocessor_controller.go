@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -17,7 +16,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/yaml"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
@@ -60,6 +58,12 @@ func (r *ReportProcessorReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
+	// The generation the verdict is about, captured before the observation:
+	// updateStatusWithRetry re-reads the object, so a spec edit landing in
+	// between would otherwise stamp the new generation onto a verdict derived
+	// from the old spec.
+	generation := rp.Generation
+
 	phase, reason, message := r.observe(ctx, rp)
 	if reason == reasonLookupFailed {
 		// A transient lookup failure says nothing about the ReportProcessor.
@@ -68,7 +72,7 @@ func (r *ReportProcessorReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	if err := updateStatusWithRetry(ctx, r.Client, rp, func() {
-		rp.Status.ObservedGeneration = rp.Generation
+		rp.Status.ObservedGeneration = generation
 		rp.Status.Phase = phase
 		status := metav1.ConditionFalse
 		if phase == openvoxv1alpha1.ReportProcessorPhaseActive {
@@ -79,7 +83,7 @@ func (r *ReportProcessorReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			Status:             status,
 			Reason:             reason,
 			Message:            message,
-			ObservedGeneration: rp.Generation,
+			ObservedGeneration: generation,
 		})
 	}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("updating ReportProcessor status %s: %w", rp.Name, err)
@@ -118,46 +122,35 @@ func (r *ReportProcessorReconciler) observe(ctx context.Context, rp *openvoxv1al
 		return "", reasonLookupFailed, fmt.Sprintf("getting Secret %s: %v", secretName, err)
 	}
 
-	rendered, err := renderedEndpointNames(secret.Data["report-webhook.yaml"])
-	if err != nil {
-		return openvoxv1alpha1.ReportProcessorPhaseError, "RenderedConfigUnreadable",
-			fmt.Sprintf("Secret %s does not contain a readable report-webhook.yaml: %v", secretName, err)
-	}
-	if slices.Contains(rendered, rp.Name) {
-		return openvoxv1alpha1.ReportProcessorPhaseActive, "Rendered",
-			fmt.Sprintf("Endpoint is present in Secret %s", secretName)
+	if !renderedSourceRecorded(secret.Annotations) {
+		return openvoxv1alpha1.ReportProcessorPhaseError, "RenderedConfigSourceUnknown",
+			fmt.Sprintf("Secret %s does not record which resources it was rendered from, so the Config "+
+				"controller has not re-rendered it yet; its contents are unchanged in the meantime", secretName)
 	}
 
-	return openvoxv1alpha1.ReportProcessorPhaseError, "NotRendered",
-		fmt.Sprintf("Secret %s does not contain an endpoint for this ReportProcessor", secretName)
-}
+	// The annotation names the processors the content was rendered from and the
+	// generation each was rendered at. An endpoint name alone cannot tell a
+	// current spec from one whose re-render failed and left the old file behind.
+	generation, ok := renderedGeneration(secret.Annotations, rp.Name)
+	switch {
+	case !ok:
+		return openvoxv1alpha1.ReportProcessorPhaseError, "NotRendered",
+			fmt.Sprintf("Secret %s does not contain an endpoint for this ReportProcessor", secretName)
+	case generation != rp.Generation:
+		return openvoxv1alpha1.ReportProcessorPhaseError, "RenderedConfigStale",
+			fmt.Sprintf("Secret %s was rendered from an earlier generation of ReportProcessor %s; "+
+				"the current spec has not reached a server", secretName, rp.Name)
+	}
 
-// renderedEndpointNames extracts the endpoint names from a rendered
-// report-webhook.yaml.
-func renderedEndpointNames(data []byte) ([]string, error) {
-	if len(data) == 0 {
-		return nil, fmt.Errorf("report-webhook.yaml is empty")
-	}
-	var parsed struct {
-		Endpoints []struct {
-			Name string `json:"name"`
-		} `json:"endpoints"`
-	}
-	if err := yaml.Unmarshal(data, &parsed); err != nil {
-		return nil, err
-	}
-	names := make([]string, 0, len(parsed.Endpoints))
-	for _, ep := range parsed.Endpoints {
-		names = append(names, ep.Name)
-	}
-	return names, nil
+	return openvoxv1alpha1.ReportProcessorPhaseActive, "Rendered",
+		fmt.Sprintf("Endpoint is present in Secret %s", secretName)
 }
 
 func (r *ReportProcessorReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&openvoxv1alpha1.ReportProcessor{}).
 		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(
-			reportProcessorsForSecret(mgr.GetClient()),
+			reportProcessorsForSecret(),
 		)).
 		Watches(&openvoxv1alpha1.Config{}, handler.EnqueueRequestsFromMapFunc(
 			reportProcessorsForConfig(mgr.GetClient()),
@@ -167,14 +160,12 @@ func (r *ReportProcessorReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 // reportProcessorsForSecret maps a rendered report-webhook Secret back to the
 // ReportProcessors it was rendered from.
-func reportProcessorsForSecret(c client.Client) handler.MapFunc {
-	return func(ctx context.Context, obj client.Object) []ctrl.Request {
-		name := obj.GetName()
-		if !strings.HasSuffix(name, "-report-webhook") {
+func reportProcessorsForSecret() handler.MapFunc {
+	return func(_ context.Context, obj client.Object) []ctrl.Request {
+		if !strings.HasSuffix(obj.GetName(), "-report-webhook") {
 			return nil
 		}
-		cfgName := strings.TrimSuffix(name, "-report-webhook")
-		return reportProcessorRequests(ctx, c, obj.GetNamespace(), cfgName)
+		return renderedSourceRequests(obj)
 	}
 }
 

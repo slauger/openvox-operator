@@ -149,12 +149,16 @@ type NodeClassifierCache struct {
 }
 
 // NodeClassifierPhase represents the current lifecycle phase.
-// +kubebuilder:validation:Enum=Active;Error
+// +kubebuilder:validation:Enum=Active;Disabled;Error
 type NodeClassifierPhase string
 
 const (
 	NodeClassifierPhaseActive NodeClassifierPhase = "Active"
-	NodeClassifierPhaseError  NodeClassifierPhase = "Error"
+	// NodeClassifierPhaseDisabled marks a classifier that is deliberately
+	// bypassed rather than broken, so an intentional configuration does not
+	// read as a fault in the Phase column.
+	NodeClassifierPhaseDisabled NodeClassifierPhase = "Disabled"
+	NodeClassifierPhaseError    NodeClassifierPhase = "Error"
 )
 
 // NodeClassifierStatus defines the observed state of NodeClassifier.

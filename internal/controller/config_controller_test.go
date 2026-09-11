@@ -247,7 +247,7 @@ func TestConfigReconcile_PuppetConfWithENC(t *testing.T) {
 func TestConfigReconcile_AutosignCommandOverride(t *testing.T) {
 	cfg := newConfig("production",
 		withAuthorityRef("production-ca"),
-		withAutosignCommand("/usr/local/bin/custom-autosign"),
+		withAutosignCommand(),
 	)
 	ca := newCertificateAuthority("production-ca")
 	c := setupTestClient(cfg, ca)
@@ -280,7 +280,7 @@ func TestConfigReconcile_AutosignCommandOverride(t *testing.T) {
 func TestConfigReconcile_ExternalNodesCommandOverride(t *testing.T) {
 	cfg := newConfig("production",
 		withNodeClassifierRef(),
-		withExternalNodesCommand("/usr/local/bin/custom-enc"),
+		withExternalNodesCommand(),
 	)
 	nc := newNodeClassifier("my-enc", "https://enc.example.com")
 	c := setupTestClient(cfg, nc)
@@ -532,7 +532,7 @@ func TestConfigReconcile_LogbackXML(t *testing.T) {
 func TestConfigReconcile_AutosignPolicy(t *testing.T) {
 	cfg := newConfig("production", withAuthorityRef("production-ca"))
 	ca := newCertificateAuthority("production-ca")
-	sp := newSigningPolicy("allow-all", "production-ca", true)
+	sp := newSigningPolicy("allow-all", "production-ca")
 
 	c := setupTestClient(cfg, ca, sp)
 	r := newConfigReconciler(c)

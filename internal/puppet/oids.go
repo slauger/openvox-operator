@@ -36,14 +36,46 @@ var PuppetOIDs = map[string]asn1.ObjectIdentifier{
 	"challengePassword":   {1, 2, 840, 113549, 1, 9, 7},
 }
 
+// AuthorizationArc is the OID prefix for Puppet's privileged authorization
+// extensions (pp_authorization, pp_auth_token, pp_cli_auth). An extension whose
+// OID falls under this arc grants elevated trust (e.g. pp_cli_auth=true is
+// honored by the CA admin auth.conf rules) and must never be auto-signed unless
+// a policy explicitly allows it.
+var AuthorizationArc = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 34380, 1, 3}
+
 // OIDByName returns the ASN.1 OID for a known Puppet extension name.
 func OIDByName(name string) (asn1.ObjectIdentifier, bool) {
 	oid, ok := PuppetOIDs[name]
 	return oid, ok
 }
 
+// NameByOID returns the Puppet extension name for a known OID.
+func NameByOID(oid asn1.ObjectIdentifier) (string, bool) {
+	for name, candidate := range PuppetOIDs {
+		if candidate.Equal(oid) {
+			return name, true
+		}
+	}
+	return "", false
+}
+
 // IsKnownOID reports whether name is a recognized Puppet extension name.
 func IsKnownOID(name string) bool {
 	_, ok := PuppetOIDs[name]
 	return ok
+}
+
+// IsAuthorizationOID reports whether oid falls under the privileged
+// authorization arc. The check is prefix-based so that authorization OIDs not
+// (yet) present in PuppetOIDs are still recognized as privileged.
+func IsAuthorizationOID(oid asn1.ObjectIdentifier) bool {
+	if len(oid) < len(AuthorizationArc) {
+		return false
+	}
+	for i := range AuthorizationArc {
+		if oid[i] != AuthorizationArc[i] {
+			return false
+		}
+	}
+	return true
 }

@@ -1,0 +1,80 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard
+  enable:
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - copyloopvar
+    - dogsled
+    - durationcheck
+    - errorlint
+    - gocritic
+    - gosec
+    - importas
+    - intrange
+    - loggercheck
+    - misspell
+    - modernize
+    - nakedret
+    - nilerr
+    - nolintlint
+    - prealloc
+    - revive
+    - unconvert
+    - unparam
+  settings:
+    importas:
+      no-unaliased: true
+      alias:
+        - pkg: k8s.io/api/core/v1
+          alias: corev1
+        - pkg: k8s.io/api/apps/v1
+          alias: appsv1
+        - pkg: k8s.io/api/autoscaling/v2
+          alias: autoscalingv2
+        - pkg: k8s.io/api/batch/v1
+          alias: batchv1
+        - pkg: k8s.io/api/discovery/v1
+          alias: discoveryv1
+        - pkg: k8s.io/api/networking/v1
+          alias: networkingv1
+        - pkg: k8s.io/api/policy/v1
+          alias: policyv1
+        - pkg: k8s.io/api/rbac/v1
+          alias: rbacv1
+        - pkg: k8s.io/apimachinery/pkg/api/errors
+          alias: apierrors
+        - pkg: k8s.io/apimachinery/pkg/apis/meta/v1
+          alias: metav1
+        - pkg: sigs.k8s.io/gateway-api/apis/v1
+          alias: gwapiv1
+    nolintlint:
+      require-specific: true
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+  exclusions:
+    generated: lax
+    rules:
+      # Test helpers construct fixtures with hardcoded values and do not need
+      # the same hardening as production code.
+      - path: _test\.go
+        linters:
+          - gosec
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+issues:
+  # Report everything instead of capping repeated findings (the defaults hide
+  # issues beyond 3 of the same kind, which makes CI runs non-exhaustive).
+  max-issues-per-linter: 0
+  max-same-issues: 0

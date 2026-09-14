@@ -1,0 +1,74 @@
+suite: Shared cert-manager issuer chain
+templates:
+  - templates/certmanager-issuer.yaml
+tests:
+  - it: should not render when nothing asks for a certificate
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render for the webhook
+    set:
+      webhook:
+        enabled: true
+    asserts:
+      - hasDocuments:
+          count: 3
+
+  # The point of extracting the chain: secure metrics need it even with the
+  # webhook off, which used to be impossible.
+  - it: should render for secure metrics without the webhook
+    set:
+      metrics:
+        secure: true
+    asserts:
+      - hasDocuments:
+          count: 3
+
+  - it: should not render for metrics when cert-manager is disabled
+    set:
+      metrics:
+        secure: true
+        certManager:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render a self-signed Issuer as first document
+    set:
+      webhook:
+        enabled: true
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: Issuer
+      - exists:
+          path: spec.selfSigned
+
+  - it: should render a CA Certificate as second document
+    set:
+      webhook:
+        enabled: true
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Certificate
+      - equal:
+          path: spec.isCA
+          value: true
+      - equal:
+          path: spec.duration
+          value: 87600h
+
+  - it: should render a CA Issuer as third document
+    set:
+      webhook:
+        enabled: true
+    documentIndex: 2
+    asserts:
+      - isKind:
+          of: Issuer
+      - equal:
+          path: spec.ca.secretName
+          value: RELEASE-NAME-openvox-operator-ca-cert

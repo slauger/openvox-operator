@@ -13,8 +13,8 @@ import (
 
 // signedCert builds a Certificate that is already signed, with the spec hash
 // and expiry a freshly issued certificate would have.
-func signedCert(name string, notAfter time.Time) *openvoxv1alpha1.Certificate {
-	cert := newCertificate(name, "production-ca", openvoxv1alpha1.CertificatePhaseSigned)
+func signedCert(notAfter time.Time) *openvoxv1alpha1.Certificate {
+	cert := newCertificate("web", "production-ca", openvoxv1alpha1.CertificatePhaseSigned)
 	cert.Spec.DNSAltNames = []string{"puppet.example.com"}
 	cert.Status.SignedSpecHash = specHash(cert)
 	t := metav1.NewTime(notAfter)
@@ -23,7 +23,7 @@ func signedCert(name string, notAfter time.Time) *openvoxv1alpha1.Certificate {
 }
 
 func TestSigningSpecHash(t *testing.T) {
-	base := signedCert("web", time.Now().Add(365*24*time.Hour))
+	base := signedCert(time.Now().Add(365 * 24 * time.Hour))
 
 	t.Run("stable across equal specs", func(t *testing.T) {
 		if specHash(base.DeepCopy()) != specHash(base) {
@@ -82,7 +82,7 @@ func TestRenewalDue_DerivedFromObservedState(t *testing.T) {
 	r := &CertificateReconciler{Clock: testclock.NewFakePassiveClock(now)}
 
 	t.Run("not due outside the window", func(t *testing.T) {
-		cert := signedCert("web", now.Add(200*24*time.Hour))
+		cert := signedCert(now.Add(200 * 24 * time.Hour))
 		cert.Spec.RenewBefore = "60d"
 		if r.renewalDue(cert) {
 			t.Error("renewal should not be due 200 days before expiry with renewBefore 60d")
@@ -90,7 +90,7 @@ func TestRenewalDue_DerivedFromObservedState(t *testing.T) {
 	})
 
 	t.Run("due inside the window", func(t *testing.T) {
-		cert := signedCert("web", now.Add(30*24*time.Hour))
+		cert := signedCert(now.Add(30 * 24 * time.Hour))
 		cert.Spec.RenewBefore = "60d"
 		if !r.renewalDue(cert) {
 			t.Error("renewal should be due 30 days before expiry with renewBefore 60d")
@@ -98,7 +98,7 @@ func TestRenewalDue_DerivedFromObservedState(t *testing.T) {
 	})
 
 	t.Run("suppressed by the cooldown annotation", func(t *testing.T) {
-		cert := signedCert("web", now.Add(30*24*time.Hour))
+		cert := signedCert(now.Add(30 * 24 * time.Hour))
 		cert.Spec.RenewBefore = "60d"
 		cert.Annotations = map[string]string{
 			AnnotationLastRenewalTime: now.Add(-1 * time.Minute).Format(time.RFC3339),
@@ -109,7 +109,7 @@ func TestRenewalDue_DerivedFromObservedState(t *testing.T) {
 	})
 
 	t.Run("phase is irrelevant", func(t *testing.T) {
-		cert := signedCert("web", now.Add(30*24*time.Hour))
+		cert := signedCert(now.Add(30 * 24 * time.Hour))
 		cert.Spec.RenewBefore = "60d"
 		cert.Status.Phase = ""
 		if !r.renewalDue(cert) {
@@ -124,7 +124,7 @@ func TestRenewalDue_DerivedFromObservedState(t *testing.T) {
 func TestReconcile_ResignsOnSpecDrift(t *testing.T) {
 	ca := newCertificateAuthority("production-ca")
 	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseReady
-	cert := signedCert("web", time.Now().Add(365*24*time.Hour))
+	cert := signedCert(time.Now().Add(365 * 24 * time.Hour))
 
 	c := setupTestClient(ca, cert)
 	r := newCertificateReconciler(c)
@@ -167,7 +167,7 @@ func TestReconcile_ResignsOnSpecDrift(t *testing.T) {
 func TestReconcile_AdoptsMissingHashWithoutResigning(t *testing.T) {
 	ca := newCertificateAuthority("production-ca")
 	ca.Status.Phase = openvoxv1alpha1.CertificateAuthorityPhaseReady
-	cert := signedCert("web", time.Now().Add(365*24*time.Hour))
+	cert := signedCert(time.Now().Add(365 * 24 * time.Hour))
 	cert.Status.SignedSpecHash = "" // pre-upgrade state
 
 	c := setupTestClient(ca, cert)

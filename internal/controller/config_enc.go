@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -33,7 +33,7 @@ func (r *ConfigReconciler) reconcileENCSecret(ctx context.Context, cfg *openvoxv
 
 	nc := &openvoxv1alpha1.NodeClassifier{}
 	if err := r.Get(ctx, types.NamespacedName{Name: cfg.Spec.NodeClassifierRef, Namespace: cfg.Namespace}, nc); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return nil
 		}
 		return fmt.Errorf("getting NodeClassifier %s: %w", cfg.Spec.NodeClassifierRef, err)

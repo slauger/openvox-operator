@@ -52,17 +52,28 @@ These types are reused across multiple CRDs.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `repository` | string | `ghcr.io/slauger/openvox-server-8` | Container image repository |
-| `tag` | string | `latest` | Container image tag |
-| `pullPolicy` | string | `IfNotPresent` | Image pull policy |
+| `repository` | string | - | Container image repository |
+| `tag` | string | - | Container image tag |
+| `pullPolicy` | string | - | Image pull policy |
 | `pullSecrets` | []LocalObjectReference | - | Image pull secrets |
 
-`repository` and `tag` carry no API-level default. They are required on `Config`
-and `Database`; on `Server` both are optional and fall back to the referenced
-`Config`, which is what lets one Config drive a whole set of Servers.
+No field here carries an API-level default. That is deliberate: a nested
+default is applied whether or not the parent object was given, so a defaulted
+field can never express "inherit from the Config" - it is simply never empty.
 
-The defaults live in the Helm charts (`config.image.*`, `database.image.*`),
-where changing the registry is a values change rather than a CRD update.
+`repository` and `tag` are required on `Config` and `Database`. On `Server`
+both are optional and fall back to the referenced `Config`, which is what lets
+one Config drive a whole set of Servers.
+
+`pullPolicy` follows the same rule, falling back to the Config and then to
+`IfNotPresent`. `pullSecrets` behaves differently: a non-empty list on a
+`Server` *replaces* the Config's rather than extending it, so a Server pulling
+from another registry does not carry the Config's credentials along. Secrets
+for code images are always added on top.
+
+The registry defaults live in the Helm charts (`config.image.*`,
+`database.image.*`), where changing them is a values change rather than a CRD
+update.
 
 ### StorageSpec
 

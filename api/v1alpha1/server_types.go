@@ -82,7 +82,11 @@ type ServerSpec struct {
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 
 	// JavaArgs defines the JVM arguments.
-	// +kubebuilder:default="-Xms512m -Xmx1024m"
+	//
+	// There is deliberately no default. A defaulted field is never empty, and
+	// the controller uses emptiness to decide whether to derive the heap from
+	// the pod's memory limit. With a default in place that derivation is dead
+	// code and every Server runs on the same heap regardless of its limit.
 	// +optional
 	JavaArgs string `json:"javaArgs,omitempty"`
 

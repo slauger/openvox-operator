@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -212,25 +212,6 @@ func TestResolveCodeMounts(t *testing.T) {
 	}
 }
 
-func TestInt64Ptr(t *testing.T) {
-	val := int64Ptr(42)
-	if val == nil || *val != 42 {
-		t.Errorf("int64Ptr(42) = %v, want pointer to 42", val)
-	}
-}
-
-func TestBoolPtr(t *testing.T) {
-	val := boolPtr(true)
-	if val == nil || !*val {
-		t.Errorf("boolPtr(true) = %v, want pointer to true", val)
-	}
-
-	val = boolPtr(false)
-	if val == nil || *val {
-		t.Errorf("boolPtr(false) = %v, want pointer to false", val)
-	}
-}
-
 func TestUpdateStatusWithRetry(t *testing.T) {
 	cfg := &openvoxv1alpha1.Config{
 		ObjectMeta: metav1.ObjectMeta{
@@ -273,7 +254,7 @@ func TestUpdateStatusWithRetry_ConflictRetry(t *testing.T) {
 		WithInterceptorFuncs(interceptor.Funcs{
 			SubResourceUpdate: func(ctx context.Context, client client.Client, subResourceName string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
 				if calls.Add(1) == 1 {
-					return errors.NewConflict(schema.GroupResource{Group: "openvox.voxpupuli.org", Resource: "configs"}, obj.GetName(), fmt.Errorf("conflict"))
+					return apierrors.NewConflict(schema.GroupResource{Group: "openvox.voxpupuli.org", Resource: "configs"}, obj.GetName(), fmt.Errorf("conflict"))
 				}
 				return client.SubResource(subResourceName).Update(ctx, obj, opts...)
 			},

@@ -1,12 +1,12 @@
 - 🔐 **Automated CA Lifecycle** - CA initialization, certificate signing, distribution, and periodic CRL refresh - fully managed
-- 📜 **Declarative Signing Policies** - CSR approval via patterns, DNS SANs, CSR attributes, or open signing - no autosign scripts
+- 📜 **Declarative Signing Policies** - CSR approval via certname globs, SAN allowlists, CSR attributes, or open signing - no autosign scripts
 - 🏷️ **External Node Classification** - Declarative ENC support for custom HTTP classifiers
 - 📦 **One Image, Two Roles** - Same rootless image runs as CA or server, configured by the operator
 - ⚡ **Scalable Servers** - Scale catalog compilation horizontally - multiple server pools with HPA
 - 🔄 **Multi-Version Deployments** - Run different server versions side by side - canary deployments, rolling upgrades
 - 🔒 **Rootless & OpenShift Ready** - Random UID compatible, no root, no ezbake, no privilege escalation
 - 🪶 **Minimal Image** - UBI9-based, no agent Ruby, no ezbake packaging - smaller footprint, fewer updates
-- 🧠 **Auto-tuned JVM** - Heap size calculated from memory limits (90%) - no manual `-Xmx` tuning needed
+- 🧠 **Auto-tuned JVM** - Heap derived from the pod memory limit (90%) unless `javaArgs` is set
 - 📦 **OCI Image Volumes** - Package Puppet code as OCI images, deploy immutably with automatic rollout (K8s 1.35+)
 - 🌐 **Gateway API** - SNI-based TLSRoute support - share a single LoadBalancer across environments via TLS passthrough
 - 🗄️ **Managed OpenVox DB** - Deploy OpenVox DB (PuppetDB) with external PostgreSQL - TLS, config, and credentials managed by the operator

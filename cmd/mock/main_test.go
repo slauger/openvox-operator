@@ -599,16 +599,23 @@ func TestHECEvent_InvalidJSON(t *testing.T) {
 	}
 }
 
+// discardResponse closes the body of a fire-and-forget request.
+func discardResponse(resp *http.Response, _ error) {
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+}
+
 func TestAPIReset(t *testing.T) {
 	ts, _ := newTestServer()
 	defer ts.Close()
 
 	// Store some data
-	_, _ = http.Post(ts.URL+"/reports", "application/json", strings.NewReader(`{"host":"test"}`))
-	_, _ = http.Post(ts.URL+"/services/collector/event", "application/json", strings.NewReader(`{"event":"test"}`))
+	discardResponse(http.Post(ts.URL+"/reports", "application/json", strings.NewReader(`{"host":"test"}`)))
+	discardResponse(http.Post(ts.URL+"/services/collector/event", "application/json", strings.NewReader(`{"event":"test"}`)))
 	cmd := `{"command":"replace facts","version":5,"payload":{"certname":"node1"}}`
-	_, _ = http.Post(ts.URL+"/pdb/cmd/v1", "application/json", strings.NewReader(cmd))
-	_, _ = http.Get(ts.URL + "/node/test-node")
+	discardResponse(http.Post(ts.URL+"/pdb/cmd/v1", "application/json", strings.NewReader(cmd)))
+	discardResponse(http.Get(ts.URL + "/node/test-node"))
 
 	// Reset
 	req, _ := http.NewRequest("DELETE", ts.URL+"/api/reset", nil)
@@ -677,8 +684,11 @@ func TestReloadClassificationsIfChanged(t *testing.T) {
 
 func TestReloadClassificationsIfChanged_MissingFile(t *testing.T) {
 	s := &server{classificationsFile: "/nonexistent/file.yaml"}
-	// Should not panic, just return
+	// Should not panic, just return without loading anything
 	s.reloadClassificationsIfChanged()
+	if s.classificationsData != nil {
+		t.Error("expected no classifications to be loaded from a missing file")
+	}
 }
 
 func TestLoadClassificationsFile_StatError(t *testing.T) {

@@ -33,7 +33,7 @@ graph TD
 
 - A **Config** is the root resource. It generates ConfigMaps for puppet.conf/puppetdb.conf/webserver.conf and holds shared configuration.
 - A **CertificateAuthority** is a standalone resource managing the CA infrastructure: PVC, setup Job, and CA Secret. A Config references it via `authorityRef`.
-- A **SigningPolicy** is an optional resource that references a CertificateAuthority and defines declarative CSR signing rules (any, pattern match, or CSR attribute match). The Config controller renders all SigningPolicies into an autosign policy file. If no SigningPolicy exists, autosigning is disabled.
+- A **SigningPolicy** is an optional resource that references a CertificateAuthority and defines declarative CSR signing rules (any, certname match, or CSR attribute match) together with fail-closed allowlists for SANs and privileged extensions. The Config controller renders all SigningPolicies into an autosign policy file. If no SigningPolicy exists, autosigning is disabled.
 - A **NodeClassifier** is an optional standalone resource defining an External Node Classifier endpoint. A Config references it via `nodeClassifierRef`. The Config controller renders the classifier configuration into an ENC Secret, and puppet.conf gets `node_terminus = exec`. See [External Node Classification](external-node-classification.md).
 - A **ReportProcessor** is an optional standalone resource that defines an external endpoint for Puppet run reports. One or more ReportProcessors can reference the same Config via `configRef`. The Config controller collects all matching ReportProcessors, renders a `report-webhook.yaml` config, and sets `reports = webhook` in puppet.conf. A minimal Ruby shim (`webhook.rb`) pipes each report as JSON to the `openvox-report` binary, which forwards it to all configured endpoints. Supports built-in PuppetDB wire format v8 (`processor: puppetdb`) and generic HTTP webhooks with configurable auth (mTLS, Bearer, Basic, custom headers). See [Report Processing](report-processing.md).
 - A **Certificate** references a CertificateAuthority and manages the lifecycle of a single certificate: signing Job and TLS Secret.
@@ -229,7 +229,7 @@ Existing containers decide at startup whether to run as CA or server based on en
 | **Privileges** | Requires root | Fully rootless, random UID compatible |
 | **CA Management** | `puppetserver ca` CLI (CRuby) | Custom JRuby wrapper via `clojure.main` |
 | **Certificates** | Each server has its own certificate | `Certificate` CRD manages the cert lifecycle - all replicas of a Server share one certificate |
-| **CSR Signing** | `autosign.conf` or Ruby scripts | `SigningPolicy` CRD with declarative rules (any, pattern, CSR attributes, DNS SAN validation) |
+| **CSR Signing** | `autosign.conf` or Ruby scripts | `SigningPolicy` CRD with declarative rules (any, certnames, CSR attributes) plus fail-closed SAN and extension allowlists |
 | **CRL** | File on disk, manual refresh | Split Secret (`{ca}-ca-crl`), operator-driven periodic refresh via CA HTTP API |
 | **Scaling** | Manual VM provisioning | Deployment replicas + HPA |
 | **Code Deployment** | r10k on the VM, cron/webhook | OCI image volumes or PVC - code packaged as immutable container images |

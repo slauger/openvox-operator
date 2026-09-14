@@ -33,7 +33,7 @@ spec:
 | `replicas` | int32 | `1` | Number of pod replicas |
 | `autoscaling` | [AutoscalingSpec](#autoscalingspec) | - | HPA configuration |
 | `resources` | ResourceRequirements | - | CPU/memory requests and limits |
-| `javaArgs` | string | `-Xms512m -Xmx1024m` | JVM arguments |
+| `javaArgs` | string | *(derived)* | JVM arguments. Unset derives the heap from the pod's memory limit (90%), falling back to `-Xms512m -Xmx1024m` when no limit is set |
 | `maxActiveInstances` | int32 | `1` | Number of JRuby instances per pod |
 | `code` | [[]CodeSpec](index.md#codespec) | - | Override the Config's code sources (replace, not merge). A list; see [CodeSpec](index.md#codespec) |
 | `topologySpreadConstraints` | []TopologySpreadConstraint | - | Pod spread constraints across topology domains |
@@ -45,6 +45,7 @@ spec:
 | `envFrom` | []EnvFromSource | - | ConfigMap/Secret sources to populate environment variables from |
 | `extraVolumes` | []Volume | - | Extra volumes added to the Server pods |
 | `extraVolumeMounts` | []VolumeMount | - | Extra volume mounts for the `openvox-server` container |
+| `readOnlyRootFilesystem` | *bool | *(inherits from Config)* | Overrides the Config's setting for this Server. One Config backs several Servers with different roles, so the CA and the compilers can differ. Unset inherits |
 | `securityContext` | [PodSecurityContextSpec](index.md#podsecuritycontextspec) | - | Override pod-level security context (runAsUser/runAsGroup/fsGroup) |
 
 ### Extra Environment and Volumes
@@ -131,7 +132,17 @@ When enabled, the default policy allows TCP/8140 from all sources (agents may co
 | `Pending` | Server created, resolving references |
 | `WaitingForCert` | Certificate not yet `Signed` |
 | `Running` | Deployment created and running |
-| `Error` | Reconciliation failed |
+| `Error` | Defined in the API, but never set by the controller (see below) |
+
+`Error` is part of the API but the controller never assigns it. A failing
+reconcile leaves the phase at its previous value, reports the reason in the
+`Ready` condition and emits a warning event. Watch the condition rather than
+the phase:
+
+```bash
+kubectl get server <name> -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.reason}: {.message}{"\n"}{end}'
+```
+
 
 ## Deployment Strategy
 

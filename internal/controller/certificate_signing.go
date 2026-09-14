@@ -20,7 +20,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -251,11 +251,12 @@ func (r *CertificateReconciler) submitCSR(ctx context.Context, cert *openvoxv1al
 	if err != nil {
 		logger.Error(err, "failed to read CSR response body")
 	}
-	if resp.StatusCode == http.StatusOK {
+	switch {
+	case resp.StatusCode == http.StatusOK:
 		logger.Info("CSR submitted successfully", "certname", certname)
-	} else if resp.StatusCode == http.StatusBadRequest && strings.Contains(string(body), "already has a requested certificate") {
+	case resp.StatusCode == http.StatusBadRequest && strings.Contains(string(body), "already has a requested certificate"):
 		logger.Info("CSR already pending", "certname", certname)
-	} else {
+	default:
 		return ctrl.Result{RequeueAfter: RequeueIntervalCRL}, fmt.Errorf("CA rejected CSR (HTTP %d): %s", resp.StatusCode, string(body))
 	}
 
@@ -499,7 +500,7 @@ func (r *CertificateReconciler) signCertificate(ctx context.Context, cert *openv
 	}
 
 	// Clean up pending Secret
-	if err := r.Delete(ctx, pendingSecret); err != nil && !errors.IsNotFound(err) {
+	if err := r.Delete(ctx, pendingSecret); err != nil && !apierrors.IsNotFound(err) {
 		logger.Info("failed to delete pending Secret", "error", err)
 	}
 
@@ -729,7 +730,7 @@ func (r *CertificateReconciler) ensurePendingKey(ctx context.Context, cert *open
 	if err == nil && len(pendingSecret.Data["key.pem"]) > 0 {
 		return pendingSecret.Data["key.pem"], nil
 	}
-	if err != nil && !errors.IsNotFound(err) {
+	if err != nil && !apierrors.IsNotFound(err) {
 		return nil, fmt.Errorf("checking pending Secret: %w", err)
 	}
 
@@ -755,7 +756,7 @@ func (r *CertificateReconciler) ensurePendingKey(ctx context.Context, cert *open
 	if err := controllerutil.SetControllerReference(cert, secret, r.Scheme); err != nil {
 		return nil, fmt.Errorf("setting owner reference on pending Secret %s: %w", pendingSecretName, err)
 	}
-	if err := r.Create(ctx, secret); err != nil && !errors.IsAlreadyExists(err) {
+	if err := r.Create(ctx, secret); err != nil && !apierrors.IsAlreadyExists(err) {
 		return nil, fmt.Errorf("creating pending Secret: %w", err)
 	}
 	return keyPEM, nil

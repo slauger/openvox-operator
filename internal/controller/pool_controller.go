@@ -3,10 +3,11 @@ package controller
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -57,7 +58,7 @@ func (r *PoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	pool := &openvoxv1alpha1.Pool{}
 	if err := r.Get(ctx, req.NamespacedName, pool); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("getting Pool %s: %w", req.NamespacedName, err)
@@ -242,7 +243,7 @@ func (r *PoolReconciler) deleteOwnedTLSRoute(ctx context.Context, pool *openvoxv
 
 	existing := &gwapiv1.TLSRoute{}
 	if err := r.Get(ctx, types.NamespacedName{Name: pool.Name, Namespace: pool.Namespace}, existing); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return nil
 		}
 		return fmt.Errorf("getting TLSRoute %s: %w", pool.Name, err)
@@ -252,7 +253,7 @@ func (r *PoolReconciler) deleteOwnedTLSRoute(ctx context.Context, pool *openvoxv
 	}
 
 	logger.Info("deleting orphaned TLSRoute", "name", pool.Name)
-	if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
+	if err := r.Delete(ctx, existing); err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("deleting orphaned TLSRoute: %w", err)
 	}
 	r.Recorder.Eventf(pool, nil, corev1.EventTypeNormal, EventReasonTLSRouteDeleted, "Reconcile", "TLSRoute %s deleted", pool.Name)
@@ -358,9 +359,7 @@ func (r *PoolReconciler) reconcileService(ctx context.Context, pool *openvoxv1al
 		"app.kubernetes.io/managed-by": "openvox-operator",
 		poolLabel(pool.Name):           "true",
 	}
-	for k, v := range pool.Spec.Service.Labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, pool.Spec.Service.Labels)
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{Name: svcName, Namespace: pool.Namespace},
@@ -432,7 +431,7 @@ func (r *PoolReconciler) reconcileTLSRoute(ctx context.Context, pool *openvoxv1a
 
 	port := gwapiv1.PortNumber(8140)
 	if pool.Spec.Service.Port > 0 {
-		port = gwapiv1.PortNumber(pool.Spec.Service.Port)
+		port = pool.Spec.Service.Port
 	}
 
 	parentRef := gwapiv1.ParentReference{

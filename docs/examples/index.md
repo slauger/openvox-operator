@@ -13,7 +13,7 @@ spec:
   authorityRef: lab-ca
   image:
     repository: ghcr.io/slauger/openvox-server-8
-    tag: "8.12.1"
+    tag: "latest"
 ---
 apiVersion: openvox.voxpupuli.org/v1alpha1
 kind: CertificateAuthority
@@ -74,7 +74,7 @@ spec:
   databaseRef: production-db
   image:
     repository: ghcr.io/slauger/openvox-server-8
-    tag: "8.12.1"
+    tag: "latest"
   puppet:
     environmentTimeout: unlimited
     storeconfigs: true
@@ -232,7 +232,7 @@ spec:
   replicas: 3
   maxActiveInstances: 2
   code:
-    claimName: puppet-code
+    - claimName: puppet-code
   resources:
     requests:
       cpu: "1"
@@ -250,10 +250,10 @@ spec:
   certificateRef: canary-cert
   poolRefs: [puppet]
   image:
-    tag: "8.13.0"
+    tag: "latest"
   replicas: 1
   code:
-    claimName: puppet-code
+    - claimName: puppet-code
   resources:
     requests:
       cpu: "1"

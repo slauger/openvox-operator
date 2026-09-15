@@ -124,12 +124,16 @@ type SecretKeyRef struct {
 }
 
 // SigningPolicyPhase represents the current lifecycle phase of a SigningPolicy.
-// +kubebuilder:validation:Enum=Active;Error
+// +kubebuilder:validation:Enum=Active;Disabled;Error
 type SigningPolicyPhase string
 
 const (
 	SigningPolicyPhaseActive SigningPolicyPhase = "Active"
-	SigningPolicyPhaseError  SigningPolicyPhase = "Error"
+	// SigningPolicyPhaseDisabled marks a policy that is deliberately bypassed
+	// rather than broken, so an intentional configuration does not read as a
+	// fault in the Phase column.
+	SigningPolicyPhaseDisabled SigningPolicyPhase = "Disabled"
+	SigningPolicyPhaseError    SigningPolicyPhase = "Error"
 )
 
 // SigningPolicyStatus defines the observed state of SigningPolicy.

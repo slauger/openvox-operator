@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -39,20 +38,23 @@ func (r *ConfigReconciler) reconcileENCSecret(ctx context.Context, cfg *openvoxv
 		return fmt.Errorf("getting NodeClassifier %s: %w", cfg.Spec.NodeClassifierRef, err)
 	}
 
+	// Rendering failures are reported on the Config, which owns this Secret. The
+	// NodeClassifier controller derives its own status from whether its endpoint
+	// ends up in the rendered Secret.
 	encYAML, renderErr := r.renderENCConfig(ctx, cfg, nc)
 	if renderErr != nil {
-		r.updateNodeClassifierStatus(ctx, nc, renderErr)
+		r.Recorder.Eventf(cfg, nil, corev1.EventTypeWarning, EventReasonENCRenderFailed, "Reconcile",
+			"Rendering the ENC configuration from NodeClassifier %s failed: %v", nc.Name, renderErr)
 		return fmt.Errorf("rendering ENC config: %w", renderErr)
 	}
-
-	r.updateNodeClassifierStatus(ctx, nc, nil)
 
 	secretName := fmt.Sprintf("%s-enc", cfg.Name)
 	data := map[string][]byte{
 		"enc.yaml": []byte(encYAML),
 	}
 
-	return r.reconcileSecret(ctx, cfg, secretName, data)
+	return r.reconcileSecret(ctx, cfg, secretName, data,
+		renderedFromAnnotation([]renderSource{sourceOf(nc)}))
 }
 
 // encYAMLConfig mirrors the YAML structure read by openvox-enc.
@@ -165,59 +167,18 @@ func (r *ConfigReconciler) renderENCConfig(ctx context.Context, cfg *openvoxv1al
 	return string(out), nil
 }
 
-// updateNodeClassifierStatus sets the phase and condition on a NodeClassifier.
-func (r *ConfigReconciler) updateNodeClassifierStatus(ctx context.Context, nc *openvoxv1alpha1.NodeClassifier, err error) {
-	var errMsg string
-	if err != nil {
-		errMsg = err.Error()
-	}
-	if statusErr := updateStatusWithRetry(ctx, r.Client, nc, func() {
-		if err != nil {
-			nc.Status.Phase = openvoxv1alpha1.NodeClassifierPhaseError
-			meta.SetStatusCondition(&nc.Status.Conditions, metav1.Condition{
-				Type:               openvoxv1alpha1.ConditionNodeClassifierReady,
-				Status:             metav1.ConditionFalse,
-				Reason:             "Error",
-				Message:            errMsg,
-				ObservedGeneration: nc.Generation,
-			})
-		} else {
-			nc.Status.Phase = openvoxv1alpha1.NodeClassifierPhaseActive
-			meta.SetStatusCondition(&nc.Status.Conditions, metav1.Condition{
-				Type:               openvoxv1alpha1.ConditionNodeClassifierReady,
-				Status:             metav1.ConditionTrue,
-				Reason:             "ConfigRendered",
-				Message:            "Node classifier configuration is active",
-				ObservedGeneration: nc.Generation,
-			})
-		}
-	}); statusErr != nil {
-		log.FromContext(ctx).Error(statusErr, "failed to update NodeClassifier status", "name", nc.Name)
-	}
-}
-
 // enqueueConfigsForNodeClassifier maps NodeClassifier changes to Config reconciles.
-func (r *ConfigReconciler) enqueueConfigsForNodeClassifier(c client.Reader) handler.MapFunc {
+func (r *ConfigReconciler) enqueueConfigsForNodeClassifier(c client.Client) handler.MapFunc {
 	return func(ctx context.Context, obj client.Object) []reconcile.Request {
 		nc, ok := obj.(*openvoxv1alpha1.NodeClassifier)
 		if !ok {
 			return nil
 		}
-
-		cfgList := &openvoxv1alpha1.ConfigList{}
-		if err := c.List(ctx, cfgList, client.InNamespace(nc.Namespace)); err != nil {
+		configs, err := configsReferencingNodeClassifier(ctx, c, nc.Namespace, nc.Name)
+		if err != nil {
 			log.FromContext(ctx).Error(err, "failed to list Configs in watcher")
 			return nil
 		}
-
-		var requests []reconcile.Request
-		for _, cfg := range cfgList.Items {
-			if cfg.Spec.NodeClassifierRef == nc.Name {
-				requests = append(requests, reconcile.Request{
-					NamespacedName: types.NamespacedName{Name: cfg.Name, Namespace: cfg.Namespace},
-				})
-			}
-		}
-		return requests
+		return configRequests(configs)
 	}
 }

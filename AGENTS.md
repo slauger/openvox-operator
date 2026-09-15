@@ -38,6 +38,8 @@ test: add unit tests for helpers
 - `feat:` triggers a minor version bump
 - `fix:` triggers a patch version bump
 - Append `BREAKING CHANGE:` in the body for major bumps
+- No AI attribution trailers. Do not add `Co-Authored-By:` for an AI assistant,
+  and no `Claude-Session:` or comparable session links.
 
 ## Pull Requests
 
@@ -46,6 +48,10 @@ test: add unit tests for helpers
 - Body should include a `## Summary` with bullet points and a `## Test plan`
 - Reference related issues with `Closes #<number>`
 - PRs always target `develop`, not `main`
+- No AI attribution footers in the description ("Generated with Claude Code" or
+  similar) and no session links. The same goes for issue and review comments.
+  If tooling appends such a footer server-side, remove it from the body
+  afterwards.
 
 ## Build & Test
 

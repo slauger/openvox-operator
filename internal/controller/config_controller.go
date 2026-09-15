@@ -29,17 +29,22 @@ type ConfigReconciler struct {
 }
 
 // Event reasons for Config.
+//
+// The Config owns every rendered ConfigMap and Secret, so a rendering failure
+// is reported here rather than on the SigningPolicy, NodeClassifier or
+// ReportProcessor it was rendered from -- those report only whether they made
+// it into the rendered output.
 const (
-	EventReasonReportWebhookRenderFailed = "ReportWebhookRenderFailed"
+	EventReasonReportWebhookRenderFailed  = "ReportWebhookRenderFailed"
+	EventReasonAutosignPolicyRenderFailed = "AutosignPolicyRenderFailed"
+	EventReasonENCRenderFailed            = "ENCRenderFailed"
 )
 
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=configs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=configs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=configs/finalizers,verbs=update
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=signingpolicies,verbs=get;list;watch
-// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=signingpolicies/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=nodeclassifiers,verbs=get;list;watch
-// +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=nodeclassifiers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=databases,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=certificateauthorities,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openvox.voxpupuli.org,resources=reportprocessors,verbs=get;list;watch
@@ -207,7 +212,13 @@ func (r *ConfigReconciler) reconcileConfigMap(ctx context.Context, cfg *openvoxv
 }
 
 // reconcileSecret creates or updates a Secret owned by the given Config.
-func (r *ConfigReconciler) reconcileSecret(ctx context.Context, cfg *openvoxv1alpha1.Config, name string, data map[string][]byte) error {
+//
+// annotations are merged into whatever the Secret already carries. The
+// AnnotationRenderedFrom entry is what the status controllers read to tell
+// which resources the current content came from; a Secret no status controller
+// observes passes nil.
+func (r *ConfigReconciler) reconcileSecret(ctx context.Context, cfg *openvoxv1alpha1.Config, name string,
+	data map[string][]byte, annotations map[string]string) error {
 	logger := log.FromContext(ctx)
 
 	secret := &corev1.Secret{
@@ -218,6 +229,9 @@ func (r *ConfigReconciler) reconcileSecret(ctx context.Context, cfg *openvoxv1al
 			return err
 		}
 		secret.Labels = configLabels(cfg.Name)
+		for k, v := range annotations {
+			metav1.SetMetaDataAnnotation(&secret.ObjectMeta, k, v)
+		}
 		secret.Data = data
 		return controllerutil.SetControllerReference(cfg, secret, r.Scheme)
 	})

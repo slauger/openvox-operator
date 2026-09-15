@@ -6,9 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -28,25 +27,6 @@ const autosignPolicyDir = "/etc/puppetlabs/puppet/autosign-policy"
 // autosignPolicyPath is the file inside that directory, passed to the binary
 // with --config.
 const autosignPolicyPath = autosignPolicyDir + "/autosign-policy.yaml"
-
-// findSigningPolicies returns all SigningPolicies referencing the given CA.
-//
-// A list error is returned rather than swallowed: an empty policy set renders
-// as a deny-all policy, so treating a transient failure as "no policies" would
-// overwrite a valid policy Secret and lock every agent out.
-func (r *ConfigReconciler) findSigningPolicies(ctx context.Context, ca *openvoxv1alpha1.CertificateAuthority) ([]openvoxv1alpha1.SigningPolicy, error) {
-	list := &openvoxv1alpha1.SigningPolicyList{}
-	if err := r.List(ctx, list, client.InNamespace(ca.Namespace)); err != nil {
-		return nil, fmt.Errorf("listing SigningPolicies in namespace %s: %w", ca.Namespace, err)
-	}
-	var result []openvoxv1alpha1.SigningPolicy
-	for _, sp := range list.Items {
-		if sp.Spec.CertificateAuthorityRef == ca.Name {
-			result = append(result, sp)
-		}
-	}
-	return result, nil
-}
 
 // reconcileAutosignSecrets reconciles the autosign policy Secret for the CA referenced by this Config.
 func (r *ConfigReconciler) reconcileAutosignSecrets(ctx context.Context, cfg *openvoxv1alpha1.Config) error {
@@ -79,27 +59,31 @@ func (r *ConfigReconciler) reconcileAutosignSecrets(ctx context.Context, cfg *op
 func (r *ConfigReconciler) reconcileAutosignSecret(ctx context.Context, cfg *openvoxv1alpha1.Config, ca *openvoxv1alpha1.CertificateAuthority) error {
 	secretName := fmt.Sprintf("%s-autosign-policy", ca.Name)
 
-	policies, err := r.findSigningPolicies(ctx, ca)
+	policies, err := signingPoliciesForAuthority(ctx, r.Client, ca.Namespace, ca.Name)
 	if err != nil {
 		return err
 	}
 
-	// Render policy config YAML
+	// Rendering failures are reported on the Config, which owns this Secret. The
+	// SigningPolicy controller derives its own status from whether its policy
+	// ends up in the rendered Secret.
 	policyYAML, renderErr := r.renderAutosignPolicyConfig(ctx, cfg.Namespace, ca, policies)
 	if renderErr != nil {
+		r.Recorder.Eventf(cfg, nil, corev1.EventTypeWarning, EventReasonAutosignPolicyRenderFailed, "Reconcile",
+			"Rendering the autosign policy for CertificateAuthority %s failed: %v", ca.Name, renderErr)
 		return fmt.Errorf("rendering autosign policy config: %w", renderErr)
-	}
-
-	// Update SigningPolicy status
-	for i := range policies {
-		r.updateSigningPolicyStatus(ctx, &policies[i], nil)
 	}
 
 	data := map[string][]byte{
 		"autosign-policy.yaml": []byte(policyYAML),
 	}
 
-	return r.reconcileSecret(ctx, cfg, secretName, data)
+	sources := make([]renderSource, 0, len(policies))
+	for i := range policies {
+		sources = append(sources, sourceOf(&policies[i]))
+	}
+
+	return r.reconcileSecret(ctx, cfg, secretName, data, renderedFromAnnotation(sources))
 }
 
 // renderAutosignPolicyConfig renders the policy config YAML that openvox-autosign reads.
@@ -159,7 +143,6 @@ func (r *ConfigReconciler) renderAutosignPolicyConfig(ctx context.Context, names
 					value, err = resolveSecretKey(ctx, r.Client, namespace,
 						attr.ValueFrom.SecretKeyRef.Name, attr.ValueFrom.SecretKeyRef.Key)
 					if err != nil {
-						r.updateSigningPolicyStatus(ctx, &p, err)
 						return "", fmt.Errorf("resolving csrAttribute %q for policy %s: %w", attr.Name, p.Name, err)
 					}
 				}
@@ -181,67 +164,29 @@ func renderAllowList(sb *strings.Builder, field string, allow []string) {
 	}
 }
 
-// updateSigningPolicyStatus sets the phase and condition on a SigningPolicy.
-func (r *ConfigReconciler) updateSigningPolicyStatus(ctx context.Context, sp *openvoxv1alpha1.SigningPolicy, err error) {
-	var errMsg string
-	if err != nil {
-		errMsg = err.Error()
-	}
-	if statusErr := updateStatusWithRetry(ctx, r.Client, sp, func() {
-		if err != nil {
-			sp.Status.Phase = openvoxv1alpha1.SigningPolicyPhaseError
-			meta.SetStatusCondition(&sp.Status.Conditions, metav1.Condition{
-				Type:               openvoxv1alpha1.ConditionSigningPolicyReady,
-				Status:             metav1.ConditionFalse,
-				Reason:             "Error",
-				Message:            errMsg,
-				ObservedGeneration: sp.Generation,
-			})
-		} else {
-			sp.Status.Phase = openvoxv1alpha1.SigningPolicyPhaseActive
-			meta.SetStatusCondition(&sp.Status.Conditions, metav1.Condition{
-				Type:               openvoxv1alpha1.ConditionSigningPolicyReady,
-				Status:             metav1.ConditionTrue,
-				Reason:             "PolicyRendered",
-				Message:            "Signing policy is active",
-				ObservedGeneration: sp.Generation,
-			})
-		}
-	}); statusErr != nil {
-		log.FromContext(ctx).Error(statusErr, "failed to update SigningPolicy status", "name", sp.Name)
-	}
-}
-
 // enqueueConfigsForSigningPolicy maps SigningPolicy changes to Config reconciles.
-func (r *ConfigReconciler) enqueueConfigsForSigningPolicy(c client.Reader) handler.MapFunc {
+func (r *ConfigReconciler) enqueueConfigsForSigningPolicy(c client.Client) handler.MapFunc {
 	return func(ctx context.Context, obj client.Object) []reconcile.Request {
 		sp, ok := obj.(*openvoxv1alpha1.SigningPolicy)
-		if !ok {
+		if !ok || sp.Spec.CertificateAuthorityRef == "" {
 			return nil
 		}
-
-		// Find the CA referenced by this SigningPolicy
-		ca := &openvoxv1alpha1.CertificateAuthority{}
-		if err := c.Get(ctx, types.NamespacedName{Name: sp.Spec.CertificateAuthorityRef, Namespace: sp.Namespace}, ca); err != nil {
-			log.FromContext(ctx).Error(err, "failed to get CertificateAuthority in watcher", "name", sp.Spec.CertificateAuthorityRef)
-			return nil
-		}
-
-		// Enqueue all Configs whose authorityRef points to this CA
-		cfgList := &openvoxv1alpha1.ConfigList{}
-		if err := c.List(ctx, cfgList, client.InNamespace(ca.Namespace)); err != nil {
+		configs, err := configsReferencingAuthority(ctx, c, sp.Namespace, sp.Spec.CertificateAuthorityRef)
+		if err != nil {
 			log.FromContext(ctx).Error(err, "failed to list Configs in watcher")
 			return nil
 		}
-
-		var requests []reconcile.Request
-		for _, cfg := range cfgList.Items {
-			if cfg.Spec.AuthorityRef == ca.Name {
-				requests = append(requests, reconcile.Request{
-					NamespacedName: types.NamespacedName{Name: cfg.Name, Namespace: cfg.Namespace},
-				})
-			}
-		}
-		return requests
+		return configRequests(configs)
 	}
+}
+
+// configRequests turns a set of Configs into reconcile requests.
+func configRequests(configs []openvoxv1alpha1.Config) []reconcile.Request {
+	requests := make([]reconcile.Request, 0, len(configs))
+	for _, cfg := range configs {
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{Name: cfg.Name, Namespace: cfg.Namespace},
+		})
+	}
+	return requests
 }

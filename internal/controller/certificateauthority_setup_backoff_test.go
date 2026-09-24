@@ -44,11 +44,11 @@ func failedSetupJob(message string) *batchv1.Job {
 }
 
 // reloadCA re-reads the CertificateAuthority, the way each reconcile does.
-func reloadCA(t *testing.T, c client.Client, name string) *openvoxv1alpha1.CertificateAuthority {
+func reloadCA(t *testing.T, c client.Client) *openvoxv1alpha1.CertificateAuthority {
 	t.Helper()
 	ca := &openvoxv1alpha1.CertificateAuthority{}
-	if err := c.Get(testCtx(), types.NamespacedName{Name: name, Namespace: testNamespace}, ca); err != nil {
-		t.Fatalf("reading CertificateAuthority %s: %v", name, err)
+	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-ca", Namespace: testNamespace}, ca); err != nil {
+		t.Fatalf("reading CertificateAuthority: %v", err)
 	}
 	return ca
 }
@@ -57,7 +57,7 @@ func reloadCA(t *testing.T, c client.Client, name string) *openvoxv1alpha1.Certi
 // a Job that cannot succeed used to be deleted and recreated roughly every 15
 // seconds forever.
 func TestSetupJob_StopsRecreatingAfterRepeatedFailures(t *testing.T) {
-	c := setupTestClient(newCertificateAuthority("test-ca"), caPrereqs("test-ca"))
+	c := setupTestClient(newCertificateAuthority("test-ca"), caPrereqs())
 	r := newCertificateAuthorityReconciler(c)
 
 	for attempt := 1; attempt <= maxSetupAttempts; attempt++ {
@@ -67,7 +67,7 @@ func TestSetupJob_StopsRecreatingAfterRepeatedFailures(t *testing.T) {
 			t.Fatalf("seeding the failed job for attempt %d: %v", attempt, err)
 		}
 
-		ca := reloadCA(t, c, "test-ca")
+		ca := reloadCA(t, c)
 		result, err := r.reconcileJob(testCtx(), ca, setupJobName, job.DeepCopy(), "test-ca-ca")
 		if err != nil {
 			t.Fatalf("reconcileJob attempt %d: %v", attempt, err)
@@ -99,10 +99,10 @@ func TestSetupJob_StopsRecreatingAfterRepeatedFailures(t *testing.T) {
 // TestSetupJob_ReportsFailureInCondition covers the second half of the problem:
 // the CA sat in Initializing with no indication of why.
 func TestSetupJob_ReportsFailureInCondition(t *testing.T) {
-	c := setupTestClient(newCertificateAuthority("test-ca"), caPrereqs("test-ca"))
+	c := setupTestClient(newCertificateAuthority("test-ca"), caPrereqs())
 	r := newCertificateAuthorityReconciler(c)
 
-	ca := reloadCA(t, c, "test-ca")
+	ca := reloadCA(t, c)
 	ca.Annotations = map[string]string{AnnotationSetupAttempts: "4"}
 	if err := c.Update(testCtx(), ca); err != nil {
 		t.Fatalf("seeding the attempt counter: %v", err)
@@ -113,11 +113,11 @@ func TestSetupJob_ReportsFailureInCondition(t *testing.T) {
 		t.Fatalf("seeding the failed job: %v", err)
 	}
 
-	if _, err := r.reconcileJob(testCtx(), reloadCA(t, c, "test-ca"), setupJobName, job.DeepCopy(), "test-ca-ca"); err != nil {
+	if _, err := r.reconcileJob(testCtx(), reloadCA(t, c), setupJobName, job.DeepCopy(), "test-ca-ca"); err != nil {
 		t.Fatalf("reconcileJob: %v", err)
 	}
 
-	got := reloadCA(t, c, "test-ca")
+	got := reloadCA(t, c)
 	if got.Status.Phase != openvoxv1alpha1.CertificateAuthorityPhaseError {
 		t.Errorf("expected phase %q, got %q", openvoxv1alpha1.CertificateAuthorityPhaseError, got.Status.Phase)
 	}
@@ -137,12 +137,12 @@ func TestSetupJob_ReportsFailureInCondition(t *testing.T) {
 // TestSetupJob_CounterDoesNotGrowOnceTerminal keeps repeated reconciles from
 // inflating the counter and re-emitting the event.
 func TestSetupJob_CounterDoesNotGrowOnceTerminal(t *testing.T) {
-	c := setupTestClient(newCertificateAuthority("test-ca"), caPrereqs("test-ca"))
+	c := setupTestClient(newCertificateAuthority("test-ca"), caPrereqs())
 	r := newCertificateAuthorityReconciler(c)
 	rec := events.NewFakeRecorder(100)
 	r.Recorder = rec
 
-	ca := reloadCA(t, c, "test-ca")
+	ca := reloadCA(t, c)
 	ca.Annotations = map[string]string{AnnotationSetupAttempts: "4"}
 	if err := c.Update(testCtx(), ca); err != nil {
 		t.Fatalf("seeding the attempt counter: %v", err)
@@ -153,13 +153,13 @@ func TestSetupJob_CounterDoesNotGrowOnceTerminal(t *testing.T) {
 		t.Fatalf("seeding the failed job: %v", err)
 	}
 
-	for i := 0; i < 3; i++ {
-		if _, err := r.reconcileJob(testCtx(), reloadCA(t, c, "test-ca"), setupJobName, job.DeepCopy(), "test-ca-ca"); err != nil {
+	for i := range 3 {
+		if _, err := r.reconcileJob(testCtx(), reloadCA(t, c), setupJobName, job.DeepCopy(), "test-ca-ca"); err != nil {
 			t.Fatalf("reconcileJob %d: %v", i, err)
 		}
 	}
 
-	if n := setupAttempts(reloadCA(t, c, "test-ca")); n != maxSetupAttempts {
+	if n := setupAttempts(reloadCA(t, c)); n != maxSetupAttempts {
 		t.Errorf("the counter must stop at %d, got %d", maxSetupAttempts, n)
 	}
 	failures := 0
@@ -188,14 +188,14 @@ func TestSetupJob_SuccessResetsTheBudget(t *testing.T) {
 	job := failedSetupJob("")
 	job.Status = batchv1.JobStatus{Succeeded: 1}
 
-	c := setupTestClient(ca, caPrereqs("test-ca"), caSecret, job)
+	c := setupTestClient(ca, caPrereqs(), caSecret, job)
 	r := newCertificateAuthorityReconciler(c)
 
-	if _, err := r.reconcileJob(testCtx(), reloadCA(t, c, "test-ca"), setupJobName, job.DeepCopy(), "test-ca-ca"); err != nil {
+	if _, err := r.reconcileJob(testCtx(), reloadCA(t, c), setupJobName, job.DeepCopy(), "test-ca-ca"); err != nil {
 		t.Fatalf("reconcileJob: %v", err)
 	}
 
-	if n := setupAttempts(reloadCA(t, c, "test-ca")); n != 0 {
+	if n := setupAttempts(reloadCA(t, c)); n != 0 {
 		t.Errorf("a successful job must clear the counter, got %d", n)
 	}
 }
@@ -208,20 +208,20 @@ func TestSetupJob_ImageChangeResetsTheBudget(t *testing.T) {
 
 	job := failedSetupJob("Job has reached the specified backoff limit")
 
-	c := setupTestClient(ca, caPrereqs("test-ca"), job)
+	c := setupTestClient(ca, caPrereqs(), job)
 	r := newCertificateAuthorityReconciler(c)
 
 	desired := job.DeepCopy()
 	desired.Spec.Template.Spec.Containers[0].Image = "corrected:1.2.3"
 
-	res, err := r.reconcileJob(testCtx(), reloadCA(t, c, "test-ca"), setupJobName, desired, "test-ca-ca")
+	res, err := r.reconcileJob(testCtx(), reloadCA(t, c), setupJobName, desired, "test-ca-ca")
 	if err != nil {
 		t.Fatalf("reconcileJob: %v", err)
 	}
 	if res.RequeueAfter != RequeueIntervalMedium {
 		t.Errorf("a corrected image must be retried, got RequeueAfter %v", res.RequeueAfter)
 	}
-	if n := setupAttempts(reloadCA(t, c, "test-ca")); n != 0 {
+	if n := setupAttempts(reloadCA(t, c)); n != 0 {
 		t.Errorf("a corrected image must clear the counter, got %d", n)
 	}
 	if err := c.Get(testCtx(), types.NamespacedName{Name: setupJobName, Namespace: testNamespace}, &batchv1.Job{}); !apierrors.IsNotFound(err) {

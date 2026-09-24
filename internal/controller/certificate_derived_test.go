@@ -20,7 +20,7 @@ func TestEffectiveDNSAltNames_AddsTheRouteHostname(t *testing.T) {
 	server.Spec.CertificateRef = "web-cert"
 	server.Spec.PoolRefs = []string{"puppet"}
 
-	pool := newPool("puppet", withRoute(true, "puppet.example.com", "gw"))
+	pool := newPool("puppet", withRoute("puppet.example.com", "gw"))
 	pool.Spec.Route.InjectDNSAltName = true
 
 	r := newCertificateReconciler(setupTestClient(cert, server, pool))
@@ -43,7 +43,7 @@ func TestEffectiveDNSAltNames_LeavesTheSpecAlone(t *testing.T) {
 	server := newServer("web")
 	server.Spec.CertificateRef = "web-cert"
 	server.Spec.PoolRefs = []string{"puppet"}
-	pool := newPool("puppet", withRoute(true, "puppet.example.com", "gw"))
+	pool := newPool("puppet", withRoute("puppet.example.com", "gw"))
 	pool.Spec.Route.InjectDNSAltName = true
 
 	c := setupTestClient(cert, server, pool)
@@ -69,7 +69,7 @@ func TestEffectiveDNSAltNames_IsIdempotent(t *testing.T) {
 	server := newServer("web")
 	server.Spec.CertificateRef = "web-cert"
 	server.Spec.PoolRefs = []string{"puppet"}
-	pool := newPool("puppet", withRoute(true, "puppet.example.com", "gw"))
+	pool := newPool("puppet", withRoute("puppet.example.com", "gw"))
 	pool.Spec.Route.InjectDNSAltName = true
 
 	r := newCertificateReconciler(setupTestClient(cert, server, pool))
@@ -96,7 +96,7 @@ func TestEffectiveDNSAltNames_IgnoresPoolsWithoutInjection(t *testing.T) {
 	server := newServer("web")
 	server.Spec.CertificateRef = "web-cert"
 	server.Spec.PoolRefs = []string{"puppet"}
-	pool := newPool("puppet", withRoute(true, "puppet.example.com", "gw")) // InjectDNSAltName stays false
+	pool := newPool("puppet", withRoute("puppet.example.com", "gw")) // InjectDNSAltName stays false
 
 	r := newCertificateReconciler(setupTestClient(cert, server, pool))
 	names, err := r.effectiveDNSAltNames(testCtx(), cert)
@@ -121,7 +121,7 @@ func TestEffectiveDNSAltNames_IgnoresUnrelatedServers(t *testing.T) {
 	notJoined.Spec.CertificateRef = "web-cert"
 	notJoined.Spec.PoolRefs = nil
 
-	pool := newPool("puppet", withRoute(true, "puppet.example.com", "gw"))
+	pool := newPool("puppet", withRoute("puppet.example.com", "gw"))
 	pool.Spec.Route.InjectDNSAltName = true
 
 	r := newCertificateReconciler(setupTestClient(cert, otherServer, notJoined, pool))
@@ -142,7 +142,7 @@ func TestEffectiveDNSAltNames_IgnoresTerminatingPool(t *testing.T) {
 	server.Spec.CertificateRef = "web-cert"
 	server.Spec.PoolRefs = []string{"puppet"}
 
-	pool := newPool("puppet", withRoute(true, "puppet.example.com", "gw"))
+	pool := newPool("puppet", withRoute("puppet.example.com", "gw"))
 	pool.Spec.Route.InjectDNSAltName = true
 	now := metav1.Now()
 	pool.DeletionTimestamp = &now
@@ -167,7 +167,7 @@ func TestEnqueueCertificatesForPool(t *testing.T) {
 	unrelated := newServer("other")
 	unrelated.Spec.CertificateRef = "other-cert"
 	unrelated.Spec.PoolRefs = []string{"different-pool"}
-	pool := newPool("puppet", withRoute(true, "puppet.example.com", "gw"))
+	pool := newPool("puppet", withRoute("puppet.example.com", "gw"))
 
 	c := setupTestClient(server, unrelated, pool)
 	got := certificatesForPool(c)(testCtx(), pool)

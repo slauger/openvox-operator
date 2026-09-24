@@ -9,7 +9,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -83,7 +83,7 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	cert := &openvoxv1alpha1.Certificate{}
 	if err := r.Get(ctx, req.NamespacedName, cert); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			forgetCertificateMetrics(req.Name, req.Namespace)
 			return ctrl.Result{}, nil
 		}
@@ -158,7 +158,7 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Resolve CertificateAuthority
 	ca := &openvoxv1alpha1.CertificateAuthority{}
 	if err := r.Get(ctx, types.NamespacedName{Name: cert.Spec.AuthorityRef, Namespace: cert.Namespace}, ca); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			logger.Info("waiting for CertificateAuthority", "authorityRef", cert.Spec.AuthorityRef)
 			return ctrl.Result{}, nil
 		}
@@ -401,7 +401,7 @@ func (r *CertificateReconciler) adoptTLSSecret(ctx context.Context, cert *openvo
 func (r *CertificateReconciler) extractNotAfter(ctx context.Context, secretName, namespace string) *metav1.Time {
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret); err != nil {
-		if !errors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			log.FromContext(ctx).Error(err, "failed to get TLS Secret", "name", secretName, "namespace", namespace)
 		}
 		return nil
@@ -462,10 +462,7 @@ func (r *CertificateReconciler) scheduleRenewalCheck(ctx context.Context, cert *
 	r.emitExpiryWarnings(ctx, cert, timeUntilExpiry)
 
 	// Schedule next check: half the time until renewal, capped at 12h
-	requeueAfter := timeUntilRenewal / 2
-	if requeueAfter > maxRenewalCheckInterval {
-		requeueAfter = maxRenewalCheckInterval
-	}
+	requeueAfter := min(timeUntilRenewal/2, maxRenewalCheckInterval)
 
 	return ctrl.Result{RequeueAfter: requeueAfter}, nil
 }
@@ -544,7 +541,7 @@ func (r *CertificateReconciler) handleCertificateCleanup(ctx context.Context, ce
 	// Resolve CertificateAuthority
 	ca := &openvoxv1alpha1.CertificateAuthority{}
 	if err := r.Get(ctx, types.NamespacedName{Name: cert.Spec.AuthorityRef, Namespace: cert.Namespace}, ca); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			logger.Info("CertificateAuthority not found, skipping cleanup", "authorityRef", cert.Spec.AuthorityRef)
 			return nil
 		}

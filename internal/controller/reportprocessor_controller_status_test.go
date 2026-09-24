@@ -23,7 +23,7 @@ func webhookSecret(cfgName string, endpointNames ...string) *corev1.Secret {
 }
 
 func TestReportProcessorReconcile_Status(t *testing.T) {
-	rp := newReportProcessor("test-rp", "production", "https://puppetdb.example.invalid")
+	rp := newReportProcessor("test-rp", "https://puppetdb.example.invalid")
 	cfg := newConfig("production")
 	key := types.NamespacedName{Name: "test-rp", Namespace: testNamespace}
 

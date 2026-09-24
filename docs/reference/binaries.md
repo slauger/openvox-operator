@@ -29,10 +29,17 @@ The CSR is read from stdin as PEM-encoded data.
 
 - Multiple policies are evaluated with OR logic (any match signs)
 - Within a policy, all conditions use AND logic (all must match)
-- `any: true` signs unconditionally
-- `pattern` matches certnames using glob patterns (`*`, `?`)
+- `any: true` signs unconditionally **once the guards below have passed**
+- `certnames` matches certnames using glob patterns (`*`, `?`)
 - `csrAttributes` matches Puppet CSR extension OIDs (e.g. `pp_role`, `pp_environment`, `pp_preshared_key`)
-- `dnsAltNames` validates DNS SANs in the CSR - if a CSR contains SANs, they must be explicitly allowed
+- `dnsAltNames`, `ipAltNames`, `uriAltNames`, `emailAltNames` and `extensions` are fail-closed allowlists: if a CSR carries a SAN of a given type, or a privileged authorization extension, the policy must allow it explicitly
+
+**Checks that precede every policy:**
+
+Two conditions are refused before any policy is consulted, so no policy -- including `any: true` -- can waive them:
+
+- **Reserved certnames.** The operator renders its own signing certname (`{ca}-operator`) into the policy file as `reservedCertnames`. The CA `auth.conf` grants admin rights to that name, so an agent holding a certificate under it would be a CA admin.
+- **Subject binding.** puppetserver passes the certname as an argument, taken from the request path, while the CN lives in the CSR subject. A CSR whose subject differs from the requested certname is refused, so the policy cannot judge one name while the certificate is issued carrying another.
 
 **Supported CSR attributes:**
 

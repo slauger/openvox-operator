@@ -3,10 +3,11 @@ package controller
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -44,7 +45,7 @@ func (r *ReportProcessorReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	rp := &openvoxv1alpha1.ReportProcessor{}
 	if err := r.Get(ctx, req.NamespacedName, rp); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("getting ReportProcessor %s: %w", req.NamespacedName, err)
@@ -100,7 +101,7 @@ func (r *ReportProcessorReconciler) observe(ctx context.Context, rp *openvoxv1al
 
 	cfg := &openvoxv1alpha1.Config{}
 	if err := r.Get(ctx, types.NamespacedName{Name: rp.Spec.ConfigRef, Namespace: rp.Namespace}, cfg); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return openvoxv1alpha1.ReportProcessorPhaseError, "ConfigNotFound",
 				fmt.Sprintf("Config %s does not exist", rp.Spec.ConfigRef)
 		}
@@ -110,7 +111,7 @@ func (r *ReportProcessorReconciler) observe(ctx context.Context, rp *openvoxv1al
 	secretName := fmt.Sprintf("%s-report-webhook", cfg.Name)
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: rp.Namespace}, secret); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return openvoxv1alpha1.ReportProcessorPhaseError, "NotRendered",
 				fmt.Sprintf("Secret %s has not been rendered yet", secretName)
 		}
@@ -122,11 +123,9 @@ func (r *ReportProcessorReconciler) observe(ctx context.Context, rp *openvoxv1al
 		return openvoxv1alpha1.ReportProcessorPhaseError, "RenderedConfigUnreadable",
 			fmt.Sprintf("Secret %s does not contain a readable report-webhook.yaml: %v", secretName, err)
 	}
-	for _, name := range rendered {
-		if name == rp.Name {
-			return openvoxv1alpha1.ReportProcessorPhaseActive, "Rendered",
-				fmt.Sprintf("Endpoint is present in Secret %s", secretName)
-		}
+	if slices.Contains(rendered, rp.Name) {
+		return openvoxv1alpha1.ReportProcessorPhaseActive, "Rendered",
+			fmt.Sprintf("Endpoint is present in Secret %s", secretName)
 	}
 
 	return openvoxv1alpha1.ReportProcessorPhaseError, "NotRendered",

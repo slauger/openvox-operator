@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	ctrlwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -35,6 +36,8 @@ func init() {
 
 func main() {
 	var metricsAddr string
+	var secureMetrics bool
+	var metricsCertDir string
 	var probeAddr string
 	var enableLeaderElection bool
 	var enableWebhooks bool
@@ -42,6 +45,14 @@ func main() {
 	var watchNamespace string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
+	flag.BoolVar(&secureMetrics, "metrics-secure", false,
+		"Serve metrics over HTTPS and require an authenticated, authorized client. "+
+			"Off by default so existing scrape configurations keep working; this is "+
+			"expected to become the default in a later release.")
+	flag.StringVar(&metricsCertDir, "metrics-cert-dir", "",
+		"Directory holding tls.crt and tls.key for the metrics endpoint. "+
+			"Empty means controller-runtime generates a self-signed certificate at startup. "+
+			"Only used with --metrics-secure.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
@@ -59,7 +70,7 @@ func main() {
 
 	mgrOptions := ctrl.Options{
 		Scheme:                 scheme,
-		Metrics:                metricsserver.Options{BindAddress: metricsAddr},
+		Metrics:                metricsOptions(metricsAddr, secureMetrics, metricsCertDir),
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "openvox-operator.voxpupuli.org",
@@ -192,4 +203,40 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+// metricsOptions builds the metrics server configuration.
+//
+// The endpoint used to be plaintext HTTP reachable by anything in the cluster.
+// It carries no key material, but it does list every certificate the operator
+// manages and when each expires - a ready-made inventory for picking a moment.
+//
+// With secure serving the filter authenticates each request against the API
+// server (TokenReview) and checks authorization (SubjectAccessReview), so a
+// scraper needs an explicit RBAC grant on /metrics.
+//
+// The certificate is self-signed and regenerated on restart. That is
+// deliberate: the protection comes from the filter, not from the certificate,
+// and requiring cert-manager for an in-cluster endpoint that exposes no
+// secrets would buy little for the dependency. Scrapers verify it with
+// insecureSkipVerify, or point at a cert-manager issued one.
+func metricsOptions(addr string, secure bool, certDir string) metricsserver.Options {
+	if !secure {
+		return metricsserver.Options{BindAddress: addr}
+	}
+	opts := metricsserver.Options{
+		BindAddress:    addr,
+		SecureServing:  true,
+		FilterProvider: filters.WithAuthenticationAndAuthorization,
+	}
+	// Without a directory controller-runtime generates a self-signed
+	// certificate at startup and regenerates it on every restart, which forces
+	// scrapers to skip verification. A directory - from cert-manager or
+	// supplied by hand - gives them something to verify against.
+	if certDir != "" {
+		opts.CertDir = certDir
+		opts.CertName = "tls.crt"
+		opts.KeyName = "tls.key"
+	}
+	return opts
 }

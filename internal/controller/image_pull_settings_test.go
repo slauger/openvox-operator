@@ -240,7 +240,7 @@ func TestSSLBootstrapped_TrueOnceSigned(t *testing.T) {
 // TestPullSecrets_ReachTheCASetupJob covers the third workload.
 func TestPullSecrets_ReachTheCASetupJob(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
-	cfg := caPrereqs("test-ca")
+	cfg := caPrereqs()
 	cfg.Spec.Image.PullSecrets = []corev1.LocalObjectReference{{Name: "registry-creds"}}
 
 	r := newCertificateAuthorityReconciler(setupTestClient(ca, cfg))

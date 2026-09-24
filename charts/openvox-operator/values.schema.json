@@ -54,6 +54,23 @@
             "description": "Prometheus metrics configuration.",
             "type": "object",
             "properties": {
+                "certManager": {
+                    "type": "object",
+                    "properties": {
+                        "duration": {
+                            "description": "Certificate validity.",
+                            "type": "string"
+                        },
+                        "enabled": {
+                            "description": "Issue the metrics serving certificate with cert-manager. Only used when secure is true.",
+                            "type": "boolean"
+                        },
+                        "renewBefore": {
+                            "description": "Renew this long before expiry.",
+                            "type": "string"
+                        }
+                    }
+                },
                 "enabled": {
                     "description": "Enable the metrics endpoint.",
                     "type": "boolean"
@@ -63,6 +80,10 @@
                     "type": "integer",
                     "maximum": 65535,
                     "minimum": 1
+                },
+                "secure": {
+                    "description": "Serve metrics over HTTPS and require an authenticated, authorized client.",
+                    "type": "boolean"
                 },
                 "service": {
                     "type": "object",
@@ -87,6 +108,15 @@
                         "labels": {
                             "description": "Additional labels for the ServiceMonitor.",
                             "type": "object"
+                        }
+                    }
+                },
+                "tls": {
+                    "type": "object",
+                    "properties": {
+                        "certSecret": {
+                            "description": "Secret holding tls.crt and tls.key for the metrics endpoint. Overrides the cert-manager issued one.",
+                            "type": "string"
                         }
                     }
                 }

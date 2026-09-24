@@ -6,7 +6,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -21,7 +21,8 @@ func (r *CertificateAuthorityReconciler) reconcileCASetupRBAC(ctx context.Contex
 
 	caKeySecretName := fmt.Sprintf("%s-ca-key", ca.Name)
 	caCRLSecretName := fmt.Sprintf("%s-ca-crl", ca.Name)
-	resourceNames := []string{caSecretName, caKeySecretName, caCRLSecretName}
+	resourceNames := make([]string, 0, 3+len(certs))
+	resourceNames = append(resourceNames, caSecretName, caKeySecretName, caCRLSecretName)
 	for _, cert := range certs {
 		resourceNames = append(resourceNames, fmt.Sprintf("%s-tls", cert.Name))
 	}
@@ -46,7 +47,7 @@ func (r *CertificateAuthorityReconciler) reconcileCASetupRBAC(ctx context.Contex
 
 func (r *CertificateAuthorityReconciler) ensureCAServiceAccount(ctx context.Context, name, namespace string, labels map[string]string, owner *openvoxv1alpha1.CertificateAuthority) error {
 	sa := &corev1.ServiceAccount{}
-	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, sa); errors.IsNotFound(err) {
+	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, sa); apierrors.IsNotFound(err) {
 		sa = &corev1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
@@ -67,7 +68,7 @@ func (r *CertificateAuthorityReconciler) ensureCAServiceAccount(ctx context.Cont
 func (r *CertificateAuthorityReconciler) ensureCARole(ctx context.Context, name, namespace string, labels map[string]string, resourceNames []string, owner *openvoxv1alpha1.CertificateAuthority) error {
 	role := &rbacv1.Role{}
 	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, role)
-	if errors.IsNotFound(err) {
+	if apierrors.IsNotFound(err) {
 		role = &rbacv1.Role{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
@@ -115,7 +116,7 @@ func (r *CertificateAuthorityReconciler) ensureCARole(ctx context.Context, name,
 func (r *CertificateAuthorityReconciler) ensureCARoleBinding(ctx context.Context, name, namespace string, labels map[string]string, owner *openvoxv1alpha1.CertificateAuthority) error {
 	rb := &rbacv1.RoleBinding{}
 	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, rb)
-	if errors.IsNotFound(err) {
+	if apierrors.IsNotFound(err) {
 		rb = &rbacv1.RoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,

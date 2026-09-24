@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -66,9 +67,9 @@ type SSLConfig struct {
 
 // ENCResult represents a Puppet ENC response.
 type ENCResult struct {
-	Classes     interface{}            `yaml:"classes" json:"classes"`
-	Parameters  map[string]interface{} `yaml:"parameters,omitempty" json:"parameters,omitempty"`
-	Environment string                 `yaml:"environment,omitempty" json:"environment,omitempty"`
+	Classes     any            `yaml:"classes" json:"classes"`
+	Parameters  map[string]any `yaml:"parameters,omitempty" json:"parameters,omitempty"`
+	Environment string         `yaml:"environment,omitempty" json:"environment,omitempty"`
 }
 
 // notFoundError indicates a 404 response.
@@ -77,13 +78,13 @@ type notFoundError struct{ msg string }
 func (e *notFoundError) Error() string { return e.msg }
 
 func isNotFound(err error) bool {
-	_, ok := err.(*notFoundError)
-	return ok
+	var nfe *notFoundError
+	return errors.As(err, &nfe)
 }
 
 // loadENCConfig reads and parses the ENC config YAML file.
 func loadENCConfig(path string) (*ENCConfig, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return nil, fmt.Errorf("reading ENC config: %w", err)
 	}
@@ -174,7 +175,7 @@ func buildRequestBody(bodyType, certname string) (string, error) {
 		return string(data), err
 	case "facts":
 		facts := loadFacts(certname)
-		data, err := json.Marshal(map[string]interface{}{
+		data, err := json.Marshal(map[string]any{
 			"certname": certname,
 			"facts":    facts,
 		})
@@ -185,22 +186,22 @@ func buildRequestBody(bodyType, certname string) (string, error) {
 }
 
 // loadFacts reads Puppet facts for a certname from the YAML facts cache.
-func loadFacts(certname string) map[string]interface{} {
+func loadFacts(certname string) map[string]any {
 	safeName := filepath.Base(certname)
 	factsPath := filepath.Join("/opt/puppetlabs/server/data/puppetserver/yaml/facts", safeName+".yaml")
-	data, err := os.ReadFile(factsPath)
+	data, err := os.ReadFile(filepath.Clean(factsPath))
 	if err != nil {
-		return map[string]interface{}{}
+		return map[string]any{}
 	}
 
 	var factsFile struct {
-		Values map[string]interface{} `yaml:"values"`
+		Values map[string]any `yaml:"values"`
 	}
 	if err := yaml.Unmarshal(data, &factsFile); err != nil {
-		return map[string]interface{}{}
+		return map[string]any{}
 	}
 	if factsFile.Values == nil {
-		return map[string]interface{}{}
+		return map[string]any{}
 	}
 	return factsFile.Values
 }
@@ -224,7 +225,7 @@ func normalizeResponse(body []byte, format string) (string, error) {
 
 	// Ensure classes is never nil
 	if result.Classes == nil {
-		result.Classes = map[string]interface{}{}
+		result.Classes = map[string]any{}
 	}
 
 	out, err := yaml.Marshal(&result)
@@ -240,7 +241,7 @@ func buildHTTPClient(cfg *ENCConfig) (*http.Client, error) {
 
 	// Load CA certificate for server verification
 	if cfg.SSL.CAFile != "" {
-		caCert, err := os.ReadFile(cfg.SSL.CAFile)
+		caCert, err := os.ReadFile(filepath.Clean(cfg.SSL.CAFile))
 		if err != nil {
 			return nil, fmt.Errorf("reading CA cert: %w", err)
 		}
@@ -270,19 +271,19 @@ func buildHTTPClient(cfg *ENCConfig) (*http.Client, error) {
 
 // saveCache writes the classification result to a cache file.
 func saveCache(dir, certname, data string) error {
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return err
 	}
 	safeName := filepath.Base(certname)
 	path := filepath.Join(dir, safeName+".yaml")
-	return os.WriteFile(path, []byte(data), 0644)
+	return os.WriteFile(path, []byte(data), 0600)
 }
 
 // readCache reads a cached classification result.
 func readCache(dir, certname string) (string, error) {
 	safeName := filepath.Base(certname)
 	path := filepath.Join(dir, safeName+".yaml")
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return "", err
 	}

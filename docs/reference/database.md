@@ -86,6 +86,7 @@ When enabled, the default policy allows TCP/8081 only from pods with `app.kubern
 
 | Field | Type | Description |
 |---|---|---|
+| `observedGeneration` | int64 | The `.metadata.generation` the status was last derived from. A value below `.metadata.generation` means the rest of this status has not caught up with the current spec yet |
 | `phase` | string | Current lifecycle phase |
 | `url` | string | HTTPS endpoint of the Database Service (e.g. `https://production-db:8081`) |
 | `ready` | int32 | Number of ready replicas |
@@ -99,7 +100,17 @@ When enabled, the default policy allows TCP/8081 only from pods with `app.kubern
 | `Pending` | Database created, resolving references |
 | `WaitingForCert` | Certificate not yet `Signed` |
 | `Running` | Deployment created and running |
-| `Error` | Reconciliation failed |
+| `Error` | Defined in the API, but never set by the controller (see below) |
+
+`Error` is part of the API but the controller never assigns it. A failing
+reconcile leaves the phase at its previous value, reports the reason in the
+`DatabaseReady` condition and emits a warning event. Watch the condition rather than
+the phase:
+
+```bash
+kubectl get database <name> -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.reason}: {.message}{"\n"}{end}'
+```
+
 
 ## Pod Anatomy
 

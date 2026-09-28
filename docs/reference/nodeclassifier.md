@@ -177,7 +177,49 @@ At most one authentication method may be configured.
 | Phase | Description |
 |---|---|
 | `Active` | Classifier configuration is rendered and active |
-| `Error` | Configuration error (e.g. referenced Secret not found) |
+| `Disabled` | Deliberately bypassed by an [`externalNodesCommand`](config.md) override -- a configuration choice, not a fault |
+| `Error` | The classifier is not in effect -- see the `Ready` condition for which case |
+
+The status is derived from the rendered ENC Secret, so it reports whether this
+classifier actually reached a server rather than whether the resource itself is
+well-formed. The `Ready` condition carries the reason:
+
+| Reason | Meaning |
+|---|---|
+| `Rendered` | The endpoint is present in the rendered Secret, at the classifier's current generation |
+| `NoConfig` | No [Config](config.md) sets `nodeClassifierRef` to this NodeClassifier, so nothing renders it |
+| `OverriddenByExternalNodesCommand` | Every Config referencing it sets [`spec.puppet.externalNodesCommand`](config.md), which replaces the built-in binary and bypasses NodeClassifier resources |
+| `NotRendered` | No Secret rendered from this NodeClassifier exists, or the one that exists was rendered from a different one |
+| `RenderedConfigStale` | A Secret was rendered from this NodeClassifier, but from an earlier generation |
+| `RenderedConfigSourceUnknown` | The Secret predates this mechanism and does not record what it was rendered from; it resolves once the Config controller re-renders |
+
+Automation upgrading from an earlier operator version should note that these
+reasons replace the previous two: `ConfigRendered` became `Rendered`, and a
+single catch-all `Error` reason was split into the specific cases above.
+
+`enc.yaml` carries no resource name, so the Secret's
+`openvox.voxpupuli.org/rendered-from` annotation is what ties the rendered file
+back to this NodeClassifier and to the generation it was rendered at. That also
+catches a Secret left over from a previous `nodeClassifierRef`, which would
+otherwise read as active. Where several Configs reference the same classifier,
+any one of them holding a Secret that does not match the current generation --
+an earlier generation, a different classifier, or one that records no source at
+all -- holds the whole resource out of `Ready`: the current spec is not in
+effect everywhere yet. A Config that has rendered no Secret at all is the
+exception, since nothing is mounted there to contradict it.
+
+Rendering failures -- an unresolvable auth Secret, for example -- are reported
+on the Config that owns the Secret, as an `ENCRenderFailed` event, and the
+failed render leaves the previous Secret untouched.
+
+What the classifier reports then depends on whether its own spec changed. If a
+spec edit triggered the failing render, the generation moved on and the
+classifier reports `RenderedConfigStale`. If the spec did not change -- the
+referenced auth Secret was rotated or deleted underneath it -- the generation
+is unchanged, the previous Secret still matches it, and the classifier keeps
+reporting `Active` while the servers classify against the old credential. Watch
+the Config's `ENCRenderFailed` events for that case; the classifier's own
+status cannot see it.
 
 ## How It Works
 

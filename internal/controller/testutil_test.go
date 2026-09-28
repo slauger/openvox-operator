@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"testing"
 
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -36,6 +37,35 @@ func testScheme() *runtime.Scheme {
 // setupTestClient creates a fake client pre-loaded with the given objects.
 // StatusSubresource is enabled for all CRD types that use status updates.
 func setupTestClient(objs ...client.Object) client.Client {
+	return testClientBuilder(objs...).Build()
+}
+
+// requireErrorCondition asserts a resource reports the given failure reason and
+// is genuinely not ready. Checking the reason alone would let a condition that
+// names the failure while still reporting Ready=True pass unnoticed.
+//
+// The condition type is not a parameter because the resources this is used on
+// -- SigningPolicy and NodeClassifier -- both name their readiness condition
+// "Ready". Others do not (ConditionCAReady, ConditionConfigReady), so a caller
+// from elsewhere fails at the Fatalf below rather than asserting nothing.
+func requireErrorCondition(t *testing.T, conditions []metav1.Condition, reason string) {
+	t.Helper()
+	const condType = openvoxv1alpha1.ConditionSigningPolicyReady
+	cond := meta.FindStatusCondition(conditions, condType)
+	if cond == nil {
+		t.Fatalf("expected a %s condition, got none", condType)
+	}
+	if cond.Reason != reason {
+		t.Errorf("reason = %q, want %q", cond.Reason, reason)
+	}
+	if cond.Status != metav1.ConditionFalse {
+		t.Errorf("status = %q for reason %q, want False", cond.Status, reason)
+	}
+}
+
+// testClientBuilder is setupTestClient stopping short of Build, for tests that
+// need to add interceptors on top of the same scheme, subresources and indexes.
+func testClientBuilder(objs ...client.Object) *fake.ClientBuilder {
 	b := fake.NewClientBuilder().
 		WithScheme(testScheme()).
 		WithObjects(objs...).
@@ -55,7 +85,7 @@ func setupTestClient(objs ...client.Object) client.Client {
 	for _, idx := range fieldIndexes() {
 		b = b.WithIndex(idx.obj, idx.field, idx.extract)
 	}
-	return b.Build()
+	return b
 }
 
 // testRecorder returns a fake event recorder.
@@ -126,15 +156,15 @@ func withReadOnlyRootFS(v bool) configOption {
 	}
 }
 
-func withAutosignCommand(cmd string) configOption {
+func withAutosignCommand() configOption {
 	return func(c *openvoxv1alpha1.Config) {
-		c.Spec.Puppet.AutosignCommand = cmd
+		c.Spec.Puppet.AutosignCommand = "/usr/local/bin/custom-autosign"
 	}
 }
 
-func withExternalNodesCommand(cmd string) configOption {
+func withExternalNodesCommand() configOption {
 	return func(c *openvoxv1alpha1.Config) {
-		c.Spec.Puppet.ExternalNodesCommand = cmd
+		c.Spec.Puppet.ExternalNodesCommand = "/usr/local/bin/custom-enc"
 	}
 }
 
@@ -416,7 +446,7 @@ func newCertificateAuthority(name string, opts ...caOption) *openvoxv1alpha1.Cer
 	return ca
 }
 
-func newSigningPolicy(name, caRef string, any bool) *openvoxv1alpha1.SigningPolicy {
+func newSigningPolicy(name, caRef string) *openvoxv1alpha1.SigningPolicy {
 	return &openvoxv1alpha1.SigningPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -424,7 +454,7 @@ func newSigningPolicy(name, caRef string, any bool) *openvoxv1alpha1.SigningPoli
 		},
 		Spec: openvoxv1alpha1.SigningPolicySpec{
 			CertificateAuthorityRef: caRef,
-			Any:                     any,
+			Any:                     true,
 		},
 	}
 }
@@ -555,6 +585,14 @@ func newReportProcessorReconciler(c client.Client) *ReportProcessorReconciler {
 		Scheme:   testScheme(),
 		Recorder: testRecorder(),
 	}
+}
+
+func newSigningPolicyReconciler(c client.Client) *SigningPolicyReconciler {
+	return &SigningPolicyReconciler{Client: c}
+}
+
+func newNodeClassifierReconciler(c client.Client) *NodeClassifierReconciler {
+	return &NodeClassifierReconciler{Client: c}
 }
 
 type databaseOption func(*openvoxv1alpha1.Database)

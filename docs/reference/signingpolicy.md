@@ -215,7 +215,45 @@ Either `value` or `valueFrom` must be set.
 | Phase | Description |
 |---|---|
 | `Active` | Policy is rendered and active |
-| `Error` | Policy has a configuration error (e.g. referenced Secret not found) |
+| `Disabled` | Deliberately bypassed by an [`autosignCommand`](config.md) override -- a configuration choice, not a fault |
+| `Error` | Policy is not in effect -- see the `Ready` condition for which case |
+
+The status is derived from the rendered autosign policy Secret, so it reports
+whether this policy actually reached the CA rather than whether the resource
+itself is well-formed. The `Ready` condition carries the reason:
+
+| Reason | Meaning |
+|---|---|
+| `Rendered` | The policy is present in the rendered Secret, at its current generation |
+| `CertificateAuthorityRefMissing` | `spec.certificateAuthorityRef` is empty, so the policy is bound to no CA |
+| `CertificateAuthorityNotFound` | `spec.certificateAuthorityRef` points at a CertificateAuthority that does not exist |
+| `NoConfig` | No [Config](config.md) references that CertificateAuthority, so nothing renders the policy |
+| `OverriddenByAutosignCommand` | Every Config referencing the CA sets [`spec.puppet.autosignCommand`](config.md), which replaces the built-in binary and bypasses SigningPolicy resources |
+| `NotRendered` | The Secret does not (yet) contain this policy |
+| `RenderedConfigStale` | The Secret contains this policy, but as it was at an earlier generation |
+| `RenderedConfigSourceUnknown` | The Secret predates this mechanism and does not record what it was rendered from; it resolves once the Config controller re-renders |
+
+Automation upgrading from an earlier operator version should note that these
+reasons replace the previous two: `PolicyRendered` became `Rendered`, and a
+single catch-all `Error` reason was split into the specific cases above.
+
+The Secret's `openvox.voxpupuli.org/rendered-from` annotation names the
+policies its content was built from and the generation each was rendered at,
+which is what separates `Rendered` from `RenderedConfigStale`.
+
+Rendering failures -- an unresolvable `csrAttributes` Secret, for example --
+are reported on the Config that owns the Secret, as an
+`AutosignPolicyRenderFailed` event, and the failed render leaves the previous
+Secret untouched.
+
+What the policy reports then depends on whether its own spec changed. If a spec
+edit triggered the failing render, the generation moved on and the policy
+reports `RenderedConfigStale`. If the spec did not change -- the referenced
+`csrAttributes` Secret was rotated or deleted underneath it -- the generation is
+unchanged, the previous Secret still matches it, and the policy keeps reporting
+`Active` while the CA signs under the last policy that rendered cleanly. Watch
+the Config's `AutosignPolicyRenderFailed` events for that case; the policy's own
+status cannot see it.
 
 ## How It Works
 

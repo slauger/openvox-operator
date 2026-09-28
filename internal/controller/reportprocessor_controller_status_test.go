@@ -11,24 +11,32 @@ import (
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
 
-func webhookSecret(cfgName string, endpointNames ...string) *corev1.Secret {
+// webhookSecret builds a report-webhook Secret as the Config controller renders
+// it: the endpoints in report-webhook.yaml, and the ReportProcessors they came
+// from in the annotation.
+func webhookSecret(cfgName string, sources ...renderSource) *corev1.Secret {
 	yaml := "endpoints:\n"
-	for _, n := range endpointNames {
-		yaml += "  - name: " + n + "\n    url: https://example.invalid\n"
+	for _, s := range sources {
+		yaml += "  - name: " + s.Name + "\n    url: https://example.invalid\n"
 	}
 	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: cfgName + "-report-webhook", Namespace: testNamespace},
-		Data:       map[string][]byte{"report-webhook.yaml": []byte(yaml)},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        cfgName + "-report-webhook",
+			Namespace:   testNamespace,
+			Annotations: renderedFromAnnotation(sources),
+		},
+		Data: map[string][]byte{"report-webhook.yaml": []byte(yaml)},
 	}
 }
 
 func TestReportProcessorReconcile_Status(t *testing.T) {
 	rp := newReportProcessor("test-rp", "https://puppetdb.example.invalid")
+	rp.Generation = 1
 	cfg := newConfig("production")
 	key := types.NamespacedName{Name: "test-rp", Namespace: testNamespace}
 
 	t.Run("active once the endpoint is rendered", func(t *testing.T) {
-		c := setupTestClient(rp.DeepCopy(), cfg.DeepCopy(), webhookSecret("production", "test-rp"))
+		c := setupTestClient(rp.DeepCopy(), cfg.DeepCopy(), webhookSecret("production", renderSource{Name: "test-rp", Generation: 1}))
 		r := &ReportProcessorReconciler{Client: c, Scheme: testScheme(), Recorder: testRecorder()}
 		if _, err := r.Reconcile(testCtx(), testRequest("test-rp")); err != nil {
 			t.Fatalf("reconcile: %v", err)
@@ -78,7 +86,7 @@ func TestReportProcessorReconcile_Status(t *testing.T) {
 	})
 
 	t.Run("error when another processor was rendered but not this one", func(t *testing.T) {
-		c := setupTestClient(rp.DeepCopy(), cfg.DeepCopy(), webhookSecret("production", "someone-else"))
+		c := setupTestClient(rp.DeepCopy(), cfg.DeepCopy(), webhookSecret("production", renderSource{Name: "someone-else", Generation: 1}))
 		r := &ReportProcessorReconciler{Client: c, Scheme: testScheme(), Recorder: testRecorder()}
 		if _, err := r.Reconcile(testCtx(), testRequest("test-rp")); err != nil {
 			t.Fatalf("reconcile: %v", err)
@@ -91,18 +99,4 @@ func TestReportProcessorReconcile_Status(t *testing.T) {
 			t.Errorf("phase = %q, want Error", got.Status.Phase)
 		}
 	})
-}
-
-func TestRenderedEndpointNames(t *testing.T) {
-	names, err := renderedEndpointNames([]byte("endpoints:\n  - name: a\n    url: https://a.invalid\n  - name: b\n    url: https://b.invalid\n"))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(names) != 2 || names[0] != "a" || names[1] != "b" {
-		t.Errorf("got %v, want [a b]", names)
-	}
-
-	if _, err := renderedEndpointNames(nil); err == nil {
-		t.Error("empty input should be an error")
-	}
 }

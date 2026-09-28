@@ -286,6 +286,7 @@ spec:
                   the phase does not change what the operator does.
                 enum:
                 - Active
+                - Disabled
                 - Error
                 type: string
             type: object

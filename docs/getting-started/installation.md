@@ -55,6 +55,33 @@ In namespace mode the operator uses Role/RoleBinding instead of ClusterRole/Clus
 
 ## Upgrading
 
+### Status of SigningPolicy, NodeClassifier and ReportProcessor
+
+From the version that introduced the `openvox.voxpupuli.org/rendered-from`
+annotation, these three resources derive their `Ready` condition from the
+Secrets the Config controller renders, and match themselves against that
+annotation. Two things follow for an upgrade:
+
+- Secrets rendered by the previous version carry no annotation, so every
+  SigningPolicy, NodeClassifier and ReportProcessor reports
+  `RenderedConfigSourceUnknown` with `Ready=False` until the Config controller
+  re-renders -- normally seconds after the new operator starts. A Config that is
+  [paused](../guides/pausing-reconciliation.md) never re-renders, so its
+  resources stay in that state until it is resumed. Where several Configs
+  reference one NodeClassifier, it can briefly flip to `Ready=False` while the
+  Configs are re-rendered one at a time.
+- The condition `reason` strings changed. `PolicyRendered` and `ConfigRendered`
+  became `Rendered`, and the single catch-all `Error` reason was split into
+  specific cases. Automation matching the old strings needs updating; see the
+  reason tables in the [CRD reference](../reference/index.md).
+
+A resource that is deliberately bypassed by an `autosignCommand` or
+`externalNodesCommand` override now reports `phase: Disabled` rather than
+`Active`, with `Ready=False` and a reason naming the override. Alerting on
+`phase: Error` is unaffected by that case; alerting on `Ready=True` is not.
+
+### CRDs are not upgraded by Helm
+
 Helm installs the CRDs from the chart's `crds/` directory on the first install,
 but [does not update them on `helm upgrade`](https://helm.sh/docs/chart_best_practices/custom_resource_definitions/).
 An operator upgraded with `helm upgrade` alone keeps running against the CRDs of

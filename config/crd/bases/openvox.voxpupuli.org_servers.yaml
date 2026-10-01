@@ -3428,8 +3428,13 @@ spec:
                     type: string
                 type: object
               javaArgs:
-                default: -Xms512m -Xmx1024m
-                description: JavaArgs defines the JVM arguments.
+                description: |-
+                  JavaArgs defines the JVM arguments.
+
+                  There is deliberately no default. A defaulted field is never empty, and
+                  the controller uses emptiness to decide whether to derive the heap from
+                  the pod's memory limit. With a default in place that derivation is dead
+                  code and every Server runs on the same heap regardless of its limit.
                 type: string
               maxActiveInstances:
                 default: 1

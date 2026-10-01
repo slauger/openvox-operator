@@ -14,15 +14,15 @@ include:
   - major: "8"
     latest: true
     # renovate: datasource=github-releases depName=OpenVoxProject/openvox-server
-    server: 8.15.2
+    server: 8.16.0
     # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
-    termini: 8.15.0
+    termini: 8.16.0
     # renovate: datasource=github-releases depName=OpenVoxProject/openvox
-    openvox: 8.28.1
+    openvox: 8.29.0
     # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
-    db: 8.15.0
+    db: 8.16.0
     # renovate: datasource=github-releases depName=OpenVoxProject/openvox
-    agent: 8.28.1
+    agent: 8.29.0
   # Re-enable at OpenVox 9.0 GA (also fix server/db to install from RPM, not tarball):
   # - major: "9"
   #   latest: false

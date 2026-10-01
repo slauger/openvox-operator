@@ -8,7 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -63,7 +63,7 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	db := &openvoxv1alpha1.Database{}
 	if err := r.Get(ctx, req.NamespacedName, db); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("getting Database %s: %w", req.NamespacedName, err)
@@ -90,7 +90,7 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	// Resolve Certificate -- wait until phase is Signed
 	cert := &openvoxv1alpha1.Certificate{}
 	if err := r.Get(ctx, types.NamespacedName{Name: db.Spec.CertificateRef, Namespace: db.Namespace}, cert); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			logger.Info("waiting for Certificate", "certificateRef", db.Spec.CertificateRef)
 			return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 		}
@@ -110,7 +110,7 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	// Resolve CertificateAuthority via Certificate's authorityRef
 	ca := &openvoxv1alpha1.CertificateAuthority{}
 	if err := r.Get(ctx, types.NamespacedName{Name: cert.Spec.AuthorityRef, Namespace: db.Namespace}, ca); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			logger.Info("waiting for CertificateAuthority", "authorityRef", cert.Spec.AuthorityRef)
 			return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 		}
@@ -120,7 +120,7 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	// Validate PG credentials Secret exists
 	pgSecret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Name: db.Spec.Postgres.CredentialsSecretRef, Namespace: db.Namespace}, pgSecret); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			logger.Info("waiting for PostgreSQL credentials Secret", "secretRef", db.Spec.Postgres.CredentialsSecretRef)
 			return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
 		}
@@ -312,7 +312,7 @@ func (r *DatabaseReconciler) reconcileService(ctx context.Context, db *openvoxv1
 func (r *DatabaseReconciler) getReadyReplicas(ctx context.Context, db *openvoxv1alpha1.Database) (int32, error) {
 	deploy := &appsv1.Deployment{}
 	if err := r.Get(ctx, types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, deploy); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return 0, nil
 		}
 		return 0, fmt.Errorf("getting Deployment %s: %w", db.Name, err)
@@ -332,11 +332,11 @@ func (r *DatabaseReconciler) reconcilePDB(ctx context.Context, db *openvoxv1alph
 				return guardErr
 			}
 			logger.Info("deleting Database PDB (disabled)", "name", pdbName)
-			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
+			if err := r.Delete(ctx, existing); err != nil && !apierrors.IsNotFound(err) {
 				return fmt.Errorf("deleting PodDisruptionBudget %s: %w", pdbName, err)
 			}
 			r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabasePDBDeleted, "Reconcile", "PodDisruptionBudget %s deleted", pdbName)
-		} else if !errors.IsNotFound(err) {
+		} else if !apierrors.IsNotFound(err) {
 			return fmt.Errorf("getting PodDisruptionBudget %s: %w", pdbName, err)
 		}
 		return nil
@@ -386,11 +386,12 @@ func (r *DatabaseReconciler) buildPDB(db *openvoxv1alpha1.Database) (*policyv1.P
 			},
 		},
 	}
-	if db.Spec.PDB.MinAvailable != nil {
+	switch {
+	case db.Spec.PDB.MinAvailable != nil:
 		pdb.Spec.MinAvailable = db.Spec.PDB.MinAvailable
-	} else if db.Spec.PDB.MaxUnavailable != nil {
+	case db.Spec.PDB.MaxUnavailable != nil:
 		pdb.Spec.MaxUnavailable = db.Spec.PDB.MaxUnavailable
-	} else {
+	default:
 		minAvailable := intstrInt(DefaultPDBMinAvailable)
 		pdb.Spec.MinAvailable = &minAvailable
 	}
@@ -412,11 +413,11 @@ func (r *DatabaseReconciler) reconcileNetworkPolicy(ctx context.Context, db *ope
 				return guardErr
 			}
 			logger.Info("deleting Database NetworkPolicy (disabled)", "name", npName)
-			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
+			if err := r.Delete(ctx, existing); err != nil && !apierrors.IsNotFound(err) {
 				return fmt.Errorf("deleting NetworkPolicy %s: %w", npName, err)
 			}
 			r.Recorder.Eventf(db, nil, corev1.EventTypeNormal, EventReasonDatabaseNetworkPolicyDeleted, "Reconcile", "NetworkPolicy %s deleted", npName)
-		} else if !errors.IsNotFound(err) {
+		} else if !apierrors.IsNotFound(err) {
 			return fmt.Errorf("getting NetworkPolicy %s: %w", npName, err)
 		}
 		return nil

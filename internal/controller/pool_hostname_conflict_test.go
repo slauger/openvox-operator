@@ -25,8 +25,8 @@ const conflictHostname = "puppet.example.com"
 // controller-runtime retry it with exponential backoff forever, which produced
 // nothing but a growing backlog of identical events.
 func TestPoolConflict_ReportedAsConditionNotRetried(t *testing.T) {
-	winner := newPool("pool-a", withRoute(true, conflictHostname, "gw"))
-	loser := newPool("pool-b", withRoute(true, conflictHostname, "gw"))
+	winner := newPool("pool-a", withRoute(conflictHostname, "gw"))
+	loser := newPool("pool-b", withRoute(conflictHostname, "gw"))
 
 	c := setupTestClient(winner, loser)
 	r := newPoolReconciler(c, true)
@@ -60,9 +60,9 @@ func TestPoolConflict_ReportedAsConditionNotRetried(t *testing.T) {
 // the same list, so both must reach the same verdict, otherwise they take turns
 // creating and deleting the TLSRoute.
 func TestPoolConflict_OlderPoolKeepsTheHostname(t *testing.T) {
-	older := newPool("zzz-first", withRoute(true, conflictHostname, "gw"))
+	older := newPool("zzz-first", withRoute(conflictHostname, "gw"))
 	older.CreationTimestamp = metav1.NewTime(time.Unix(1_700_000_000, 0))
-	younger := newPool("aaa-second", withRoute(true, conflictHostname, "gw"))
+	younger := newPool("aaa-second", withRoute(conflictHostname, "gw"))
 	younger.CreationTimestamp = metav1.NewTime(time.Unix(1_700_000_100, 0))
 
 	c := setupTestClient(older, younger)
@@ -99,7 +99,7 @@ func TestPoolConflict_OlderPoolKeepsTheHostname(t *testing.T) {
 // TLSRoutes for one hostname: a Pool that held the route before an older
 // claimant enabled its own must release it.
 func TestPoolConflict_LoserGivesUpItsRoute(t *testing.T) {
-	loser := newPool("pool-b", withRoute(true, conflictHostname, "gw"))
+	loser := newPool("pool-b", withRoute(conflictHostname, "gw"))
 
 	c := setupTestClient(loser)
 	r := newPoolReconciler(c, true)
@@ -112,7 +112,7 @@ func TestPoolConflict_LoserGivesUpItsRoute(t *testing.T) {
 	}
 
 	// pool-a takes the hostname on the tie-break.
-	winner := newPool("pool-a", withRoute(true, conflictHostname, "gw"))
+	winner := newPool("pool-a", withRoute(conflictHostname, "gw"))
 	if err := c.Create(testCtx(), winner); err != nil {
 		t.Fatalf("creating pool-a: %v", err)
 	}
@@ -130,10 +130,10 @@ func TestPoolConflict_LoserGivesUpItsRoute(t *testing.T) {
 // from holding a hostname hostage.
 func TestPoolConflict_TerminatingPoolReleasesTheHostname(t *testing.T) {
 	now := metav1.Now()
-	leaving := newPool("pool-a", withRoute(true, conflictHostname, "gw"))
+	leaving := newPool("pool-a", withRoute(conflictHostname, "gw"))
 	leaving.DeletionTimestamp = &now
 	leaving.Finalizers = []string{"example.com/keep-around"}
-	successor := newPool("pool-b", withRoute(true, conflictHostname, "gw"))
+	successor := newPool("pool-b", withRoute(conflictHostname, "gw"))
 
 	c := setupTestClient(leaving, successor)
 	r := newPoolReconciler(c, true)
@@ -150,15 +150,15 @@ func TestPoolConflict_TerminatingPoolReleasesTheHostname(t *testing.T) {
 // TestPoolConflict_EventFiresOncePerTransition guards against the event noise
 // the old backoff loop produced.
 func TestPoolConflict_EventFiresOncePerTransition(t *testing.T) {
-	winner := newPool("pool-a", withRoute(true, conflictHostname, "gw"))
-	loser := newPool("pool-b", withRoute(true, conflictHostname, "gw"))
+	winner := newPool("pool-a", withRoute(conflictHostname, "gw"))
+	loser := newPool("pool-b", withRoute(conflictHostname, "gw"))
 
 	c := setupTestClient(winner, loser)
 	r := newPoolReconciler(c, true)
 	rec := events.NewFakeRecorder(100)
 	r.Recorder = rec
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if _, err := r.Reconcile(testCtx(), testRequest("pool-b")); err != nil {
 			t.Fatalf("reconcile %d: %v", i, err)
 		}
@@ -189,8 +189,8 @@ func countEvents(rec *events.FakeRecorder, reason string) int {
 // hostname is free the Pool must pick it up, which is what the sibling watch is
 // there to trigger.
 func TestPoolConflict_ResolvedWhenTheWinnerGivesUp(t *testing.T) {
-	winner := newPool("pool-a", withRoute(true, conflictHostname, "gw"))
-	loser := newPool("pool-b", withRoute(true, conflictHostname, "gw"))
+	winner := newPool("pool-a", withRoute(conflictHostname, "gw"))
+	loser := newPool("pool-b", withRoute(conflictHostname, "gw"))
 
 	c := setupTestClient(winner, loser)
 	r := newPoolReconciler(c, true)
@@ -223,9 +223,9 @@ func TestPoolConflict_ResolvedWhenTheWinnerGivesUp(t *testing.T) {
 // TestPoolsSharingHostname checks the watch that makes the resolution
 // above happen without polling.
 func TestPoolsSharingHostname(t *testing.T) {
-	changed := newPool("pool-a", withRoute(true, conflictHostname, "gw"))
-	sibling := newPool("pool-b", withRoute(true, conflictHostname, "gw"))
-	unrelated := newPool("pool-c", withRoute(true, "other.example.com", "gw"))
+	changed := newPool("pool-a", withRoute(conflictHostname, "gw"))
+	sibling := newPool("pool-b", withRoute(conflictHostname, "gw"))
+	unrelated := newPool("pool-c", withRoute("other.example.com", "gw"))
 	noRoute := newPool("pool-d")
 
 	c := setupTestClient(changed, sibling, unrelated, noRoute)
@@ -242,8 +242,8 @@ func TestPoolsSharingHostname(t *testing.T) {
 // flight comes back with a nil Spec.Route. Reporting the conflict must not
 // reach into it.
 func TestPoolConflict_SurvivesRouteRemovedMidReconcile(t *testing.T) {
-	winner := newPool("pool-a", withRoute(true, conflictHostname, "gw"))
-	loser := newPool("pool-b", withRoute(true, conflictHostname, "gw"))
+	winner := newPool("pool-a", withRoute(conflictHostname, "gw"))
+	loser := newPool("pool-b", withRoute(conflictHostname, "gw"))
 
 	gets := 0
 	c := fake.NewClientBuilder().

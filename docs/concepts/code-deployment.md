@@ -58,9 +58,9 @@ metadata:
 spec:
   image:
     repository: ghcr.io/slauger/openvox-server-8
-    tag: "8.12.1"
+    tag: "latest"
   code:
-    image: ghcr.io/example/puppet-code:v1.0.0
+    - image: ghcr.io/example/puppet-code:v1.0.0
 ```
 
 ### Pull Policy
@@ -70,8 +70,8 @@ Control when the image is pulled via `imagePullPolicy`. Defaults to `IfNotPresen
 ```yaml
 spec:
   code:
-    image: ghcr.io/example/puppet-code:v1.0.0
-    imagePullPolicy: Always
+    - image: ghcr.io/example/puppet-code:v1.0.0
+      imagePullPolicy: Always
 ```
 
 Supported values: `Always`, `IfNotPresent`, `Never`.
@@ -83,7 +83,7 @@ For immutable, reproducible deployments you can reference images by digest inste
 ```yaml
 spec:
   code:
-    image: ghcr.io/example/puppet-code@sha256:45b23dee08af5e43a7fea6c4cf9c25ccf269ee113168c19722f87876677c5cb2
+    - image: ghcr.io/example/puppet-code@sha256:45b23dee08af5e43a7fea6c4cf9c25ccf269ee113168c19722f87876677c5cb2
 ```
 
 A tag+digest combination also works:
@@ -91,7 +91,7 @@ A tag+digest combination also works:
 ```yaml
 spec:
   code:
-    image: ghcr.io/example/puppet-code:v1.0.0@sha256:45b23dee08af5e43a7fea6c4cf9c25ccf269ee113168c19722f87876677c5cb2
+    - image: ghcr.io/example/puppet-code:v1.0.0@sha256:45b23dee08af5e43a7fea6c4cf9c25ccf269ee113168c19722f87876677c5cb2
 ```
 
 ### Rolling Out Code Changes
@@ -101,7 +101,7 @@ Update the image reference to deploy new code. The operator detects the change a
 ```yaml
 spec:
   code:
-    image: ghcr.io/example/puppet-code:v1.1.0
+    - image: ghcr.io/example/puppet-code:v1.1.0
 ```
 
 ### Private Registries
@@ -111,8 +111,8 @@ For private registries, create a pull secret and reference it:
 ```yaml
 spec:
   code:
-    image: registry.example.com/puppet-code:v1.0.0
-    imagePullSecret: registry-credentials
+    - image: registry.example.com/puppet-code:v1.0.0
+      imagePullSecret: registry-credentials
 ```
 
 ### Rollout Visibility
@@ -163,7 +163,7 @@ spec:
   configRef: production
   certificateRef: canary-cert
   code:
-    image: ghcr.io/example/puppet-code:v2.0.0-rc1
+    - image: ghcr.io/example/puppet-code:v2.0.0-rc1
 ```
 
 ## PVC
@@ -181,9 +181,9 @@ metadata:
 spec:
   image:
     repository: ghcr.io/slauger/openvox-server-8
-    tag: "8.12.1"
+    tag: "latest"
   code:
-    claimName: puppet-code
+    - claimName: puppet-code
 ```
 
 Like the image volume, the PVC is mounted at the configured `environmentPath` (default `/etc/puppetlabs/code/environments`), so its root must contain the environment directories directly (`production/`, `staging/`, ...).

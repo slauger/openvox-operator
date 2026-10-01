@@ -249,7 +249,7 @@ func TestResolveCAJobResources(t *testing.T) {
 
 func TestReconcileJob_CreatesNew(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
-	cfg := caPrereqs("test-ca")
+	cfg := caPrereqs()
 	c := setupTestClient(ca, cfg)
 	r := newCertificateAuthorityReconciler(c)
 
@@ -284,7 +284,7 @@ func TestReconcileJob_CreatesNew(t *testing.T) {
 
 func TestReconcileJob_Succeeded(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
-	cfg := caPrereqs("test-ca")
+	cfg := caPrereqs()
 
 	// Pre-create the expected secret
 	caSecret := newSecret("test-ca-ca", map[string][]byte{
@@ -324,7 +324,7 @@ func TestReconcileJob_Succeeded(t *testing.T) {
 
 func TestReconcileJob_Failed(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
-	cfg := caPrereqs("test-ca")
+	cfg := caPrereqs()
 
 	existingJob := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -361,7 +361,7 @@ func TestReconcileJob_Failed(t *testing.T) {
 
 func TestReconcileJob_Running(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
-	cfg := caPrereqs("test-ca")
+	cfg := caPrereqs()
 
 	existingJob := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -393,7 +393,7 @@ func TestReconcileJob_Running(t *testing.T) {
 
 func TestReconcileJob_ImageChanged(t *testing.T) {
 	ca := newCertificateAuthority("test-ca")
-	cfg := caPrereqs("test-ca")
+	cfg := caPrereqs()
 
 	existingJob := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{

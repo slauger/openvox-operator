@@ -7,7 +7,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
@@ -64,7 +63,7 @@ func TestValidateStorageTransition(t *testing.T) {
 			Spec:       openvoxv1alpha1.CertificateAuthoritySpec{Storage: &openvoxv1alpha1.StorageSpec{StorageClass: class}},
 		}
 		if size != "" {
-			ca.Spec.Storage.Size = ptr.To(resource.MustParse(size))
+			ca.Spec.Storage.Size = new(resource.MustParse(size))
 		}
 		return ca
 	}

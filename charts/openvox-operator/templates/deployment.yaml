@@ -51,6 +51,10 @@ spec:
             {{- end }}
             {{- if .Values.metrics.enabled }}
             - --metrics-bind-address=:{{ .Values.metrics.port | default 8080 }}
+            - --metrics-secure={{ .Values.metrics.secure }}
+            {{- if and .Values.metrics.secure (or .Values.metrics.certManager.enabled .Values.metrics.tls.certSecret) }}
+            - --metrics-cert-dir=/tmp/k8s-metrics-server/serving-certs
+            {{- end }}
             {{- else }}
             - --metrics-bind-address=0
             {{- end }}
@@ -90,17 +94,32 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if .Values.webhook.enabled }}
+          {{- $metricsCerts := and .Values.metrics.enabled .Values.metrics.secure (or .Values.metrics.certManager.enabled .Values.metrics.tls.certSecret) }}
+          {{- if or .Values.webhook.enabled $metricsCerts }}
           volumeMounts:
+            {{- if .Values.webhook.enabled }}
             - name: webhook-certs
               mountPath: /tmp/k8s-webhook-server/serving-certs
               readOnly: true
+            {{- end }}
+            {{- if $metricsCerts }}
+            - name: metrics-certs
+              mountPath: /tmp/k8s-metrics-server/serving-certs
+              readOnly: true
+            {{- end }}
           {{- end }}
-      {{- if .Values.webhook.enabled }}
+      {{- if or .Values.webhook.enabled $metricsCerts }}
       volumes:
+        {{- if .Values.webhook.enabled }}
         - name: webhook-certs
           secret:
             secretName: {{ .Values.webhook.tls.certSecret | default (printf "%s-webhook-cert" (include "openvox-operator.fullname" .)) }}
+        {{- end }}
+        {{- if $metricsCerts }}
+        - name: metrics-certs
+          secret:
+            secretName: {{ .Values.metrics.tls.certSecret | default (printf "%s-metrics-cert" (include "openvox-operator.fullname" .)) }}
+        {{- end }}
       {{- end }}
       terminationGracePeriodSeconds: 10
       {{- with .Values.nodeSelector }}

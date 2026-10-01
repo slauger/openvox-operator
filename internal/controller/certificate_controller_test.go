@@ -1,11 +1,12 @@
 package controller
 
 import (
+	"slices"
 	"testing"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	clocktesting "k8s.io/utils/clock/testing"
@@ -444,13 +445,7 @@ func TestCertReconcile_FinalizerAdded(t *testing.T) {
 		t.Fatalf("failed to get Certificate: %v", err)
 	}
 
-	found := false
-	for _, f := range updated.Finalizers {
-		if f == certificateFinalizer {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(updated.Finalizers, certificateFinalizer)
 	if !found {
 		t.Error("expected finalizer to be added to Certificate")
 	}
@@ -488,7 +483,7 @@ func TestCertReconcile_DeletionCleansUp(t *testing.T) {
 	// Object should be gone (fake client deletes once last finalizer is removed)
 	updated := &openvoxv1alpha1.Certificate{}
 	err = c.Get(testCtx(), types.NamespacedName{Name: "my-cert", Namespace: testNamespace}, updated)
-	if !errors.IsNotFound(err) {
+	if !apierrors.IsNotFound(err) {
 		t.Errorf("expected Certificate to be deleted, got err: %v", err)
 	}
 }
@@ -513,7 +508,7 @@ func TestCertReconcile_DeletionCANotFound(t *testing.T) {
 	// Object should be gone (CA missing -> cleanup skipped -> finalizer removed)
 	updated := &openvoxv1alpha1.Certificate{}
 	err = c.Get(testCtx(), types.NamespacedName{Name: "my-cert", Namespace: testNamespace}, updated)
-	if !errors.IsNotFound(err) {
+	if !apierrors.IsNotFound(err) {
 		t.Errorf("expected Certificate to be deleted, got err: %v", err)
 	}
 }

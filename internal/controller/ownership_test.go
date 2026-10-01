@@ -78,7 +78,7 @@ func TestReconcilePDB_NoEventWhenUnchanged(t *testing.T) {
 	}
 	drain(rec)
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if err := r.reconcilePDB(testCtx(), server); err != nil {
 			t.Fatalf("reconcile %d: %v", i+2, err)
 		}
@@ -165,7 +165,7 @@ func TestPoolRouteHostname_IsDerivedNotWritten(t *testing.T) {
 	server.Spec.CertificateRef = "web-cert"
 	server.Spec.PoolRefs = []string{"puppet"}
 
-	pool := newPool("puppet", withRoute(true, "puppet.example.com", "gw"))
+	pool := newPool("puppet", withRoute("puppet.example.com", "gw"))
 	pool.Spec.Route.InjectDNSAltName = true
 
 	c := setupTestClient(ca, cert, server, pool)

@@ -1,0 +1,75 @@
+{
+  "_comment": "Config-driven auth for the native openvox-server edge. Mirrors the operator's builtinAuthRules (auth.conf) for the SERVER role only -- the CA role stays on the JVM puppetserver. The operator could render this file from the same authorization model it uses for HOCON auth.conf.",
+  "rules": [
+    {
+      "name": "puppetlabs v3 catalog from agents",
+      "path": "^/puppet/v3/catalog/([^/]+)$",
+      "type": "regex",
+      "method": ["get", "post"],
+      "allow": "$1"
+    },
+    {
+      "name": "puppetlabs v3 node",
+      "path": "^/puppet/v3/node/([^/]+)$",
+      "type": "regex",
+      "method": ["get"],
+      "allow": "$1"
+    },
+    {
+      "name": "puppetlabs v3 file_metadata",
+      "path": "/puppet/v3/file_metadata",
+      "type": "path",
+      "method": ["get", "post"],
+      "allow": "*"
+    },
+    {
+      "name": "puppetlabs v3 file_metadatas",
+      "path": "/puppet/v3/file_metadatas",
+      "type": "path",
+      "method": ["get", "post"],
+      "allow": "*"
+    },
+    {
+      "name": "puppetlabs v3 file_content",
+      "path": "/puppet/v3/file_content",
+      "type": "path",
+      "method": ["get", "post"],
+      "allow": "*"
+    },
+    {
+      "name": "puppetlabs v3 file_bucket_file",
+      "path": "/puppet/v3/file_bucket_file",
+      "type": "path",
+      "method": ["get", "head", "put"],
+      "allow": "*"
+    },
+    {
+      "name": "puppetlabs v3 environments",
+      "path": "/puppet/v3/environments",
+      "type": "path",
+      "method": ["get"],
+      "allow": "*"
+    },
+    {
+      "name": "puppetlabs v3 environment",
+      "path": "^/puppet/v3/environment/[^/]+$",
+      "type": "regex",
+      "method": ["get"],
+      "allow": "*"
+    },
+    {
+      "name": "puppetlabs v3 report",
+      "path": "^/puppet/v3/report/([^/]+)$",
+      "type": "regex",
+      "method": ["put"],
+      "allow": "$1"
+    },
+    {
+      "name": "puppetlabs status",
+      "path": "/status/",
+      "type": "path",
+      "allow_unauthenticated": true
+    }
+  ],
+  "default": "deny"
+}

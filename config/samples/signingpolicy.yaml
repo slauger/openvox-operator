@@ -12,7 +12,7 @@ metadata:
   name: trusted-hosts
 spec:
   certificateAuthorityRef: production-ca
-  pattern:
+  certnames:
     allow:
       - "*.example.com"
       - "web-*"
@@ -36,7 +36,7 @@ metadata:
   name: trusted-with-psk
 spec:
   certificateAuthorityRef: production-ca
-  pattern:
+  certnames:
     allow:
       - "*.example.com"
   csrAttributes:

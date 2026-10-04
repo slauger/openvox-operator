@@ -107,7 +107,7 @@ spec:
   authorityRef: production-ca
   image:
     repository: ghcr.io/slauger/openvox-server-8
-    tag: "8.12.1"
+    tag: "latest"
 ```
 
 ```yaml

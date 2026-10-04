@@ -167,6 +167,13 @@ signingPolicies: []
 #     csrAttributes:
 #       - name: pp_preshared_key
 #         value: "my-secret-token"
+#   # SAN and extension allowlists are fail-closed: a CSR carrying a SAN type
+#   # the policy does not list is denied, for every policy including any: true.
+#   - name: internal-nodes
+#     certnames:
+#       allow: ["*.example.com"]
+#     dnsAltNames:
+#       allow: ["*.svc.cluster.local"]
 
 nodeClassifier:
   # @schema description: Enable external node classifier integration.

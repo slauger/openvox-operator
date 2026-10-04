@@ -13,7 +13,7 @@ spec:
   authorityRef: production-ca
   image:
     repository: ghcr.io/slauger/openvox-server-8
-    tag: "8.12.1"
+    tag: "latest"
   puppet:
     environmentTimeout: "0"
     storeconfigs: true
@@ -199,6 +199,7 @@ Controls Puppet Server metrics.conf settings.
 
 | Field | Type | Description |
 |---|---|---|
+| `observedGeneration` | int64 | The `.metadata.generation` the status was last derived from. A value below `.metadata.generation` means the rest of this status has not caught up with the current spec yet |
 | `phase` | string | Current lifecycle phase |
 | `conditions` | []Condition | `ConfigReady` |
 
@@ -208,7 +209,17 @@ Controls Puppet Server metrics.conf settings.
 |---|---|
 | `Pending` | Config created, waiting for reconciliation |
 | `Running` | ConfigMap created, ready for use |
-| `Error` | Reconciliation failed |
+| `Error` | Defined in the API, but never set by the controller (see below) |
+
+`Error` is part of the API but the controller never assigns it. A failing
+reconcile leaves the phase at its previous value, reports the reason in the
+`ConfigReady` condition and emits a warning event. Watch the condition rather than
+the phase:
+
+```bash
+kubectl get config <name> -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.reason}: {.message}{"\n"}{end}'
+```
+
 
 ### Image resolution
 
@@ -223,6 +234,6 @@ credentials along. Secrets for code images are always added on top.
 
 | Resource | Name | Description |
 |---|---|---|
-| ConfigMap | `{name}` | puppet.conf, puppetserver.conf, auth.conf, webserver.conf, `routes.yaml` (facts terminus, when PuppetDB is the active backend), etc. |
+| ConfigMap | `{name}-config` | puppet.conf, puppetserver.conf, auth.conf, webserver.conf, `routes.yaml` (facts terminus, when PuppetDB is the active backend), etc. |
 | Secret | `{name}-enc` | ENC config for openvox-enc binary (only when `nodeClassifierRef` is set) |
 | ServiceAccount | `{name}-server` | Shared ServiceAccount for all Server pods (`automountServiceAccountToken: false`) |

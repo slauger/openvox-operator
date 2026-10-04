@@ -125,7 +125,7 @@ func TestCondition_LastTransitionTimeIsStable(t *testing.T) {
 	}
 	first := readTransitionTime("the first reconcile")
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if _, err := r.Reconcile(testCtx(), testRequest("production")); err != nil {
 			t.Fatalf("reconcile %d: %v", i+2, err)
 		}

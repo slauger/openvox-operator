@@ -27,21 +27,21 @@ tests:
           path: spec.any
           value: true
 
-  - it: should render a SigningPolicy with pattern
+  - it: should render a SigningPolicy with certnames
     set:
       signingPolicies:
         - name: domain-only
-          pattern:
+          certnames:
             allow:
               - "*.example.com"
               - "*.test.local"
     documentIndex: 0
     asserts:
       - contains:
-          path: spec.pattern.allow
+          path: spec.certnames.allow
           content: "*.example.com"
       - contains:
-          path: spec.pattern.allow
+          path: spec.certnames.allow
           content: "*.test.local"
 
   - it: should render a SigningPolicy with csrAttributes
@@ -85,7 +85,7 @@ tests:
         - name: policy-a
           any: true
         - name: policy-b
-          pattern:
+          certnames:
             allow:
               - "*.example.com"
     asserts:
@@ -100,3 +100,40 @@ tests:
       - equal:
           path: metadata.name
           value: RELEASE-NAME-signing-policy-0
+
+  - it: should render SAN and extension allowlists
+    set:
+      signingPolicies:
+        - name: guarded
+          certnames:
+            allow:
+              - "svc-*"
+          ipAltNames:
+            allow:
+              - "10.0.0.0/16"
+          uriAltNames:
+            allow:
+              - "spiffe://example.com/*"
+          emailAltNames:
+            allow:
+              - "*@example.com"
+          extensions:
+            allow:
+              - pp_cli_auth
+    documentIndex: 0
+    asserts:
+      - contains:
+          path: spec.certnames.allow
+          content: "svc-*"
+      - contains:
+          path: spec.ipAltNames.allow
+          content: "10.0.0.0/16"
+      - contains:
+          path: spec.uriAltNames.allow
+          content: "spiffe://example.com/*"
+      - contains:
+          path: spec.emailAltNames.allow
+          content: "*@example.com"
+      - contains:
+          path: spec.extensions.allow
+          content: pp_cli_auth

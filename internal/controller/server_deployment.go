@@ -7,7 +7,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -118,17 +118,9 @@ func (r *ServerReconciler) reconcileDeployment(ctx context.Context, server *open
 	// SigningPolicy changes. The policy Secret is subPath-mounted, so kubelet does not
 	// live-sync it; hashing it into the pod template rolls the CA pod when the rendered
 	// policy changes, so a SigningPolicy edit applies without a manual restart.
-	// Skipped when a custom autosignCommand disables the SigningPolicy-driven flow.
-	if server.Spec.CA && cfg.Spec.Puppet.AutosignCommand == "" {
-		autosignSecretName := fmt.Sprintf("%s-autosign-policy", ca.Name)
-		if autosignHash, err := r.secretHash(ctx, autosignSecretName, server.Namespace); err == nil {
-			annotations["openvox.voxpupuli.org/autosign-policy-secret-hash"] = autosignHash
-		}
-	}
-
 	deploy := &appsv1.Deployment{}
 	err = r.Get(ctx, types.NamespacedName{Name: deployName, Namespace: server.Namespace}, deploy)
-	if errors.IsNotFound(err) {
+	if apierrors.IsNotFound(err) {
 		logger.Info("creating Server Deployment", "name", deployName, "role", role, "replicas", replicas)
 
 		deploy = &appsv1.Deployment{
@@ -312,10 +304,15 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 		// flow: the command is then responsible for its own signing decision.
 		if cfg.Spec.Puppet.AutosignCommand == "" {
 			autosignSecretName := fmt.Sprintf("%s-autosign-policy", ca.Name)
+			// Mounted as a directory rather than with SubPath: a SubPath mount is
+			// never refreshed by the kubelet, which is why this used to need a
+			// pod restart on every policy change. The CA Deployment uses the
+			// Recreate strategy, so that restart was a short CA outage - no
+			// signing, no CRL - for an edit that changes no running state. The
+			// CRL Secret is mounted the same way for the same reason.
 			volumeMounts = append(volumeMounts, corev1.VolumeMount{
 				Name:      "autosign-policy",
-				MountPath: "/etc/puppetlabs/puppet/autosign-policy.yaml",
-				SubPath:   "autosign-policy.yaml",
+				MountPath: autosignPolicyDir,
 				ReadOnly:  true,
 			})
 			volumes = append(volumes, corev1.Volume{
@@ -436,7 +433,7 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						SecretName: reportSecretName,
-						Optional:   boolPtr(true),
+						Optional:   new(true),
 					},
 				},
 			},
@@ -448,9 +445,8 @@ func (r *ServerReconciler) buildPodSpec(server *openvoxv1alpha1.Server, cfg *ope
 	volumes = append(volumes, server.Spec.ExtraVolumes...)
 	volumeMounts = append(volumeMounts, server.Spec.ExtraVolumeMounts...)
 
-	env := []corev1.EnvVar{
-		{Name: "JAVA_ARGS", Value: javaArgs},
-	}
+	env := make([]corev1.EnvVar, 0, 1+len(server.Spec.ExtraEnv))
+	env = append(env, corev1.EnvVar{Name: "JAVA_ARGS", Value: javaArgs})
 	env = append(env, server.Spec.ExtraEnv...)
 
 	container := corev1.Container{
@@ -518,8 +514,8 @@ chmod 640 /ssl/private_keys/puppet.pem`
 	}
 
 	containerSecurityContext := &corev1.SecurityContext{
-		AllowPrivilegeEscalation: boolPtr(false),
-		ReadOnlyRootFilesystem:   boolPtr(resolveReadOnlyRootFilesystem(server, cfg)),
+		AllowPrivilegeEscalation: new(false),
+		ReadOnlyRootFilesystem:   new(resolveReadOnlyRootFilesystem(server, cfg)),
 		Capabilities: &corev1.Capabilities{
 			Drop: []corev1.Capability{"ALL"},
 		},

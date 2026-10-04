@@ -1,12 +1,10 @@
 package controller
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
@@ -120,14 +118,14 @@ func TestRenderAutosignPolicyConfig(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Name: "pattern-policy", Namespace: testNamespace},
 					Spec: openvoxv1alpha1.SigningPolicySpec{
 						CertificateAuthorityRef: "ca",
-						Pattern: &openvoxv1alpha1.PatternSpec{
+						Certnames: &openvoxv1alpha1.PatternSpec{
 							Allow: []string{"*.example.com", "web-*"},
 						},
 					},
 				},
 			},
 			contains: []string{
-				"pattern:",
+				"certnames:",
 				"allow:",
 				`"*.example.com"`,
 				`"web-*"`,
@@ -175,6 +173,53 @@ func TestRenderAutosignPolicyConfig(t *testing.T) {
 				"\n    any: true",
 			},
 		},
+		{
+			name: "SAN and extension allowlists rendered",
+			policies: []openvoxv1alpha1.SigningPolicy{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: testNamespace},
+					Spec: openvoxv1alpha1.SigningPolicySpec{
+						CertificateAuthorityRef: "ca",
+						Certnames:               &openvoxv1alpha1.PatternSpec{Allow: []string{"svc-*"}},
+						IPAltNames:              &openvoxv1alpha1.PatternSpec{Allow: []string{"10.0.0.0/16"}},
+						URIAltNames:             &openvoxv1alpha1.PatternSpec{Allow: []string{"spiffe://example.com/*"}},
+						EmailAltNames:           &openvoxv1alpha1.PatternSpec{Allow: []string{"*@example.com"}},
+						Extensions:              &openvoxv1alpha1.PatternSpec{Allow: []string{"pp_cli_auth"}},
+					},
+				},
+			},
+			contains: []string{
+				"ipAltNames:",
+				`"10.0.0.0/16"`,
+				"uriAltNames:",
+				`"spiffe://example.com/*"`,
+				"emailAltNames:",
+				`"*@example.com"`,
+				"extensions:",
+				`"pp_cli_auth"`,
+			},
+		},
+		{
+			name: "any:true still renders guard fields",
+			policies: []openvoxv1alpha1.SigningPolicy{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "bootstrap", Namespace: testNamespace},
+					Spec: openvoxv1alpha1.SigningPolicySpec{
+						CertificateAuthorityRef: "ca",
+						Any:                     true,
+						Extensions:              &openvoxv1alpha1.PatternSpec{Allow: []string{"pp_cli_auth"}},
+						IPAltNames:              &openvoxv1alpha1.PatternSpec{Allow: []string{"10.0.0.0/8"}},
+					},
+				},
+			},
+			contains: []string{
+				"any: true",
+				"extensions:",
+				`"pp_cli_auth"`,
+				"ipAltNames:",
+				`"10.0.0.0/8"`,
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -182,7 +227,7 @@ func TestRenderAutosignPolicyConfig(t *testing.T) {
 			c := setupTestClient(tt.objs...)
 			r := newConfigReconciler(c)
 
-			out, err := r.renderAutosignPolicyConfig(testCtx(), testNamespace, tt.policies)
+			out, err := r.renderAutosignPolicyConfig(testCtx(), testNamespace, newCertificateAuthority("production-ca"), tt.policies)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -220,7 +265,7 @@ func TestRenderAutosignPolicyConfig_SortOrder(t *testing.T) {
 		},
 	}
 
-	out, err := r.renderAutosignPolicyConfig(testCtx(), testNamespace, policies)
+	out, err := r.renderAutosignPolicyConfig(testCtx(), testNamespace, newCertificateAuthority("production-ca"), policies)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -238,34 +283,25 @@ func TestRenderAutosignPolicyConfig_SortOrder(t *testing.T) {
 	}
 }
 
-func TestUpdateSigningPolicyStatus_Success(t *testing.T) {
-	sp := newSigningPolicy("test-policy", "test-ca", true)
-	c := setupTestClient(sp)
-	r := newConfigReconciler(c)
+// TestRenderAutosignPolicy_ReservesTheOperatorCertname is the operator half of
+// the escalation guard. The CA auth.conf grants admin rights to this certname,
+// so the rendered policy has to tell the autosign binary never to hand it out.
+func TestRenderAutosignPolicy_ReservesTheOperatorCertname(t *testing.T) {
+	ca := newCertificateAuthority("production-ca")
+	r := newConfigReconciler(setupTestClient(ca))
 
-	r.updateSigningPolicyStatus(testCtx(), sp, nil)
-
-	updated := &openvoxv1alpha1.SigningPolicy{}
-	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-policy", Namespace: testNamespace}, updated); err != nil {
-		t.Fatalf("failed to get SigningPolicy: %v", err)
+	out, err := r.renderAutosignPolicyConfig(testCtx(), testNamespace, ca, nil)
+	if err != nil {
+		t.Fatalf("rendering the policy: %v", err)
 	}
-	if updated.Status.Phase != openvoxv1alpha1.SigningPolicyPhaseActive {
-		t.Errorf("expected phase %q, got %q", openvoxv1alpha1.SigningPolicyPhaseActive, updated.Status.Phase)
+
+	if !strings.Contains(out, "reservedCertnames:") {
+		t.Fatalf("the rendered policy carries no reservation:\n%s", out)
 	}
-}
-
-func TestUpdateSigningPolicyStatus_Error(t *testing.T) {
-	sp := newSigningPolicy("test-policy", "test-ca", true)
-	c := setupTestClient(sp)
-	r := newConfigReconciler(c)
-
-	r.updateSigningPolicyStatus(testCtx(), sp, fmt.Errorf("rendering failed"))
-
-	updated := &openvoxv1alpha1.SigningPolicy{}
-	if err := c.Get(testCtx(), types.NamespacedName{Name: "test-policy", Namespace: testNamespace}, updated); err != nil {
-		t.Fatalf("failed to get SigningPolicy: %v", err)
-	}
-	if updated.Status.Phase != openvoxv1alpha1.SigningPolicyPhaseError {
-		t.Errorf("expected phase %q, got %q", openvoxv1alpha1.SigningPolicyPhaseError, updated.Status.Phase)
+	// Must match what the operator actually issues to itself, not a literal
+	// spelled out twice.
+	want := operatorSigningCertname(ca.Name)
+	if !strings.Contains(out, want) {
+		t.Errorf("expected %q to be reserved, got:\n%s", want, out)
 	}
 }

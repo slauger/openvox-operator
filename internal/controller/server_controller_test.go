@@ -6,6 +6,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -180,7 +181,12 @@ func TestServerReconcile_AnnotationHashes(t *testing.T) {
 	}
 }
 
-func TestServerReconcile_AutosignPolicyHashAnnotation(t *testing.T) {
+// TestServerReconcile_AutosignPolicyIsLiveMounted replaces the former hash
+// annotation test. A policy edit must not roll the CA pod: the CA Deployment
+// uses the Recreate strategy, so a restart is a short outage with no signing
+// and no CRL - for a change that alters no running state. The binary re-reads
+// the file on every CSR, so nothing downstream needs the restart either.
+func TestServerReconcile_AutosignPolicyIsLiveMounted(t *testing.T) {
 	objs := append(serverPrereqs(),
 		newSecret("production-ca-autosign-policy", map[string][]byte{
 			"autosign-policy.yaml": []byte("policies:\n"),
@@ -199,9 +205,26 @@ func TestServerReconcile_AutosignPolicyHashAnnotation(t *testing.T) {
 		t.Fatalf("Deployment not found: %v", err)
 	}
 
-	// The CA pod must carry the autosign-policy hash so a SigningPolicy change rolls it.
-	if v, ok := deploy.Spec.Template.Annotations["openvox.voxpupuli.org/autosign-policy-secret-hash"]; !ok || v == "" {
-		t.Error("CA pod should carry the autosign-policy-secret-hash annotation")
+	if _, ok := deploy.Spec.Template.Annotations["openvox.voxpupuli.org/autosign-policy-secret-hash"]; ok {
+		t.Error("the policy hash must not be in the pod template any more, it would roll the CA on every edit")
+	}
+
+	// A SubPath mount is never refreshed by the kubelet, which is what forced
+	// the restart. The mount has to stay a directory for the sync to happen.
+	var mount *corev1.VolumeMount
+	for i := range deploy.Spec.Template.Spec.Containers[0].VolumeMounts {
+		if deploy.Spec.Template.Spec.Containers[0].VolumeMounts[i].Name == "autosign-policy" {
+			mount = &deploy.Spec.Template.Spec.Containers[0].VolumeMounts[i]
+		}
+	}
+	if mount == nil {
+		t.Fatal("the CA pod must mount the autosign policy")
+	}
+	if mount.SubPath != "" {
+		t.Errorf("the policy must not be mounted with SubPath, got %q", mount.SubPath)
+	}
+	if mount.MountPath != autosignPolicyDir {
+		t.Errorf("expected the policy directory %q, got %q", autosignPolicyDir, mount.MountPath)
 	}
 }
 

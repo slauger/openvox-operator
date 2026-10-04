@@ -136,7 +136,7 @@ spec:
   nodeClassifierRef: pe-classifier
   image:
     repository: ghcr.io/slauger/openvox-server-8
-    tag: "8.12.1"
+    tag: "latest"
 ```
 
 This generates the following puppet.conf entries in the `[server]` section:

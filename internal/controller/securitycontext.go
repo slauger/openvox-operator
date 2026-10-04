@@ -15,13 +15,15 @@ import (
 // root. Callers pass their workload-specific uid/gid/fsGroup constants; users can
 // override individual fields via the CRD (e.g. on OpenShift or PSA-restricted
 // namespaces that assign their own UID/GID ranges).
+//
+//nolint:unparam // every workload currently runs as uid 1001; the uid stays a parameter alongside group and fsGroup so per-workload constants remain possible
 func buildPodSecurityContext(defaultUser, defaultGroup, defaultFSGroup int64, override *openvoxv1alpha1.PodSecurityContextSpec) *corev1.PodSecurityContext {
 	psc := &corev1.PodSecurityContext{
-		RunAsUser:           int64Ptr(defaultUser),
-		RunAsGroup:          int64Ptr(defaultGroup),
-		RunAsNonRoot:        boolPtr(true),
-		FSGroup:             int64Ptr(defaultFSGroup),
-		FSGroupChangePolicy: fsGroupChangePolicyPtr(corev1.FSGroupChangeOnRootMismatch),
+		RunAsUser:           new(defaultUser),
+		RunAsGroup:          new(defaultGroup),
+		RunAsNonRoot:        new(true),
+		FSGroup:             new(defaultFSGroup),
+		FSGroupChangePolicy: new(corev1.FSGroupChangeOnRootMismatch),
 		SeccompProfile: &corev1.SeccompProfile{
 			Type: corev1.SeccompProfileTypeRuntimeDefault,
 		},

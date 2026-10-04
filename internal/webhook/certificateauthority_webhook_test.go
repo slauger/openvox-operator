@@ -6,7 +6,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
@@ -39,7 +38,7 @@ func TestCertificateAuthorityValidator(t *testing.T) {
 				TTL:                "5y",
 				AutoRenewalCertTTL: "90d",
 				CRLRefreshInterval: "5m",
-				Storage:            &openvoxv1alpha1.StorageSpec{Size: ptr.To(resource.MustParse("1Gi"))},
+				Storage:            &openvoxv1alpha1.StorageSpec{Size: new(resource.MustParse("1Gi"))},
 			},
 		}
 		_, err := v.ValidateCreate(context.Background(), ca)

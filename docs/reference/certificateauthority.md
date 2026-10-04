@@ -81,6 +81,7 @@ spec:
 
 | Field | Type | Description |
 |---|---|---|
+| `observedGeneration` | int64 | The `.metadata.generation` the status was last derived from. A value below `.metadata.generation` means the rest of this status has not caught up with the current spec yet |
 | `phase` | string | Current lifecycle phase |
 | `caSecretName` | string | Name of the Secret containing `ca_crt.pem` (public CA certificate) |
 | `serviceName` | string | Name of the internal ClusterIP Service for operator communication. Empty when `spec.external` is set. |
@@ -182,7 +183,7 @@ The failed Job is left in place; its logs are the only record of what went
 wrong:
 
 ```bash
-kubectl logs -n <namespace> job/<ca-name>-setup
+kubectl logs -n <namespace> job/<ca-name>-ca-setup
 ```
 
 The attempt counter lives in the `openvox.voxpupuli.org/setup-attempts`

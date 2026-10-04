@@ -201,7 +201,7 @@ func TestBuildPodSpec_MultipleCodeVolumes(t *testing.T) {
 }
 
 func TestBuildPodSpec_AutosignCommandSkipsPolicyMount(t *testing.T) {
-	cfg := newConfig("production", withAutosignCommand("/usr/local/bin/custom-autosign"))
+	cfg := newConfig("production", withAutosignCommand())
 	server := newServer("test-ca", withCA(true), withServerRole(false))
 
 	podSpec := testBuildPodSpec(server, cfg)
@@ -220,8 +220,8 @@ func TestBuildPodSpec_AutosignCommandSkipsPolicyMount(t *testing.T) {
 
 func TestBuildPodSpec_ExternalNodesCommandSkipsENCMount(t *testing.T) {
 	cfg := newConfig("production",
-		withNodeClassifierRef("my-enc"),
-		withExternalNodesCommand("/usr/local/bin/custom-enc"),
+		withNodeClassifierRef(),
+		withExternalNodesCommand(),
 	)
 	server := newServer("test-server", withServerRole(true))
 
@@ -465,7 +465,7 @@ func TestBuildPodSpec_SecurityContextOverride(t *testing.T) {
 }
 
 func TestBuildPodSpec_ENCVolumes(t *testing.T) {
-	cfg := newConfig("production", withNodeClassifierRef("my-enc"))
+	cfg := newConfig("production", withNodeClassifierRef())
 	server := newServer("test-server", withServerRole(true))
 
 	podSpec := testBuildPodSpec(server, cfg)

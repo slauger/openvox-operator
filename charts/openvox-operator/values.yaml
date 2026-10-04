@@ -78,6 +78,23 @@ metrics:
   # @schema description: Enable the metrics endpoint.
   # -- Enable the metrics endpoint.
   enabled: true
+  # @schema description: Serve metrics over HTTPS and require an authenticated, authorized client.
+  # -- Serve metrics over HTTPS and require an authenticated, authorized client. Off by default so existing scrape configurations keep working; expected to become the default in a later release. Leaving it off serves the metrics as plaintext to anything that can reach the pod.
+  secure: false
+  certManager:
+    # @schema description: Issue the metrics serving certificate with cert-manager. Only used when secure is true.
+    # -- Issue the metrics serving certificate with cert-manager. Only used when `secure` is true. Without it the operator generates a self-signed certificate at startup, which scrapers can only skip verifying.
+    enabled: true
+    # @schema description: Certificate validity.
+    # -- Certificate validity.
+    duration: 8760h
+    # @schema description: Renew this long before expiry.
+    # -- Renew this long before expiry.
+    renewBefore: 720h
+  tls:
+    # @schema description: Secret holding tls.crt and tls.key for the metrics endpoint. Overrides the cert-manager issued one.
+    # -- Secret holding `tls.crt` and `tls.key` for the metrics endpoint. Set this to bring your own certificate instead of the cert-manager issued one.
+    certSecret: ""
   # @schema minimum:1;maximum:65535
   # @schema description: Port for the metrics endpoint.
   # -- Port for the metrics endpoint.

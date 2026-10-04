@@ -52,17 +52,28 @@ These types are reused across multiple CRDs.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `repository` | string | `ghcr.io/slauger/openvox-server-8` | Container image repository |
-| `tag` | string | `latest` | Container image tag |
-| `pullPolicy` | string | `IfNotPresent` | Image pull policy |
+| `repository` | string | - | Container image repository |
+| `tag` | string | - | Container image tag |
+| `pullPolicy` | string | - | Image pull policy |
 | `pullSecrets` | []LocalObjectReference | - | Image pull secrets |
 
-`repository` and `tag` carry no API-level default. They are required on `Config`
-and `Database`; on `Server` both are optional and fall back to the referenced
-`Config`, which is what lets one Config drive a whole set of Servers.
+No field here carries an API-level default. That is deliberate: a nested
+default is applied whether or not the parent object was given, so a defaulted
+field can never express "inherit from the Config" - it is simply never empty.
 
-The defaults live in the Helm charts (`config.image.*`, `database.image.*`),
-where changing the registry is a values change rather than a CRD update.
+`repository` and `tag` are required on `Config` and `Database`. On `Server`
+both are optional and fall back to the referenced `Config`, which is what lets
+one Config drive a whole set of Servers.
+
+`pullPolicy` follows the same rule, falling back to the Config and then to
+`IfNotPresent`. `pullSecrets` behaves differently: a non-empty list on a
+`Server` *replaces* the Config's rather than extending it, so a Server pulling
+from another registry does not carry the Config's credentials along. Secrets
+for code images are always added on top.
+
+The registry defaults live in the Helm charts (`config.image.*`,
+`database.image.*`), where changing them is a values change rather than a CRD
+update.
 
 ### StorageSpec
 
@@ -157,6 +168,39 @@ of the status has not caught up with the current spec yet.
 | `Database` | `Ready` | At least one replica is ready |
 | `Pool` | `Ready` | At least one ready endpoint is behind the Service |
 | `SigningPolicy`, `NodeClassifier`, `ReportProcessor` | `Ready` | The resource was rendered into the configuration the servers mount |
+
+These three are policy resources: the Config controller renders them into the
+ConfigMaps and Secrets it owns, and each one derives its own `Ready` from
+whether it ended up in that rendered output. So a failure to render is reported
+as an event on the Config, while the policy resource reports only whether it is
+in effect -- including the cases where nothing references it, or where an
+`autosignCommand` / `externalNodesCommand` override bypasses it entirely. The
+condition's `reason` names the case; see
+[SigningPolicy](signingpolicy.md#phases) and
+[NodeClassifier](nodeclassifier.md#phases).
+
+Each rendered Secret carries an `openvox.voxpupuli.org/rendered-from`
+annotation listing the resources its content was built from and the
+`metadata.generation` each had at the time. That is what a policy resource
+matches itself against, so `Ready` distinguishes "my current spec is in effect"
+from "an earlier version of it is": a spec edit whose re-render fails leaves the
+previous Secret in place, and the resource reports `RenderedConfigStale` rather
+than claiming the new spec reached a server. A Secret rendered before this
+mechanism existed carries no annotation at all, which is not the same as being
+rendered from nothing; those resources report `RenderedConfigSourceUnknown`
+until the Config controller re-renders.
+
+Because the annotation records the generation, this only covers failures a spec
+edit caused. A render that starts failing under an *unchanged* spec -- a
+referenced credential Secret rotated out from under it -- leaves the generation
+matching, so the resource keeps reporting `Ready`. The render failure is an
+event on the Config, which is where that case is visible.
+
+A resource that is deliberately bypassed reports `phase: Disabled` rather than
+`Error` -- an `autosignCommand` or `externalNodesCommand` override replaces the
+built-in binary, which is a configuration choice, not a fault. `Ready` is still
+`False`, because the resource genuinely is not in effect. Everything else that
+is not `Active` is `Error`.
 
 Any resource can additionally carry `Paused` -- see
 [Pausing Reconciliation](../guides/pausing-reconciliation.md).

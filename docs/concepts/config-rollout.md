@@ -15,7 +15,6 @@ Tracked annotations:
 | `openvox.voxpupuli.org/ca-secret-hash` | CA Secret (`{ca}-ca`) | Yes |
 | `openvox.voxpupuli.org/enc-secret-hash` | ENC Secret (`{config}-enc`) | Yes |
 | `openvox.voxpupuli.org/report-webhook-secret-hash` | Report webhook Secret (`{config}-report-webhook`) | Yes |
-| `openvox.voxpupuli.org/autosign-policy-secret-hash` | Autosign policy Secret (`{ca}-autosign-policy`, CA pods only) | Yes |
 | `openvox.voxpupuli.org/code-image` | Code OCI image reference | Yes |
 
 ## What Triggers a Restart
@@ -88,8 +87,20 @@ Creating or updating a SigningPolicy:
 
 1. Config controller is triggered via SigningPolicy watcher
 2. Autosign policy Secret (`{ca}-autosign-policy`) is updated
-3. Server controller detects the updated `autosign-policy-secret-hash` annotation
-4. CA pod is recreated so `openvox-autosign` reads the new policy on the next CSR (no manual restart)
+3. The kubelet syncs the updated Secret into the CA pod, which mounts it as a
+   directory rather than through `subPath`
+4. `openvox-autosign` reads the file on the next CSR
+
+**No restart is involved.** The policy Secret is deliberately the one Secret
+that does not roll its pod. A `subPath` mount is never refreshed by the
+kubelet, which is why this used to need a restart - and because the CA
+Deployment uses the `Recreate` strategy, that restart meant a short outage with
+no signing and no CRL, for a change that alters no running state.
+
+The trade-off is timing: a policy edit takes effect within the kubelet sync
+period, up to about a minute, instead of immediately after a restart. For a
+rule that governs which CSRs get signed, waiting a minute is preferable to
+dropping the CA.
 
 ### Changing ENC Configuration
 

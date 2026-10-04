@@ -75,7 +75,7 @@ This guide sets up an OpenVox Server deployment. Choose between the Helm chart (
       authorityRef: lab-ca
       image:
         repository: ghcr.io/slauger/openvox-server-8
-        tag: "8.12.1"
+        tag: "latest"
     ---
     apiVersion: openvox.voxpupuli.org/v1alpha1
     kind: CertificateAuthority
@@ -161,6 +161,18 @@ server.openvox.voxpupuli.org/puppet         lab      true   1          1       R
 NAME                                        TYPE        ENDPOINTS   AGE
 pool.openvox.voxpupuli.org/puppet           ClusterIP   1           2m
 ```
+
+!!! warning "Without a SigningPolicy nothing gets signed"
+
+    The operator points `autosign` at its own binary as soon as a
+    CertificateAuthority exists, and that binary denies every CSR it has no
+    matching policy for. An empty policy list therefore means deny-all, not
+    off.
+
+    Nothing surfaces this. The servers come up, the Config reports `Running`,
+    and every agent sits in `puppet agent --waitforcert` until it gives up.
+    Check with `kubectl get signingpolicy -n <namespace>`; if the list is
+    empty, see [SigningPolicy](../reference/signingpolicy.md).
 
 ## Next Steps
 

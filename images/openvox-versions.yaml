@@ -19,8 +19,11 @@ include:
     termini: 8.16.0
     # renovate: datasource=github-releases depName=OpenVoxProject/openvox
     openvox: 8.29.0
+    # openvoxdb-8.16.0.tar.gz is the FIPS build: puppetdb.jar lacks BouncyCastle and
+    # the server crashes at startup with ClassNotFoundException. Stay on 8.15.0 until
+    # a non-FIPS 8.x tarball is published (renovate skips 8.16.0).
     # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
-    db: 8.16.0
+    db: 8.15.0
     # renovate: datasource=github-releases depName=OpenVoxProject/openvox
     agent: 8.29.0
   # Re-enable at OpenVox 9.0 GA (also fix server/db to install from RPM, not tarball):

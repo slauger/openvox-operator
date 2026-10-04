@@ -333,7 +333,10 @@ func (r *ConfigReconciler) renderAuthConf(cfg *openvoxv1alpha1.Config, ca *openv
 }
 
 // builtinAuthRules returns the built-in auth.conf rules as HOCON (without the deny-all).
-// When operatorCertname is non-empty, CA admin rules emit a combined allow list that
+// The rules follow the openvox-server 9 defaults and are rendered for every OpenVox
+// major: they only gate server-side endpoints that exist in 8 as well, and agents of
+// both majors need nothing beyond head/put on the filebucket.
+// When operatorCertname is non-empty, admin rules emit a combined allow list that
 // permits both the pp_cli_auth extension and the operator-signing certificate CN.
 func (r *ConfigReconciler) builtinAuthRules(operatorCertname string) string {
 	// ppCliAuthAllow returns the HOCON allow block for CA admin endpoints.
@@ -490,26 +493,6 @@ func (r *ConfigReconciler) builtinAuthRules(operatorCertname string) string {
         },
         {
             match-request: {
-                path: "^/puppet/v3/resource_type/([^/]+)$"
-                type: regex
-                method: [get, post]
-            }
-            allow: "*"
-            sort-order: 500
-            name: "puppetlabs resource type"
-        },
-        {
-            match-request: {
-                path: "^/puppet/v3/status/([^/]+)$"
-                type: regex
-                method: get
-            }
-            allow: "$1"
-            sort-order: 500
-            name: "puppetlabs status"
-        },
-        {
-            match-request: {
                 path: "/status/v1/services"
                 type: path
                 method: get
@@ -542,11 +525,21 @@ func (r *ConfigReconciler) builtinAuthRules(operatorCertname string) string {
             match-request: {
                 path: "/puppet/v3/file_bucket_file"
                 type: path
-                method: [get, head, post, put]
+                method: [head, put]
             }
             allow: "*"
             sort-order: 500
             name: "puppetlabs file bucket file"
+        },
+        {
+            match-request: {
+                path: "/puppet/v3/file_bucket_file"
+                type: path
+                method: [get, post]
+            }
+%s
+            sort-order: 500
+            name: "puppetlabs file bucket file read"
         },
         {
             match-request: {
@@ -617,7 +610,17 @@ func (r *ConfigReconciler) builtinAuthRules(operatorCertname string) string {
             sort-order: 500
             name: "puppet tasks information"
         },
-`, caAdminAllow, caAdminAllow, caAdminAllow, caAdminAllow, caAdminAllow, caAdminAllow)
+        {
+            match-request: {
+                path: "/puppet-admin-api/v1/environment-cache"
+                type: path
+                method: delete
+            }
+%s
+            sort-order: 500
+            name: "primary can clean cache after code deploy"
+        },
+`, caAdminAllow, caAdminAllow, caAdminAllow, caAdminAllow, caAdminAllow, caAdminAllow, caAdminAllow, caAdminAllow)
 }
 
 // renderLogbackXML generates logback.xml from LoggingSpec.

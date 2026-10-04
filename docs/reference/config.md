@@ -148,6 +148,28 @@ Controls puppetserver.conf, webserver.conf, and auth.conf settings.
 
 Custom rules for auth.conf. Rules are evaluated in `sortOrder` (lower = earlier) and inserted before the default deny-all rule.
 
+The operator always renders the openvox-server 9 default rules, for OpenVox 8 and 9
+alike. Administrative endpoints (CA management, reading the filebucket, flushing the
+environment cache) require a certificate with the `pp_cli_auth` extension or, with an
+internal CA, the operator's own signing certificate. Agents can only store content in
+the filebucket (`head`, `put`), not read it back.
+
+To restore or diff from the filebucket remotely with an ordinary certificate, add a rule
+for that certname that sorts before the built-in rules:
+
+```yaml
+spec:
+  puppetserver:
+    authorizationRules:
+      - name: "filebucket read for backup admin"
+        matchRequest:
+          path: /puppet/v3/file_bucket_file
+          type: path
+          method: ["get", "post"]
+        allow: backup-admin.example.com
+        sortOrder: 400
+```
+
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `name` | string | **required** | Descriptive name for the rule |

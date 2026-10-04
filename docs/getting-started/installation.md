@@ -110,6 +110,21 @@ Check the upstream
 [openvoxdb](https://github.com/OpenVoxProject/openvoxdb/releases) release notes
 for changes that affect your code.
 
+### auth.conf follows the OpenVox 9 defaults
+
+The auth.conf the operator renders now matches the openvox-server 9 defaults,
+for OpenVox 8 and 9 alike:
+
+- Agents can only store content in the filebucket (`head`, `put`). Reading it
+  back (`get`, `post`) requires a `pp_cli_auth` certificate or the operator's
+  signing certificate. Sites that restore or diff remotely with an ordinary
+  certificate need a custom rule; see
+  [AuthorizationRule](../reference/config.md#authorizationrule).
+- `DELETE /puppet-admin-api/v1/environment-cache` is allowed for the same
+  certificates, so the environment cache can be flushed after a code deploy.
+- The rules for `/puppet/v3/resource_type/` and `/puppet/v3/status/` are gone;
+  neither OpenVox 8 nor 9 serves these endpoints.
+
 ### CRDs are not upgraded by Helm
 
 Helm installs the CRDs from the chart's `crds/` directory on the first install,

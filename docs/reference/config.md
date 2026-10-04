@@ -81,6 +81,10 @@ server image or is mounted into the pod via the Server's
 (client certificates, API tokens) are supplied the same way, via `extraVolumes` and
 `extraEnv` / `envFrom`.
 
+`autosignCommand` takes no arguments: puppetserver only runs it if the whole value
+is an existing executable file, and otherwise silently signs nothing. Wrap the call
+in a script if the command needs options.
+
 !!! warning
     Autosign is the certificate admission boundary - a command that signs
     unconditionally will sign every CSR. Review a custom `autosignCommand` as

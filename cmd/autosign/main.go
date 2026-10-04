@@ -12,12 +12,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/slauger/openvox-operator/internal/puppet"
 )
 
-const defaultConfigPath = "/etc/puppetlabs/puppet/autosign-policy.yaml"
-
 func main() {
-	configPath := flag.String("config", defaultConfigPath, "Path to autosign policy YAML config")
+	configPath := flag.String("config", puppet.AutosignPolicyPath, "Path to autosign policy YAML config")
 	flag.Parse()
 
 	args := flag.Args()

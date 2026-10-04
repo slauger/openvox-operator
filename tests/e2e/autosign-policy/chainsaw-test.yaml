@@ -204,7 +204,7 @@ spec:
     - name: Change the SigningPolicy and assert it applies without rolling the CA pod
       try:
         - script:
-            timeout: 3m
+            timeout: 6m
             content: |
               set -eu
               NS=e2e-autosign-policy
@@ -228,6 +228,19 @@ spec:
                 | base64 -d | grep -q 'e2e-rotated-key' \
                 || { echo "ERROR: the policy Secret was not re-rendered after the SigningPolicy update"; exit 1; }
               echo "OK: policy Secret carries the rotated key"
+
+              # puppetserver evaluates autosign once, when the CSR is submitted, so the
+              # agent may only start once the kubelet has synced the Secret into the pod.
+              POD=$(head -1 /tmp/autosign-policy-pods)
+              for _ in $(seq 1 36); do
+                kubectl exec -n "${NS}" "${POD}" -- cat /etc/puppetlabs/puppet/autosign-policy/autosign-policy.yaml \
+                  | grep -q 'e2e-rotated-key' && break
+                sleep 5
+              done
+              kubectl exec -n "${NS}" "${POD}" -- cat /etc/puppetlabs/puppet/autosign-policy/autosign-policy.yaml \
+                | grep -q 'e2e-rotated-key' \
+                || { echo "ERROR: the rotated policy never reached the running CA pod"; exit 1; }
+              echo "OK: the running CA pod sees the rotated policy"
         - apply:
             resource:
               apiVersion: batch/v1
@@ -266,8 +279,6 @@ spec:
               set -eu
               NS=e2e-autosign-policy
               DEPLOY=e2e-autosign-policy-ca
-              # The kubelet syncs Secret volumes within about a minute, so the agent
-              # may retry its CSR a few times before the rotated key is accepted.
               kubectl wait --for=condition=Complete job/puppet-agent-rotated -n "${NS}" --timeout=300s
 
               GEN=$(kubectl get deploy "${DEPLOY}" -n "${NS}" -o jsonpath='{.metadata.generation}')

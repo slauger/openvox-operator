@@ -41,16 +41,6 @@
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+\\w+_VERSION: \"(?<currentValue>[^\"]+)\""
       ],
       "extractVersionTemplate": "^v?(?<version>.*)$"
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": [
-        "/(^|/).github/workflows/_go\\.yaml$/"
-      ],
-      "matchStrings": [
-        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+version: \"(?<currentValue>[^\"]+)\""
-      ],
-      "extractVersionTemplate": "^v?(?<version>.*)$"
     }
   ],
   "packageRules": [

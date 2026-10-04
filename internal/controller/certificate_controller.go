@@ -210,7 +210,7 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 		if r.renewalDue(cert) {
 			logger.Info("certificate within renewal window, renewing",
-				"certname", cert.Spec.Certname, "notAfter", cert.Status.NotAfter)
+				"certname", cert.Spec.Certname, "notAfter", cert.Status.NotAfter.Format(time.RFC3339))
 			r.Recorder.Eventf(cert, nil, corev1.EventTypeNormal, EventReasonCertificateRenewalTriggered, "Reconcile",
 				"Certificate renewal triggered, expires %s", cert.Status.NotAfter.Format(time.RFC3339))
 			return r.reconcileCertRenewal(ctx, cert, ca)

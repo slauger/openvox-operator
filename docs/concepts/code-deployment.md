@@ -57,7 +57,7 @@ metadata:
   name: production
 spec:
   image:
-    repository: ghcr.io/slauger/openvox-server-8
+    repository: ghcr.io/slauger/openvox-server-9
     tag: "latest"
   code:
     - image: ghcr.io/example/puppet-code:v1.0.0
@@ -180,7 +180,7 @@ metadata:
   name: production
 spec:
   image:
-    repository: ghcr.io/slauger/openvox-server-8
+    repository: ghcr.io/slauger/openvox-server-9
     tag: "latest"
   code:
     - claimName: puppet-code

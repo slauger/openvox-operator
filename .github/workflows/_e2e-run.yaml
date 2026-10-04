@@ -19,7 +19,7 @@ on:
         description: 'OpenVox major for the content images under test (8 or 9)'
         required: false
         type: string
-        default: '8'
+        default: '9'
 
 concurrency:
   group: e2e

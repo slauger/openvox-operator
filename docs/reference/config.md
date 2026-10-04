@@ -12,7 +12,7 @@ metadata:
 spec:
   authorityRef: production-ca
   image:
-    repository: ghcr.io/slauger/openvox-server-8
+    repository: ghcr.io/slauger/openvox-server-9
     tag: "latest"
   puppet:
     environmentTimeout: "0"
@@ -25,9 +25,9 @@ spec:
 
 !!! note "Image naming"
     The content images are published as `openvox-server` / `openvox-db` (the current default
-    major), with a major-suffixed variant (`openvox-server-8`) available to pin a specific
-    OpenVox major - the unsuffixed name and the default-major suffix share the same image
-    digest. The exact OpenVox versions baked into each image are pinned in
+    major, OpenVox 9), with major-suffixed variants (`openvox-server-9`, `openvox-server-8`)
+    available to pin a specific OpenVox major - the unsuffixed name and the default-major
+    suffix share the same image digest. The exact OpenVox versions baked into each image are pinned in
     `images/openvox-versions.yaml`, and every operator release lists the shipped component
     versions in its GitHub release notes.
 

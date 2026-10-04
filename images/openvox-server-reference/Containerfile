@@ -6,6 +6,6 @@
 
 FROM registry.access.redhat.com/ubi9/ubi:9.8-1791179325
 
-RUN rpm -Uvh https://yum.voxpupuli.org/openvox8-release-el-9.noarch.rpm \
+RUN rpm -Uvh https://yum.voxpupuli.org/openvox9-release-el-9.noarch.rpm \
     && dnf install -y --setopt=install_weak_deps=False openvox-server \
     && dnf clean all

@@ -80,6 +80,36 @@ A resource that is deliberately bypassed by an `autosignCommand` or
 `Active`, with `Ready=False` and a reason naming the override. Alerting on
 `phase: Error` is unaffected by that case; alerting on `Ready=True` is not.
 
+### OpenVox 9 is the default major
+
+The content images now default to OpenVox 9. Three things move to 9 on upgrade:
+
+- The `openvox-stack` chart defaults `config.image.repository` and
+  `database.image.repository` to `openvox-server-9` and `openvox-db-9`.
+- The unsuffixed images `openvox-server` and `openvox-db`, and their `:latest`
+  tags, now carry OpenVox 9.
+- The CR examples in this documentation reference the `-9` images.
+
+Installations that set an explicit `-8` repository are unaffected. OpenVox 8
+images are still built and published for every release. To stay on 8 with the
+stack chart, pin the repositories:
+
+```bash
+helm upgrade openvox-stack oci://ghcr.io/slauger/charts/openvox-stack \
+  --namespace openvox \
+  --reuse-values \
+  --set config.image.repository=ghcr.io/slauger/openvox-server-8 \
+  --set database.image.repository=ghcr.io/slauger/openvox-db-8
+```
+
+When moving to 9, upgrade the servers and the database before the agents, and
+back up the PostgreSQL database first: OpenVox DB migrates its schema on the
+first start of a new major, and going back to 8 means restoring that backup.
+Check the upstream
+[openvox-server](https://github.com/OpenVoxProject/openvox-server/releases) and
+[openvoxdb](https://github.com/OpenVoxProject/openvoxdb/releases) release notes
+for changes that affect your code.
+
 ### CRDs are not upgraded by Helm
 
 Helm installs the CRDs from the chart's `crds/` directory on the first install,

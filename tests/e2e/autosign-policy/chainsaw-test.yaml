@@ -201,40 +201,99 @@ spec:
       catch:
         - events: {}
 
-    - name: Change the SigningPolicy and assert the CA pod rolls
+    - name: Change the SigningPolicy and assert it applies without rolling the CA pod
       try:
         - script:
-            timeout: 8m
+            timeout: 6m
             content: |
               set -eu
               NS=e2e-autosign-policy
               DEPLOY=e2e-autosign-policy-ca
-              HASH='{.spec.template.metadata.annotations.openvox\.voxpupuli\.org/autosign-policy-secret-hash}'
-              BEFORE=$(kubectl get deploy "${DEPLOY}" -n "${NS}" -o jsonpath="${HASH}")
-              echo "before=${BEFORE}"
-              [ -n "${BEFORE}" ] || { echo "ERROR: CA deployment has no autosign-policy-secret-hash annotation"; exit 1; }
+              SECRET=e2e-autosign-policy-ca-autosign-policy
+              kubectl get deploy "${DEPLOY}" -n "${NS}" -o jsonpath='{.metadata.generation}' > /tmp/autosign-policy-generation
+              kubectl get pods -n "${NS}" -o name | grep "^pod/${DEPLOY}-" | grep -v -- '-ca-setup-' | sort > /tmp/autosign-policy-pods
+              echo "generation=$(cat /tmp/autosign-policy-generation) pods=$(cat /tmp/autosign-policy-pods)"
 
-              # A SigningPolicy change must re-render the policy Secret and roll the CA pod,
-              # so the new policy applies without a manual restart.
+              # The policy Secret is mounted as a directory, so the kubelet syncs the new
+              # policy into the running CA pod: the change must apply without a rollout.
               kubectl patch signingpolicies.openvox.voxpupuli.org preshared-key -n "${NS}" --type=merge \
                 -p '{"spec":{"csrAttributes":[{"name":"pp_preshared_key","value":"e2e-rotated-key"}]}}'
 
-              AFTER="${BEFORE}"
               for _ in $(seq 1 30); do
-                AFTER=$(kubectl get deploy "${DEPLOY}" -n "${NS}" -o jsonpath="${HASH}")
-                [ -n "${AFTER}" ] && [ "${AFTER}" != "${BEFORE}" ] && break
+                kubectl get secret "${SECRET}" -n "${NS}" -o jsonpath='{.data.autosign-policy\.yaml}' \
+                  | base64 -d | grep -q 'e2e-rotated-key' && break
                 sleep 5
               done
-              echo "after=${AFTER}"
-              [ "${AFTER}" != "${BEFORE}" ] || { echo "ERROR: autosign-policy-secret-hash did not change after the SigningPolicy update"; exit 1; }
+              kubectl get secret "${SECRET}" -n "${NS}" -o jsonpath='{.data.autosign-policy\.yaml}' \
+                | base64 -d | grep -q 'e2e-rotated-key' \
+                || { echo "ERROR: the policy Secret was not re-rendered after the SigningPolicy update"; exit 1; }
+              echo "OK: policy Secret carries the rotated key"
 
-              kubectl rollout status deploy/"${DEPLOY}" -n "${NS}" --timeout=300s
-              echo "OK: SigningPolicy change rolled the CA pod without a manual restart"
+              # puppetserver evaluates autosign once, when the CSR is submitted, so the
+              # agent may only start once the kubelet has synced the Secret into the pod.
+              POD=$(head -1 /tmp/autosign-policy-pods)
+              for _ in $(seq 1 36); do
+                kubectl exec -n "${NS}" "${POD}" -- cat /etc/puppetlabs/puppet/autosign-policy/autosign-policy.yaml \
+                  | grep -q 'e2e-rotated-key' && break
+                sleep 5
+              done
+              kubectl exec -n "${NS}" "${POD}" -- cat /etc/puppetlabs/puppet/autosign-policy/autosign-policy.yaml \
+                | grep -q 'e2e-rotated-key' \
+                || { echo "ERROR: the rotated policy never reached the running CA pod"; exit 1; }
+              echo "OK: the running CA pod sees the rotated policy"
+        - apply:
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: puppet-agent-rotated
+                namespace: e2e-autosign-policy
+              spec:
+                backoffLimit: 0
+                template:
+                  spec:
+                    restartPolicy: Never
+                    containers:
+                      - name: puppet-agent
+                        image: (join('', [$registry, '/openvox-agent-', $major, ':', $imageTag]))
+                        imagePullPolicy: Always
+                        command: ["sh", "-c"]
+                        args:
+                          - |
+                            mkdir -p /etc/puppetlabs/puppet
+                            cat > /etc/puppetlabs/puppet/csr_attributes.yaml << 'CSRATTR'
+                            extension_requests:
+                              pp_preshared_key: e2e-rotated-key
+                            CSRATTR
+                            puppet agent --test \
+                              --server e2e-autosign-policy-server \
+                              --waitforcert 30 \
+                              --certname agent-rotated-test;
+                            EXIT=$?;
+                            if [ $EXIT -eq 0 ] || [ $EXIT -eq 2 ]; then exit 0; else exit $EXIT; fi
+                        securityContext:
+                          runAsUser: 0
+        - script:
+            timeout: 6m
+            content: |
+              set -eu
+              NS=e2e-autosign-policy
+              DEPLOY=e2e-autosign-policy-ca
+              kubectl wait --for=condition=Complete job/puppet-agent-rotated -n "${NS}" --timeout=300s
+
+              GEN=$(kubectl get deploy "${DEPLOY}" -n "${NS}" -o jsonpath='{.metadata.generation}')
+              PODS=$(kubectl get pods -n "${NS}" -o name | grep "^pod/${DEPLOY}-" | grep -v -- '-ca-setup-' | sort)
+              [ "${GEN}" = "$(cat /tmp/autosign-policy-generation)" ] \
+                || { echo "ERROR: the CA deployment changed (generation ${GEN})"; exit 1; }
+              [ "${PODS}" = "$(cat /tmp/autosign-policy-pods)" ] \
+                || { echo "ERROR: the CA pod was replaced: ${PODS}"; exit 1; }
+              echo "OK: the rotated policy signed a CSR without rolling the CA pod"
       finally:
         - script:
             timeout: 2m
             content: |
               kubectl logs -n e2e-autosign-policy job/puppet-agent-match || true
               kubectl logs -n e2e-autosign-policy job/puppet-agent-nomatch || true
+              kubectl logs -n e2e-autosign-policy job/puppet-agent-rotated || true
               helm uninstall e2e-autosign-policy --namespace e2e-autosign-policy --wait 2>/dev/null || true
               kubectl delete namespace e2e-autosign-policy --ignore-not-found 2>/dev/null || true

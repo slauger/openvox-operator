@@ -21,12 +21,9 @@ const autosignBinaryPath = "/usr/local/bin/openvox-autosign"
 
 // autosignPolicyDir is where the rendered policy Secret is mounted. It is a
 // directory so the kubelet keeps it in sync; see the mount in
-// server_deployment.go.
+// server_deployment.go. The binary reads puppet.AutosignPolicyPath inside it by
+// default, because puppet.conf cannot pass it an argument.
 const autosignPolicyDir = "/etc/puppetlabs/puppet/autosign-policy"
-
-// autosignPolicyPath is the file inside that directory, passed to the binary
-// with --config.
-const autosignPolicyPath = autosignPolicyDir + "/autosign-policy.yaml"
 
 // reconcileAutosignSecrets reconciles the autosign policy Secret for the CA referenced by this Config.
 func (r *ConfigReconciler) reconcileAutosignSecrets(ctx context.Context, cfg *openvoxv1alpha1.Config) error {

@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
 
+	"k8s.io/utils/clock"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -29,6 +30,7 @@ type CertificateAuthorityReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder events.EventRecorder
+	Clock    clock.PassiveClock
 }
 
 // Event reasons for CertificateAuthority.
@@ -36,6 +38,7 @@ const (
 	EventReasonCAInitialized          = "CAInitialized"
 	EventReasonCAExternal             = "CAExternal"
 	EventReasonCAWaitingForConfig     = "WaitingForConfig"
+	EventReasonCAWaitingForCAServer   = "WaitingForCAServer"
 	EventReasonCRLRefreshed           = "CRLRefreshed"
 	EventReasonCRLRefreshFailed       = "CRLRefreshFailed"
 	EventReasonOperatorSigningCreated = "OperatorSigningCreated"
@@ -332,6 +335,9 @@ func (r *CertificateAuthorityReconciler) findConfigForCA(ctx context.Context, ca
 }
 
 func (r *CertificateAuthorityReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.Clock == nil {
+		r.Clock = clock.RealClock{}
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&openvoxv1alpha1.CertificateAuthority{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
@@ -359,6 +365,11 @@ func (r *CertificateAuthorityReconciler) SetupWithManager(mgr ctrl.Manager) erro
 					{NamespacedName: types.NamespacedName{Name: cfg.Spec.AuthorityRef, Namespace: cfg.Namespace}},
 				}
 			},
+		)).
+		// The setup Job waits for the CA Server, which can be created after the
+		// CA and its Certificates.
+		Watches(&openvoxv1alpha1.Server{}, handler.EnqueueRequestsFromMapFunc(
+			caForCAServer(mgr.GetClient()),
 		)).
 		Complete(r)
 }

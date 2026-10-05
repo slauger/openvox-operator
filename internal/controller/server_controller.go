@@ -523,6 +523,9 @@ func (r *ServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).
 		Owns(&networkingv1.NetworkPolicy{}).
 		Watches(&corev1.Secret{}, enqueueServersForSecret(mgr.GetClient())).
+		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(
+			serversForConfigMap(mgr.GetClient()),
+		)).
 		Watches(&openvoxv1alpha1.Config{}, handler.EnqueueRequestsFromMapFunc(
 			enqueueServersForConfigObject(mgr.GetClient()),
 		)).

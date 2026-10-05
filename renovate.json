@@ -104,6 +104,20 @@
       "semanticCommitType": "fix"
     },
     {
+      "description": "openvoxdb-8.16.0.tar.gz is the FIPS build without BouncyCastle in puppetdb.jar; skip it for the 8.x content images",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchDepNames": [
+        "OpenVoxProject/openvoxdb"
+      ],
+      "matchCurrentValue": "/^8\\./",
+      "allowedVersions": "<8.16.0 || >8.16.0 <9.0.0"
+    },
+    {
       "matchManagers": [
         "custom.regex"
       ],

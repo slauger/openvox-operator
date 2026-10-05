@@ -260,7 +260,9 @@ status cannot see it.
 1. The operator collects all SigningPolicies for a CertificateAuthority
 2. It renders a policy config YAML into a Secret, mounted into the CA pod
 3. puppet.conf always points to the `openvox-autosign` binary, so puppet.conf itself never changes when policies change
-4. When a SigningPolicy changes, the operator rewrites the Secret and hashes it into the CA pod's `autosign-policy-secret-hash` annotation, which rolls the CA pod so the new policy applies automatically. **No manual restart needed.**
+4. When a SigningPolicy changes, the operator rewrites the Secret. It is mounted as a directory, so the kubelet syncs the new policy into the running CA pod, usually within a minute. The CA pod is not restarted. **No manual restart needed.**
+
+A policy change only affects CSRs submitted after it reached the CA pod. puppetserver evaluates autosign once, when a CSR arrives. A CSR that was denied stays pending and is not re-evaluated, even if a later policy would match it. Sign it manually (`puppetserver ca sign --certname <name>`), or clean it and let the agent submit a new one.
 
 The `openvox-autosign` binary shipped in the openvox-server container image evaluates policies at CSR signing time:
 

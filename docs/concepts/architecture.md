@@ -148,7 +148,7 @@ Server pods use a read-only root filesystem by default for security hardening. T
 | Volume | Type | Mount Path | RO | Purpose |
 |--------|------|------------|-----|---------|
 | `ca-data` | PVC | `/etc/puppetlabs/puppetserver/ca` | No | CA private keys and signed certificates |
-| `autosign-policy` | Secret | `.../puppet/autosign-policy.yaml` | Yes | Autosign policy rendered from SigningPolicy CRDs |
+| `autosign-policy` | Secret | `.../puppet/autosign-policy/autosign-policy.yaml` | Yes | Autosign policy rendered from SigningPolicy CRDs |
 
 **Code volume** (when `code` is configured):
 

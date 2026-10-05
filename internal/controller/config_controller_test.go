@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -8,6 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
+	"github.com/slauger/openvox-operator/internal/puppet"
 )
 
 func TestConfigReconcile_NotFound(t *testing.T) {
@@ -209,14 +211,16 @@ func TestConfigReconcile_PuppetConfWithCA(t *testing.T) {
 	if !strings.Contains(puppetConf, "ca_ttl =") {
 		t.Errorf("puppet.conf missing ca_ttl\n---\n%s", puppetConf)
 	}
-	if !strings.Contains(puppetConf, "autosign = ") {
-		t.Errorf("puppet.conf missing autosign\n---\n%s", puppetConf)
+	// puppetserver runs autosign only if the whole value is an existing
+	// executable file, so anything beyond the bare binary path silently denies
+	// every CSR. That would otherwise surface only in an end-to-end run.
+	if !strings.Contains(puppetConf, "autosign = "+autosignBinaryPath+"\n") {
+		t.Errorf("puppet.conf must set autosign to the bare binary path %s\n---\n%s", autosignBinaryPath, puppetConf)
 	}
-	// The policy lives in a directory mount, so the binary has to be told where
-	// to look. A wrong path here denies every CSR and would otherwise surface
-	// only in an end-to-end run.
-	if !strings.Contains(puppetConf, "--config "+autosignPolicyPath) {
-		t.Errorf("puppet.conf must point the binary at %s\n---\n%s", autosignPolicyPath, puppetConf)
+	// The binary finds the policy at its default path, which has to lie inside
+	// the directory the policy Secret is mounted at.
+	if filepath.Dir(puppet.AutosignPolicyPath) != autosignPolicyDir {
+		t.Errorf("autosign policy path %s is outside the mount %s", puppet.AutosignPolicyPath, autosignPolicyDir)
 	}
 }
 

@@ -10,7 +10,7 @@ spec:
     - name: imageTag
       value: (env('IMAGE_TAG') || 'latest')
     - name: major
-      value: (env('OPENVOX_MAJOR') || '8')
+      value: (env('OPENVOX_MAJOR') || '9')
   steps:
     - name: Install CNPG PostgreSQL cluster
       try:
@@ -45,10 +45,10 @@ spec:
               helm upgrade --install openvox-stack-db "${REPO_ROOT}/charts/openvox-stack" \
                 --namespace e2e-database-cnpg --create-namespace \
                 --values "${REPO_ROOT}/charts/openvox-stack/ci/database-cnpg-values.yaml" \
-                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server-${OPENVOX_MAJOR:-8} \
+                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server-${OPENVOX_MAJOR:-9} \
                 --set config.image.tag="${IMAGE_TAG}" \
                 --set config.image.pullPolicy=Always \
-                --set database.image.repository=${IMAGE_REGISTRY}/openvox-db-${OPENVOX_MAJOR:-8} \
+                --set database.image.repository=${IMAGE_REGISTRY}/openvox-db-${OPENVOX_MAJOR:-9} \
                 --set database.image.tag="${IMAGE_TAG}" \
                 --set database.image.pullPolicy=Always
       catch:

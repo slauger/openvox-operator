@@ -9,10 +9,10 @@ on:
         type: string
         default: 'develop'
       openvox_major:
-        description: 'OpenVox major to test against (8 = default/stable, 9 = beta; requires the -9 images to exist)'
+        description: 'OpenVox major to test against (9 = default, 8 = previous major)'
         required: false
         type: string
-        default: '8'
+        default: '9'
 
 jobs:
   e2e-base:

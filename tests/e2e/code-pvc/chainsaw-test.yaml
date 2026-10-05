@@ -10,7 +10,7 @@ spec:
     - name: imageTag
       value: (env('IMAGE_TAG') || 'latest')
     - name: major
-      value: (env('OPENVOX_MAJOR') || '8')
+      value: (env('OPENVOX_MAJOR') || '9')
   steps:
     - name: Create PVC and populate with a Puppet environment
       try:
@@ -87,7 +87,7 @@ spec:
               helm upgrade --install e2e-code-pvc "${REPO_ROOT}/charts/openvox-stack" \
                 --namespace e2e-code-pvc --create-namespace \
                 --values "${REPO_ROOT}/charts/openvox-stack/ci/code-pvc-values.yaml" \
-                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server-${OPENVOX_MAJOR:-8} \
+                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server-${OPENVOX_MAJOR:-9} \
                 --set config.image.tag="${IMAGE_TAG}" \
                 --set config.image.pullPolicy=Always \
                 --set-json "config.code=[{\"claimName\":\"puppet-code\",\"environment\":\"production\"},{\"image\":\"${CODE_IMAGE}\",\"imagePullPolicy\":\"Always\",\"mountPath\":\"/etc/puppetlabs/code/hieradata\"}]"

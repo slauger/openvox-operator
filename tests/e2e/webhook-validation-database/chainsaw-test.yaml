@@ -47,7 +47,7 @@ spec:
               spec:
                 certificateRef: wh-db-cert
                 image:
-                  repository: ghcr.io/slauger/openvox-db-8
+                  repository: ghcr.io/slauger/openvox-db-9
                   tag: latest
                 postgres:
                   host: pg-cluster-rw
@@ -66,7 +66,7 @@ spec:
                 namespace: e2e-webhook-val-db
               spec:
                 image:
-                  repository: ghcr.io/slauger/openvox-db-8
+                  repository: ghcr.io/slauger/openvox-db-9
                   tag: latest
                 postgres:
                   host: pg-cluster-rw
@@ -92,7 +92,7 @@ spec:
               spec:
                 certificateRef: wh-db-cert
                 image:
-                  repository: ghcr.io/slauger/openvox-db-8
+                  repository: ghcr.io/slauger/openvox-db-9
                   tag: latest
                 postgres:
                   credentialsSecretRef: wh-db-pg-creds
@@ -117,7 +117,7 @@ spec:
               spec:
                 certificateRef: wh-db-cert
                 image:
-                  repository: ghcr.io/slauger/openvox-db-8
+                  repository: ghcr.io/slauger/openvox-db-9
                   tag: latest
                 postgres:
                   host: pg-cluster-rw
@@ -142,7 +142,7 @@ spec:
               spec:
                 certificateRef: wh-db-cert
                 image:
-                  repository: ghcr.io/slauger/openvox-db-8
+                  repository: ghcr.io/slauger/openvox-db-9
                   tag: latest
                 postgres:
                   host: pg-cluster-rw

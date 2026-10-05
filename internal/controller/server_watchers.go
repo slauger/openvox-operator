@@ -43,6 +43,25 @@ func serversForSecret(c client.Client) handler.MapFunc {
 	}
 }
 
+// serversForConfigMap maps a change to a Config's rendered ConfigMap to the
+// Servers of that Config. The pod template carries a hash of the ConfigMap, and
+// the ConfigMap changes without the Config itself changing - for example when a
+// referenced Database reports its URL after the Servers already rolled out. Without
+// this watch those Servers keep the old hash and the old puppetdb.conf.
+func serversForConfigMap(c client.Client) handler.MapFunc {
+	return func(ctx context.Context, obj client.Object) []ctrl.Request {
+		labels := obj.GetLabels()
+		if labels["app.kubernetes.io/managed-by"] != "openvox-operator" {
+			return nil
+		}
+		cfgName := labels[LabelConfig]
+		if cfgName == "" {
+			return nil
+		}
+		return enqueueServersForConfig(c, ctx, obj.GetNamespace(), cfgName)
+	}
+}
+
 // enqueueServersForConfigObject maps a Config change to every Server that
 // references it. Image, resources, code and the config hash are all derived
 // from the Config, so a change there has to reach the Servers.

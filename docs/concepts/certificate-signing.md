@@ -82,7 +82,16 @@ The operator uses two strategies depending on when the Certificate is created re
 
 The CA setup Job signs the certificate as part of the initial `puppetserver ca setup` and exports the cert+key directly as a Kubernetes Secret. The Certificate controller detects the existing Secret, adopts it (sets ownerReference), and marks the Certificate as `Signed`.
 
-This is the typical path for the **CA server's own certificate**.
+This is the typical path for the **CA server's own certificate**, and the only one that
+works for it: HTTP signing needs a running CA server, which is waiting for exactly this
+certificate. Only the certificate of the Server with `ca: true` is exported.
+
+Helm and GitOps tools create the CertificateAuthority, the CA Server and its Certificate
+in no fixed order. The operator therefore holds the setup Job back until a Server with
+`ca: true` and its Certificate exist, for up to two minutes after the CertificateAuthority
+was created (event `WaitingForCAServer`). After that the Job runs without exporting a
+server certificate, so a CA without a CA server of its own still initializes. A CA server
+added later than that cannot get its certificate this way. Create it together with the CA.
 
 ### Strategy 2: HTTP Signing
 

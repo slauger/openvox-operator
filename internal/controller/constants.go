@@ -34,6 +34,14 @@ const (
 	ServerFSGroup      = int64(1001)
 )
 
+// CAServerWaitGrace is how long the CA setup Job waits for the CA Server's
+// Certificate to appear before it runs without exporting a server certificate.
+// Helm and GitOps tools create the CertificateAuthority, the Server and its
+// Certificate in no fixed order; without the wait the Job can run first, the CA
+// Server's certificate is never exported, and the CA Server waits for a
+// certificate only it could sign.
+const CAServerWaitGrace = 2 * time.Minute
+
 // CA setup Job resource defaults (JRuby/JVM workload).
 const (
 	DefaultCAJobCPURequest    = "200m"

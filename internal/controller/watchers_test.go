@@ -59,6 +59,30 @@ func TestEnqueueServersForConfigObject(t *testing.T) {
 	}
 }
 
+func TestServersForConfigMap(t *testing.T) {
+	c := setupTestClient(
+		serverIn("web-a", "production", "prod-cert"),
+		serverIn("web-b", "production", "prod-cert"),
+		serverIn("staging", "staging", "staging-cert"),
+	)
+
+	rendered := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+		Name: "production-config", Namespace: testNamespace, Labels: configLabels("production"),
+	}}
+	got := serversForConfigMap(c)(testCtx(), rendered)
+	if !equalNames(got, "web-a", "web-b") {
+		t.Errorf("a rendered ConfigMap change should reach exactly its Config's Servers, got %v", names(got))
+	}
+
+	foreign := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+		Name: "production-config", Namespace: testNamespace,
+		Labels: map[string]string{LabelConfig: "production"},
+	}}
+	if got := serversForConfigMap(c)(testCtx(), foreign); len(got) != 0 {
+		t.Errorf("a ConfigMap the operator does not manage must not enqueue Servers, got %v", names(got))
+	}
+}
+
 func TestEnqueueServersForCertificate(t *testing.T) {
 	c := setupTestClient(
 		serverIn("web-a", "production", "prod-cert"),

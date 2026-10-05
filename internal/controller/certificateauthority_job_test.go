@@ -3,12 +3,14 @@ package controller
 import (
 	"strings"
 	"testing"
+	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	clocktesting "k8s.io/utils/clock/testing"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
 )
@@ -40,7 +42,7 @@ func TestFindCAServerCert(t *testing.T) {
 		}
 	})
 
-	t.Run("fallback to first cert when no CA server", func(t *testing.T) {
+	t.Run("no fallback to another cert when no CA server", func(t *testing.T) {
 		ca := newCertificateAuthority("myca")
 		cfg := newConfig("production", withAuthorityRef("myca"))
 		// No server with ca:true
@@ -55,14 +57,10 @@ func TestFindCAServerCert(t *testing.T) {
 		r := newCertificateAuthorityReconciler(c)
 
 		certs := []openvoxv1alpha1.Certificate{*cert1, *cert2}
-		found := r.findCAServerCert(testCtx(), ca, certs)
-
-		if found == nil {
-			t.Fatal("expected fallback to first cert, got nil")
-			return
-		}
-		if found.Name != "first-cert" {
-			t.Errorf("expected 'first-cert', got %q", found.Name)
+		// Exporting a non-CA certificate under the CA Server's name would leave the
+		// CA Server waiting for a certificate only it could sign.
+		if found := r.findCAServerCert(testCtx(), ca, certs); found != nil {
+			t.Errorf("expected nil without a CA Server, got %q", found.Name)
 		}
 	})
 
@@ -453,4 +451,105 @@ func TestDeleteAndRequeueJob(t *testing.T) {
 	if res.RequeueAfter != RequeueIntervalMedium {
 		t.Errorf("expected requeue after %v, got %v", RequeueIntervalMedium, res.RequeueAfter)
 	}
+}
+
+func TestReconcileCASetupJob_WaitsForCAServer(t *testing.T) {
+	created := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
+	freshCA := func() *openvoxv1alpha1.CertificateAuthority {
+		ca := newCertificateAuthority("myca")
+		ca.CreationTimestamp = metav1.NewTime(created)
+		return ca
+	}
+	jobKey := types.NamespacedName{Name: "myca-ca-setup", Namespace: testNamespace}
+
+	t.Run("holds the Job back while the CA Server is missing", func(t *testing.T) {
+		ca := freshCA()
+		cfg := newConfig("production", withAuthorityRef("myca"))
+		// A Certificate of the CA exists, but no Server with ca: true yet.
+		other := newCertificate("puppetdb", "myca", openvoxv1alpha1.CertificatePhasePending)
+		c := setupTestClient(ca, cfg, other)
+		r := newCertificateAuthorityReconciler(c)
+		r.Clock = clocktesting.NewFakePassiveClock(created.Add(30 * time.Second))
+
+		res, err := r.reconcileCASetupJob(testCtx(), ca, cfg, []openvoxv1alpha1.Certificate{*other})
+		if err != nil {
+			t.Fatalf("reconcile error: %v", err)
+		}
+		if res.RequeueAfter == 0 {
+			t.Error("expected a requeue while waiting for the CA Server")
+		}
+		if err := c.Get(testCtx(), jobKey, &batchv1.Job{}); err == nil {
+			t.Error("the setup Job must not be created before the CA Server exists")
+		}
+	})
+
+	t.Run("exports the CA Server certificate once it exists", func(t *testing.T) {
+		ca := freshCA()
+		cfg := newConfig("production", withAuthorityRef("myca"))
+		server := newServer("ca-server", withCA(true), withServerRole(true))
+		server.Spec.ConfigRef = "production"
+		server.Spec.CertificateRef = "ca-cert"
+		caCert := newCertificate("ca-cert", "myca", openvoxv1alpha1.CertificatePhasePending)
+		c := setupTestClient(ca, cfg, server, caCert)
+		r := newCertificateAuthorityReconciler(c)
+		r.Clock = clocktesting.NewFakePassiveClock(created.Add(30 * time.Second))
+
+		if _, err := r.reconcileCASetupJob(testCtx(), ca, cfg, []openvoxv1alpha1.Certificate{*caCert}); err != nil {
+			t.Fatalf("reconcile error: %v", err)
+		}
+		job := &batchv1.Job{}
+		if err := c.Get(testCtx(), jobKey, job); err != nil {
+			t.Fatalf("expected the setup Job, got %v", err)
+		}
+		if got := jobEnv(job, "SSL_SECRET_NAME"); got != "ca-cert-tls" {
+			t.Errorf("expected SSL_SECRET_NAME ca-cert-tls, got %q", got)
+		}
+	})
+
+	t.Run("runs without an export after the grace period", func(t *testing.T) {
+		ca := freshCA()
+		cfg := newConfig("production", withAuthorityRef("myca"))
+		c := setupTestClient(ca, cfg)
+		r := newCertificateAuthorityReconciler(c)
+		r.Clock = clocktesting.NewFakePassiveClock(created.Add(CAServerWaitGrace + time.Second))
+
+		if _, err := r.reconcileCASetupJob(testCtx(), ca, cfg, nil); err != nil {
+			t.Fatalf("reconcile error: %v", err)
+		}
+		job := &batchv1.Job{}
+		if err := c.Get(testCtx(), jobKey, job); err != nil {
+			t.Fatalf("a CA without a CA Server must still initialize, got %v", err)
+		}
+		if got := jobEnv(job, "SSL_SECRET_NAME"); got != "" {
+			t.Errorf("expected no server certificate export, got %q", got)
+		}
+	})
+}
+
+func TestCAForCAServer(t *testing.T) {
+	cfg := newConfig("production", withAuthorityRef("myca"))
+	c := setupTestClient(cfg)
+
+	caServer := newServer("ca-server", withCA(true), withServerRole(true))
+	caServer.Spec.ConfigRef = "production"
+	got := caForCAServer(c)(testCtx(), caServer)
+	if len(got) != 1 || got[0].Name != "myca" {
+		t.Errorf("a CA Server should enqueue its Config's CA, got %v", got)
+	}
+
+	plain := newServer("web", withCA(false))
+	plain.Spec.ConfigRef = "production"
+	if got := caForCAServer(c)(testCtx(), plain); len(got) != 0 {
+		t.Errorf("a Server without ca: true must not enqueue the CA, got %v", got)
+	}
+}
+
+// jobEnv returns the value of an environment variable of the Job's first container.
+func jobEnv(job *batchv1.Job, name string) string {
+	for _, e := range job.Spec.Template.Spec.Containers[0].Env {
+		if e.Name == name {
+			return e.Value
+		}
+	}
+	return ""
 }

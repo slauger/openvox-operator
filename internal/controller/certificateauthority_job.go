@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -17,6 +18,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	openvoxv1alpha1 "github.com/slauger/openvox-operator/api/v1alpha1"
@@ -72,17 +74,45 @@ func (r *CertificateAuthorityReconciler) findCAServerCert(ctx context.Context, c
 		}
 	}
 
+	// No fallback to another Certificate: exporting a non-CA certificate under
+	// the CA Server's name would leave the CA Server waiting for a certificate
+	// that only it could sign.
 	for i := range certs {
 		if caServerCertRefs[certs[i].Name] {
 			return &certs[i]
 		}
 	}
-
-	// Fallback: return first cert if no CA server found
-	if len(certs) > 0 {
-		return &certs[0]
-	}
 	return nil
+}
+
+// caForCAServer maps a Server with ca: true to the CertificateAuthority of its
+// Config, so a CA Server created after the CA starts the waiting setup Job.
+func caForCAServer(c client.Client) handler.MapFunc {
+	return func(ctx context.Context, obj client.Object) []ctrl.Request {
+		server, ok := obj.(*openvoxv1alpha1.Server)
+		if !ok || !server.Spec.CA || server.Spec.ConfigRef == "" {
+			return nil
+		}
+		cfg := &openvoxv1alpha1.Config{}
+		if err := c.Get(ctx, types.NamespacedName{Name: server.Spec.ConfigRef, Namespace: server.Namespace}, cfg); err != nil {
+			if !apierrors.IsNotFound(err) {
+				log.FromContext(ctx).Error(err, "failed to get Config in CA Server watcher", "config", server.Spec.ConfigRef)
+			}
+			return nil
+		}
+		if cfg.Spec.AuthorityRef == "" {
+			return nil
+		}
+		return []ctrl.Request{{NamespacedName: types.NamespacedName{Name: cfg.Spec.AuthorityRef, Namespace: server.Namespace}}}
+	}
+}
+
+// now returns the reconciler's clock time, defaulting to the real clock.
+func (r *CertificateAuthorityReconciler) now() time.Time {
+	if r.Clock == nil {
+		return time.Now()
+	}
+	return r.Clock.Now()
 }
 
 // --- CA Setup Job ---
@@ -105,6 +135,28 @@ func (r *CertificateAuthorityReconciler) reconcileCASetupJob(ctx context.Context
 	}
 
 	jobName := fmt.Sprintf("%s-ca-setup", ca.Name)
+
+	// The Job exports the CA Server's certificate only if it knows which one that
+	// is when it is created. Give a CA Server created alongside the CA time to
+	// appear; past the grace period run without it, so a CA that has no CA Server
+	// of its own still initializes. An existing Job is never held back.
+	existing := &batchv1.Job{}
+	err := r.Get(ctx, types.NamespacedName{Name: jobName, Namespace: ca.Namespace}, existing)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return ctrl.Result{}, fmt.Errorf("getting CA setup Job %s: %w", jobName, err)
+	}
+	if apierrors.IsNotFound(err) && r.findCAServerCert(ctx, ca, certs) == nil {
+		if waited := r.now().Sub(ca.CreationTimestamp.Time); waited < CAServerWaitGrace {
+			logger.Info("waiting for the CA Server and its Certificate before running the CA setup Job",
+				"ca", ca.Name, "waited", waited.Round(time.Second))
+			r.Recorder.Eventf(ca, nil, corev1.EventTypeNormal, EventReasonCAWaitingForCAServer, "Reconcile",
+				"Waiting for a Server with ca: true and its Certificate before running the CA setup Job")
+			return ctrl.Result{RequeueAfter: RequeueIntervalShort}, nil
+		}
+		logger.Info("no CA Server found within the grace period, running the CA setup Job without exporting a server certificate",
+			"ca", ca.Name, "grace", CAServerWaitGrace)
+	}
+
 	job := r.buildCASetupJob(ctx, ca, cfg, jobName, certs)
 
 	return r.reconcileJob(ctx, ca, jobName, job, caSecretName)

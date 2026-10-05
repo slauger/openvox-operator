@@ -24,6 +24,7 @@ spec:
                 name: wh-db-cert
               spec:
                 authorityRef: wh-db-ca
+                certname: wh-db
         - apply:
             resource:
               apiVersion: v1

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -241,7 +242,7 @@ func TestRenderAuthConf(t *testing.T) {
 			t.Errorf("expected operator certname in combined allow, got:\n%s", out)
 		}
 
-		// Verify the combined allow appears for CA admin endpoints
+		// Verify the combined allow appears for every admin endpoint
 		for _, ruleName := range []string{
 			"puppetlabs cert status",
 			"puppetlabs CRL update",
@@ -249,12 +250,67 @@ func TestRenderAuthConf(t *testing.T) {
 			"puppetlabs cert clean",
 			"puppetlabs cert sign",
 			"puppetlabs cert sign all",
+			"puppetlabs file bucket file read",
+			"primary can clean cache after code deploy",
 		} {
-			if !strings.Contains(out, ruleName) {
-				t.Errorf("expected rule %q in output", ruleName)
+			rule := authRule(t, out, ruleName)
+			if !strings.Contains(rule, `"my-ca-operator"`) {
+				t.Errorf("rule %q does not allow the operator certname:\n%s", ruleName, rule)
 			}
 		}
 	})
+
+	t.Run("filebucket reads are restricted to admin certificates", func(t *testing.T) {
+		out := r.renderAuthConf(cfg, nil)
+
+		store := authRule(t, out, "puppetlabs file bucket file")
+		if !strings.Contains(store, "method: [head, put]") || !strings.Contains(store, `allow: "*"`) {
+			t.Errorf("agents should only store into the filebucket:\n%s", store)
+		}
+		read := authRule(t, out, "puppetlabs file bucket file read")
+		if !strings.Contains(read, "method: [get, post]") || !strings.Contains(read, `pp_cli_auth: "true"`) {
+			t.Errorf("filebucket reads should require pp_cli_auth:\n%s", read)
+		}
+	})
+
+	t.Run("environment cache flush requires admin certificates", func(t *testing.T) {
+		out := r.renderAuthConf(cfg, nil)
+
+		rule := authRule(t, out, "primary can clean cache after code deploy")
+		for _, want := range []string{
+			`path: "/puppet-admin-api/v1/environment-cache"`,
+			"method: delete",
+			`pp_cli_auth: "true"`,
+		} {
+			if !strings.Contains(rule, want) {
+				t.Errorf("expected %q in rule:\n%s", want, rule)
+			}
+		}
+	})
+
+	t.Run("rules for endpoints puppetserver does not serve are gone", func(t *testing.T) {
+		out := r.renderAuthConf(cfg, nil)
+
+		for _, path := range []string{"/puppet/v3/resource_type/", "/puppet/v3/status/"} {
+			if strings.Contains(out, path) {
+				t.Errorf("unexpected rule for %s in output", path)
+			}
+		}
+	})
+}
+
+// authRule returns the HOCON block of the auth.conf rule with the given name.
+func authRule(t *testing.T, authConf, name string) string {
+	t.Helper()
+	end := strings.Index(authConf, fmt.Sprintf("name: %q", name))
+	if end < 0 {
+		t.Fatalf("rule %q not found in auth.conf", name)
+	}
+	start := strings.LastIndex(authConf[:end], "match-request:")
+	if start < 0 {
+		t.Fatalf("rule %q has no match-request", name)
+	}
+	return authConf[start:end]
 }
 
 func TestRenderCAConf(t *testing.T) {

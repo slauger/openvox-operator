@@ -91,7 +91,6 @@ jobs:
       image_name: openvox-server-${{ matrix.major }}
       # Publish the unsuffixed backward-compat alias only for the default major.
       alias_image_name: ${{ matrix.latest && 'openvox-server' || '' }}
-      allow_failure: ${{ matrix.major != '8' }}
       dockerfile: images/openvox-server/Containerfile
       context: '.'
       push: true
@@ -118,7 +117,6 @@ jobs:
       image_name: openvox-db-${{ matrix.major }}
       # Publish the unsuffixed backward-compat alias only for the default major.
       alias_image_name: ${{ matrix.latest && 'openvox-db' || '' }}
-      allow_failure: ${{ matrix.major != '8' }}
       dockerfile: images/openvox-db/Containerfile
       context: '.'
       push: true
@@ -139,8 +137,8 @@ jobs:
       image: ${{ needs.openvox-operator.outputs.image }}
       digest: ${{ needs.openvox-operator.outputs.digest }}
 
-  # Only the default major (8) is conforma-validated: it is the released,
-  # :latest-tagged image. Major 9 is a best-effort pre-release build.
+  # Only the default major is conforma-validated: it is the released,
+  # :latest-tagged image, addressed through its unsuffixed alias.
   validate-openvox-server:
     needs: [semantic-release, openvox-server]
     if: needs.semantic-release.outputs.new-release-published == 'true'
@@ -151,7 +149,7 @@ jobs:
       packages: read
     with:
       # ec resolves the tag to a digest itself.
-      image: ghcr.io/${{ github.repository_owner }}/openvox-server-8:${{ needs.semantic-release.outputs.new-release-version }}
+      image: ghcr.io/${{ github.repository_owner }}/openvox-server:${{ needs.semantic-release.outputs.new-release-version }}
 
   validate-openvox-db:
     needs: [semantic-release, openvox-db]
@@ -162,7 +160,7 @@ jobs:
       id-token: write
       packages: read
     with:
-      image: ghcr.io/${{ github.repository_owner }}/openvox-db-8:${{ needs.semantic-release.outputs.new-release-version }}
+      image: ghcr.io/${{ github.repository_owner }}/openvox-db:${{ needs.semantic-release.outputs.new-release-version }}
 
   helm-charts:
     needs: [semantic-release, openvox-operator, openvox-server, openvox-db]
@@ -259,12 +257,12 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           VERSION="${{ needs.semantic-release.outputs.new-release-version }}"
-          ROWS=$(yq -r '.include[] | "| " + .major + " | " + .server + " | " + .db + " | " + .agent + " |"' images/openvox-versions.yaml)
+          ROWS=$(yq -r '(.include[] | select(.latest) | .major) += " (default)" | .include[] | "| " + .major + " | " + .server + " | " + .db + " | " + .agent + " |"' images/openvox-versions.yaml)
           BODY=$(gh release view "v${VERSION}" --json body -q .body)
           {
             printf '%s\n\n' "${BODY}"
             printf '## OpenVox component versions\n\n'
-            printf 'Content images shipped with this release. Major 8 is the default and the only one tagged `:latest`; major 9 is a pre-release.\n\n'
+            printf 'Content images shipped with this release. The default major is the only one tagged `:latest` and published under the unsuffixed image names.\n\n'
             printf '| Major | openvox-server | openvox-db | openvox-agent |\n'
             printf '|---|---|---|---|\n'
             printf '%s\n' "${ROWS}"

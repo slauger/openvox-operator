@@ -74,7 +74,7 @@ This guide sets up an OpenVox Server deployment. Choose between the Helm chart (
     spec:
       authorityRef: lab-ca
       image:
-        repository: ghcr.io/slauger/openvox-server-8
+        repository: ghcr.io/slauger/openvox-server-9
         tag: "latest"
     ---
     apiVersion: openvox.voxpupuli.org/v1alpha1

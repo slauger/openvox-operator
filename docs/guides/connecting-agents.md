@@ -66,7 +66,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: puppet-agent
-          image: ghcr.io/slauger/openvox-agent-8:develop  # test artifact, see above
+          image: ghcr.io/slauger/openvox-agent-9:develop  # test artifact, see above
           command: ["sh", "-c"]
           args:
             - |

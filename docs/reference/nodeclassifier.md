@@ -82,7 +82,7 @@ metadata:
 spec:
   authorityRef: production-ca
   image:
-    repository: ghcr.io/slauger/openvox-server-8
+    repository: ghcr.io/slauger/openvox-server-9
     tag: "latest"
   nodeClassifierRef: foreman
 ```

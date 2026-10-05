@@ -1,12 +1,12 @@
+# OpenVox major selects the content image variant (-8 / -9) for local builds and e2e tests.
+OPENVOX_MAJOR ?= 9
 IMG ?= ghcr.io/slauger/openvox-operator:latest
-OPENVOX_SERVER_IMG ?= ghcr.io/slauger/openvox-server-8:latest
+OPENVOX_SERVER_IMG ?= ghcr.io/slauger/openvox-server-$(OPENVOX_MAJOR):latest
 OPENVOX_E2E_CODE_IMG ?= ghcr.io/slauger/openvox-e2e-code:latest
-OPENVOX_AGENT_IMG ?= ghcr.io/slauger/openvox-agent-8:latest
+OPENVOX_AGENT_IMG ?= ghcr.io/slauger/openvox-agent-$(OPENVOX_MAJOR):latest
 OPENVOX_MOCK_IMG ?= ghcr.io/slauger/openvox-mock:latest
 NAMESPACE ?= openvox-system
 IMAGE_REGISTRY ?= ghcr.io/slauger
-# OpenVox major selects the content image variant (-8 / -9) for e2e tests.
-OPENVOX_MAJOR ?= 8
 CONTAINER_TOOL ?= $(shell which podman 2>/dev/null || which docker 2>/dev/null)
 CONTROLLER_GEN = go tool controller-gen
 GOVULNCHECK = go tool govulncheck
@@ -63,17 +63,27 @@ docker-push: ## Push container image.
 
 IMAGE_TAG ?= $(shell git describe --always)
 
+# Look up a pinned OpenVox version for OPENVOX_MAJOR in images/openvox-versions.yaml.
+openvox_version = $(shell yq '.include[] | select(.major == "$(OPENVOX_MAJOR)") | .$(1)' images/openvox-versions.yaml)
+
 .PHONY: local-build
 local-build: ## Build all images for local development (Docker Desktop K8s).
 	$(CONTAINER_TOOL) build -t ghcr.io/slauger/openvox-operator:$(IMAGE_TAG) -f images/openvox-operator/Containerfile .
-	$(CONTAINER_TOOL) build -t ghcr.io/slauger/openvox-server-8:$(IMAGE_TAG) -f images/openvox-server/Containerfile .
+	$(CONTAINER_TOOL) build -t ghcr.io/slauger/openvox-server-$(OPENVOX_MAJOR):$(IMAGE_TAG) \
+		--build-arg OPENVOXSERVER_VERSION=$(call openvox_version,server) \
+		--build-arg OPENVOXDB_TERMINI_VERSION=$(call openvox_version,termini) \
+		--build-arg OPENVOX_VERSION=$(call openvox_version,openvox) \
+		-f images/openvox-server/Containerfile .
 	$(CONTAINER_TOOL) build -t ghcr.io/slauger/openvox-e2e-code:latest -f images/openvox-e2e-code/Containerfile .
-	$(CONTAINER_TOOL) build -t ghcr.io/slauger/openvox-agent-8:latest -f images/openvox-agent/Containerfile images/openvox-agent/
+	$(CONTAINER_TOOL) build -t ghcr.io/slauger/openvox-agent-$(OPENVOX_MAJOR):latest \
+		--build-arg OPENVOX_AGENT_VERSION=$(call openvox_version,agent) \
+		--build-arg OPENVOX_MAJOR=$(OPENVOX_MAJOR) \
+		-f images/openvox-agent/Containerfile images/openvox-agent/
 	$(CONTAINER_TOOL) build -t ghcr.io/slauger/openvox-mock:latest -f images/openvox-mock/Containerfile .
 	@echo "Built ghcr.io/slauger/openvox-operator:$(IMAGE_TAG)"
-	@echo "Built ghcr.io/slauger/openvox-server-8:$(IMAGE_TAG)"
+	@echo "Built ghcr.io/slauger/openvox-server-$(OPENVOX_MAJOR):$(IMAGE_TAG)"
 	@echo "Built ghcr.io/slauger/openvox-e2e-code:latest"
-	@echo "Built ghcr.io/slauger/openvox-agent-8:latest"
+	@echo "Built ghcr.io/slauger/openvox-agent-$(OPENVOX_MAJOR):latest"
 	@echo "Built ghcr.io/slauger/openvox-mock:latest"
 
 .PHONY: local-deploy
@@ -90,7 +100,7 @@ STACK_VALUES ?= charts/openvox-stack/values.yaml
 # configure helm to pull that specific image from the registry.
 ifeq ($(origin IMAGE_TAG),command line)
 HELM_SET ?= --set image.repository=$(IMAGE_REGISTRY)/openvox-operator --set image.tag=$(IMAGE_TAG) --set image.pullPolicy=Always
-STACK_HELM_SET ?= --set config.image.repository=$(IMAGE_REGISTRY)/openvox-server-8 --set config.image.tag=$(IMAGE_TAG) --set config.image.pullPolicy=Always
+STACK_HELM_SET ?= --set config.image.repository=$(IMAGE_REGISTRY)/openvox-server-$(OPENVOX_MAJOR) --set config.image.tag=$(IMAGE_TAG) --set config.image.pullPolicy=Always
 endif
 
 .PHONY: install

@@ -16,7 +16,7 @@ spec:
               helm upgrade --install openvox-stack-single "${REPO_ROOT}/charts/openvox-stack" \
                 --namespace e2e-single-node --create-namespace \
                 --values "${REPO_ROOT}/charts/openvox-stack/ci/single-node-values.yaml" \
-                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server-${OPENVOX_MAJOR:-8} \
+                --set config.image.repository=${IMAGE_REGISTRY}/openvox-server-${OPENVOX_MAJOR:-9} \
                 --set config.image.tag="${IMAGE_TAG}" \
                 --set config.image.pullPolicy=Always
       catch:
@@ -61,7 +61,7 @@ spec:
       description: |
         spec.image on the Config reached no Server until #549 removed the nested
         default from ImageSpec, so the suite silently ran against
-        openvox-server-8:latest instead of the image built for this run. This
+        openvox-server-9:latest instead of the image built for this run. This
         step makes that regression fail here instead of passing quietly.
       try:
         - script:
@@ -70,7 +70,7 @@ spec:
               set -eu
               IMAGE_TAG=${IMAGE_TAG:-$(git describe --always)}
               IMAGE_REGISTRY=${IMAGE_REGISTRY:-ghcr.io/slauger}
-              EXPECTED="${IMAGE_REGISTRY}/openvox-server-${OPENVOX_MAJOR:-8}:${IMAGE_TAG}"
+              EXPECTED="${IMAGE_REGISTRY}/openvox-server-${OPENVOX_MAJOR:-9}:${IMAGE_TAG}"
 
               ACTUAL=$(kubectl get pods -n e2e-single-node \
                 -l openvox.voxpupuli.org/server=openvox-stack-single-ca \

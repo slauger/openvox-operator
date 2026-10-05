@@ -135,7 +135,7 @@ spec:
   authorityRef: production-ca
   nodeClassifierRef: pe-classifier
   image:
-    repository: ghcr.io/slauger/openvox-server-8
+    repository: ghcr.io/slauger/openvox-server-9
     tag: "latest"
 ```
 

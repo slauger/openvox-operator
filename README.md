@@ -205,9 +205,10 @@ helm install production \
 ## Content images
 
 The OpenVox Server and DB content images are published under their plain names,
-`ghcr.io/slauger/openvox-server` and `ghcr.io/slauger/openvox-db`. A major-suffixed variant
-(`openvox-server-8` / `openvox-db-8`) is also published for pinning a specific OpenVox major;
-the unsuffixed name tracks the current default major and shares its image digest.
+`ghcr.io/slauger/openvox-server` and `ghcr.io/slauger/openvox-db`. Major-suffixed variants
+(`openvox-server-9` / `openvox-db-9` and `openvox-server-8` / `openvox-db-8`) are also
+published for pinning a specific OpenVox major; the unsuffixed name tracks the current default
+major (OpenVox 9) and shares its image digest.
 
 The exact OpenVox versions baked into each image are pinned in
 [`images/openvox-versions.yaml`](images/openvox-versions.yaml) (kept current by Renovate),

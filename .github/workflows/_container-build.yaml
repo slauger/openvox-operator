@@ -193,6 +193,9 @@ jobs:
         if: inputs.sign
         uses: sigstore/cosign-installer@v4.1.2
 
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0.24.3
+
       - name: Create and push manifest
         run: |
           IMAGE="ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}"
@@ -239,6 +242,52 @@ jobs:
           if [[ -n "${ALIAS}" ]]; then
             cosign sign --yes "ghcr.io/${{ github.repository_owner }}/${ALIAS}@${{ steps.digest.outputs.digest }}"
           fi
+
+      # BuildKit already attaches an SPDX SBOM to every platform image. Dependency-Track and
+      # other CycloneDX-only consumers cannot read it, so syft generates both formats from the
+      # pushed per-platform images; they are also published as release assets.
+      - name: Generate SBOMs
+        env:
+          # Packages only: without this, every file owned by an RPM becomes a CycloneDX component
+          SYFT_FILE_METADATA_SELECTION: none
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}"
+          VERSION="${{ needs.prepare.outputs.version }}"
+          PLATFORMS="${{ inputs.platforms }}"
+          INDEX=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{json .Manifest}}')
+
+          mkdir -p sbom
+          for PLATFORM in ${PLATFORMS//,/ }; do
+            SUFFIX="${PLATFORM//\//-}"
+            DIGEST=$(jq -r --arg os "${PLATFORM%%/*}" --arg arch "${PLATFORM#*/}" \
+              '.manifests[] | select(.platform.os == $os and .platform.architecture == $arch) | .digest' <<< "${INDEX}")
+            BASE="sbom/${{ inputs.image_name }}-${VERSION}-${SUFFIX}"
+            syft scan "registry:${IMAGE}@${DIGEST}" \
+              --source-name "${IMAGE}" --source-version "${VERSION}" \
+              -o "cyclonedx-json=${BASE}.cdx.json" \
+              -o "spdx-json=${BASE}.spdx.json"
+            echo "${DIGEST}" > "${BASE}.digest"
+          done
+
+      - name: Attest CycloneDX SBOMs with cosign (keyless)
+        if: inputs.sign
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}"
+          ALIAS="${{ inputs.alias_image_name }}"
+          for CDX in sbom/*.cdx.json; do
+            DIGEST=$(cat "${CDX%.cdx.json}.digest")
+            cosign attest --yes --type cyclonedx --predicate "${CDX}" "${IMAGE}@${DIGEST}"
+            if [[ -n "${ALIAS}" ]]; then
+              cosign attest --yes --type cyclonedx --predicate "${CDX}" "ghcr.io/${{ github.repository_owner }}/${ALIAS}@${DIGEST}"
+            fi
+          done
+
+      - name: Upload SBOMs
+        uses: actions/upload-artifact@v7
+        with:
+          name: sbom-${{ inputs.image_name }}
+          path: sbom/*.json
+          retention-days: 7
 
       - name: Attest manifest index
         uses: actions/attest-build-provenance@v4

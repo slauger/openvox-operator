@@ -243,13 +243,20 @@ jobs:
         with:
           name: helm-charts
 
+      - name: Download SBOM artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: sbom-*
+          path: sbom
+          merge-multiple: true
+
       - name: Upload assets to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           VERSION="${{ needs.semantic-release.outputs.new-release-version }}"
-          gh release upload "v${VERSION}" *.tgz
+          gh release upload "v${VERSION}" *.tgz sbom/*.json
 
       - name: Append OpenVox component versions to release notes
         env:

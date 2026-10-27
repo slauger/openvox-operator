@@ -17,7 +17,7 @@ ARG OPENVOX_VERSION=9.0.0
 ################################################################################
 # Stage: base — JRE + minimal runtime deps (no Ruby)
 ################################################################################
-FROM registry.access.redhat.com/ubi9/ubi:9.8-1791179325 AS base
+FROM registry.access.redhat.com/ubi9/ubi:9.8-1793004556 AS base
 
 ARG JDK_VERSION=21
 
@@ -41,9 +41,9 @@ ARG OPENVOXSERVER_VERSION
 ARG OPENVOXDB_TERMINI_VERSION
 ARG OPENVOX_VERSION
 
-# Ruby needed temporarily for install-vendored-gems.sh
+# Ruby needed temporarily for install-vendored-gems.sh, unzip for the JRuby gemspecs
 RUN dnf module enable ruby:3.3 -y \
-    && dnf install -y --setopt=install_weak_deps=False ruby \
+    && dnf install -y --setopt=install_weak_deps=False ruby unzip \
     && dnf clean all
 
 ADD https://artifacts.voxpupuli.org/openvox-server/${OPENVOXSERVER_VERSION}/openvox-server-${OPENVOXSERVER_VERSION}.tar.gz /
@@ -110,6 +110,13 @@ RUN tar -xzf /openvox-server-${OPENVOXSERVER_VERSION}.tar.gz \
     && install -m 0755 ext/cli/gem                                "${apps_dir}/puppetserver/cli/apps/gem" \
     && install -m 0755 ext/cli/irb                                "${apps_dir}/puppetserver/cli/apps/irb" \
     && install -m 0755 ext/cli/ruby                               "${apps_dir}/puppetserver/cli/apps/ruby" \
+    # --- SBOM: the JRuby default gems (net-imap, rexml, uri, ...) only exist inside the jar,
+    #     where SBOM generators and scanners do not look. Their gemspecs are copied out so
+    #     syft/trivy list them as gem packages; JRuby does not load anything from here. ---
+    && unzip -q puppet-server-release.jar 'META-INF/jruby.home/lib/ruby/gems/shared/specifications/*' -d /tmp/jruby-home \
+    && install -d -m 0755 "${apps_dir}/puppetserver/jruby-stdlib" \
+    && cp -r /tmp/jruby-home/META-INF/jruby.home/lib/ruby/gems/shared/specifications "${apps_dir}/puppetserver/jruby-stdlib/" \
+    && rm -rf /tmp/jruby-home \
     # --- symlinks ---
     && ln -s "../apps/puppetserver/bin/puppetserver"              "${symbindir}/puppetserver" \
     && ln -s "../server/apps/puppetserver/bin/puppetserver"       "${uxbindir}/puppetserver" \
@@ -153,7 +160,7 @@ RUN printf '%s\n' \
 ################################################################################
 # Stage: autosign — compile the openvox-autosign Go binary
 ################################################################################
-FROM docker.io/library/golang:1.27.1 AS autosign
+FROM docker.io/library/golang:1.27.3 AS autosign
 
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -166,7 +173,7 @@ RUN CGO_ENABLED=0 go build -o /openvox-autosign ./cmd/autosign/
 ################################################################################
 # Stage: enc — compile the openvox-enc Go binary
 ################################################################################
-FROM docker.io/library/golang:1.27.1 AS enc
+FROM docker.io/library/golang:1.27.3 AS enc
 
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -178,7 +185,7 @@ RUN CGO_ENABLED=0 go build -o /openvox-enc ./cmd/enc/
 ################################################################################
 # Stage: report — compile the openvox-report Go binary
 ################################################################################
-FROM docker.io/library/golang:1.27.1 AS report
+FROM docker.io/library/golang:1.27.3 AS report
 
 WORKDIR /src
 COPY go.mod go.sum ./

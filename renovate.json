@@ -45,14 +45,6 @@
   ],
   "packageRules": [
     {
-      "matchDepNames": [
-        "go",
-        "golang",
-        "docker.io/library/golang"
-      ],
-      "groupName": "Go version"
-    },
-    {
       "matchManagers": [
         "gomod"
       ],
@@ -71,6 +63,31 @@
       ],
       "groupName": "Container base images",
       "semanticCommitType": "fix"
+    },
+    {
+      "description": "Updates that can change the generated CRDs or deepcopy code; run make manifests generate if the manifests check fails",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchPackageNames": [
+        "k8s.io/**",
+        "sigs.k8s.io/controller-runtime",
+        "sigs.k8s.io/controller-tools"
+      ],
+      "groupName": "Kubernetes and code generation",
+      "addLabels": [
+        "codegen"
+      ],
+      "semanticCommitType": "fix"
+    },
+    {
+      "matchDepNames": [
+        "go",
+        "golang",
+        "docker.io/library/golang"
+      ],
+      "groupName": "Go version",
+      "description": "After the manager groups, otherwise gomod/dockerfile grouping wins and the toolchain ends up in Go dependencies"
     },
     {
       "matchManagers": [

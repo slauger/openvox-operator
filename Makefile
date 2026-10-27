@@ -10,6 +10,8 @@ IMAGE_REGISTRY ?= ghcr.io/slauger
 CONTAINER_TOOL ?= $(shell which podman 2>/dev/null || which docker 2>/dev/null)
 CONTROLLER_GEN = go tool controller-gen
 GOVULNCHECK = go tool govulncheck
+# GNU sed (on macOS: brew install gnu-sed)
+SED ?= $(shell which gsed 2>/dev/null || echo sed)
 
 LOCALBIN ?= $(shell pwd)/bin
 CHAINSAW_VERSION ?= v0.2.14
@@ -23,6 +25,10 @@ all: build
 .PHONY: manifests
 manifests: ## Generate CRD manifests.
 	$(CONTROLLER_GEN) crd webhook paths="./..." output:crd:dir=config/crd/bases output:webhook:dir=config/webhook
+	# Drop the controller-gen version stamp (and the then empty annotations), otherwise every
+	# controller-tools update changes all CRDs without any schema change.
+	@$(SED) --version >/dev/null 2>&1 || { echo "GNU sed required (macOS: brew install gnu-sed)"; exit 1; }
+	$(SED) -i -z -e 's/\n    controller-gen\.kubebuilder\.io\/version: [^\n]*//g' -e 's/\n  annotations:\n  \([^ ]\)/\n  \1/g' config/crd/bases/*.yaml
 	cp config/crd/bases/*.yaml charts/openvox-operator/crds/
 
 .PHONY: generate

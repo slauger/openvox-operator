@@ -17,11 +17,11 @@ include:
     # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
     termini: 9.2.0
     # renovate: datasource=github-releases depName=OpenVoxProject/openvox
-    openvox: 9.3.0
+    openvox: 9.4.0
     # renovate: datasource=github-releases depName=OpenVoxProject/openvoxdb
     db: 9.2.0
     # renovate: datasource=github-releases depName=OpenVoxProject/openvox
-    agent: 9.3.0
+    agent: 9.4.0
   - major: "8"
     latest: false
     # renovate: datasource=github-releases depName=OpenVoxProject/openvox-server

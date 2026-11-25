@@ -10,7 +10,7 @@ A Kubernetes Operator that maps [OpenVox Server](https://github.com/OpenVoxProje
 
 <!-- features: keep in sync with docs/_snippets/features.md -->
 - 🔐 **Automated CA Lifecycle** - CA initialization, certificate signing, distribution, and periodic CRL refresh - fully managed
-- 📜 **Declarative Signing Policies** - CSR approval via patterns, DNS SANs, CSR attributes, or open signing - no autosign scripts
+- 📜 **Declarative Signing Policies** - CSR approval via certname globs, SAN allowlists, CSR attributes, or open signing - no autosign scripts
 - 🏷️ **External Node Classification** - Declarative ENC support for custom HTTP classifiers
 - 📦 **One Image, Two Roles** - Same rootless image runs as CA or server, configured by the operator
 - ⚡ **Scalable Servers** - Scale catalog compilation horizontally - multiple server pools with HPA
@@ -125,7 +125,7 @@ All resources use the API group `openvox.voxpupuli.org/v1alpha1`.
 |---|---|---|
 | **`Config`** | Shared config (puppet.conf, auth.conf, etc.), OpenVox DB connection | ConfigMaps, Secrets, ServiceAccount |
 | **`CertificateAuthority`** | CA infrastructure: keys, signing, split Secrets (cert, key, CRL) | PVC, Job, Service, ServiceAccount, Role, RoleBinding, 3 Secrets |
-| **`SigningPolicy`** | Declarative CSR signing policy (any, pattern, DNS SANs, CSR attributes) | *(rendered into Config's autosign Secret)* |
+| **`SigningPolicy`** | Declarative CSR signing policy (any, certnames, CSR attributes, SAN and extension allowlists) | *(rendered into Config's autosign Secret)* |
 | **`NodeClassifier`** | External Node Classifier (ENC) endpoint (custom HTTP) | *(rendered into Config's ENC Secret)* |
 | **`ReportProcessor`** | Report forwarding endpoint (generic webhook or PuppetDB Wire Format v8) | *(rendered into Config's report-webhook Secret)* |
 | **`Certificate`** | Lifecycle of a single certificate (request, sign) | TLS Secret |
@@ -146,7 +146,7 @@ This operator takes a **Kubernetes-native approach** that differs in several key
 | **Privileges** | Requires root | Fully rootless, random UID compatible |
 | **CA Management** | `puppetserver ca` CLI with CRuby shebang | Custom JRuby wrapper that routes through `clojure.main` |
 | **Certificates** | Each server has its own certificate | `Certificate` CRD manages the cert lifecycle - all replicas of a `Server` share the same certificate, enabling seamless horizontal scaling |
-| **CSR Signing** | `autosign.conf` or Ruby scripts | `SigningPolicy` CRD with declarative rules (any, pattern, DNS SANs, CSR attributes) |
+| **CSR Signing** | `autosign.conf` or Ruby scripts | `SigningPolicy` CRD with declarative rules (any, certnames, CSR attributes, SAN and extension allowlists) |
 | **ENC** | Script on disk, manually configured | `NodeClassifier` CRD with support for custom HTTP endpoints |
 | **CRL** | File on disk, manual refresh | Split Secret (`{ca}-ca-crl`), operator-driven periodic refresh via CA HTTP API |
 | **Scaling** | Horizontal scaling possible but requires manual setup of additional server VMs | Horizontal via Deployment replicas and HPA |
@@ -204,16 +204,9 @@ helm install production \
 
 ## Content images
 
-The OpenVox Server and DB content images are published under their plain names,
-`ghcr.io/slauger/openvox-server` and `ghcr.io/slauger/openvox-db`. Major-suffixed variants
-(`openvox-server-9` / `openvox-db-9` and `openvox-server-8` / `openvox-db-8`) are also
-published for pinning a specific OpenVox major; the unsuffixed name tracks the current default
-major (OpenVox 9) and shares its image digest.
+The OpenVox Server and DB content images are published under their plain names, `ghcr.io/slauger/openvox-server` and `ghcr.io/slauger/openvox-db`. Major-suffixed variants (`openvox-server-9` / `openvox-db-9` and `openvox-server-8` / `openvox-db-8`) are also published for pinning a specific OpenVox major; the unsuffixed name tracks the current default major (OpenVox 9) and shares its image digest.
 
-The exact OpenVox versions baked into each image are pinned in
-[`images/openvox-versions.yaml`](images/openvox-versions.yaml) (kept current by Renovate),
-and every operator release lists the shipped component versions in its GitHub release notes.
-The operator uses these images everywhere by default (chart values, CRD defaults, samples).
+The exact OpenVox versions baked into each image are pinned in [`images/openvox-versions.yaml`](images/openvox-versions.yaml) (kept current by Renovate), and every operator release lists the shipped component versions in its GitHub release notes. The operator uses these images everywhere by default (chart values, CRD defaults, samples).
 
 ## Local Development
 

@@ -74,22 +74,26 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
+      # Workflow inputs and contexts are passed through env instead of being
+      # expanded into the script, so their values cannot inject shell code.
       - name: Determine version
         id: version
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
         run: |
-          if [[ -n "${{ inputs.image_tag }}" ]]; then
-            echo "version=${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          if [[ -n "${IMAGE_TAG}" ]]; then
+            echo "version=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
           else
-            SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-            echo "version=${SHORT_SHA}" >> $GITHUB_OUTPUT
+            echo "version=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build platform matrix
         id: matrix
+        env:
+          PLATFORMS: ${{ inputs.platforms }}
         run: |
-          PLATFORMS='${{ inputs.platforms }}'
           MATRIX='{"include":['
           FIRST=true
           for PLATFORM in ${PLATFORMS//,/ }; do
@@ -106,7 +110,7 @@ jobs:
             MATRIX="${MATRIX}{\"platform\":\"${PLATFORM}\",\"runner\":\"${RUNNER}\"}"
           done
           MATRIX="${MATRIX}]}"
-          echo "matrix=${MATRIX}" >> $GITHUB_OUTPUT
+          echo "matrix=${MATRIX}" >> "$GITHUB_OUTPUT"
 
   hadolint:
     runs-on: ubuntu-latest
@@ -136,9 +140,10 @@ jobs:
 
       - name: Set platform suffix
         id: platform
+        env:
+          PLATFORM: ${{ matrix.platform }}
         run: |
-          SUFFIX="${{ matrix.platform }}"
-          echo "suffix=${SUFFIX//\//-}" >> $GITHUB_OUTPUT
+          echo "suffix=${PLATFORM//\//-}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -178,6 +183,13 @@ jobs:
       packages: write
       id-token: write
       attestations: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}
+      IMAGE_NAME: ${{ inputs.image_name }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+      PLATFORMS: ${{ inputs.platforms }}
+      LATEST: ${{ inputs.latest }}
+      ALIAS: ${{ inputs.alias_image_name }}
     steps:
       - name: Login to ghcr.io
         uses: docker/login-action@v4
@@ -198,10 +210,6 @@ jobs:
 
       - name: Create and push manifest
         run: |
-          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}"
-          VERSION="${{ needs.prepare.outputs.version }}"
-          PLATFORMS="${{ inputs.platforms }}"
-
           SOURCES=""
           for PLATFORM in ${PLATFORMS//,/ }; do
             SUFFIX="${PLATFORM//\//-}"
@@ -210,17 +218,16 @@ jobs:
 
           docker buildx imagetools create -t "${IMAGE}:${VERSION}" ${SOURCES}
 
-          if [[ "${{ inputs.latest }}" == "true" ]]; then
+          if [[ "${LATEST}" == "true" ]]; then
             docker buildx imagetools create -t "${IMAGE}:latest" ${SOURCES}
           fi
 
           # Publish the unsuffixed backward-compat alias for the default major, from the
           # same per-arch sources, so it shares the primary manifest digest.
-          ALIAS="${{ inputs.alias_image_name }}"
           if [[ -n "${ALIAS}" ]]; then
-            ALIAS_IMAGE="ghcr.io/${{ github.repository_owner }}/${ALIAS}"
+            ALIAS_IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER}/${ALIAS}"
             docker buildx imagetools create -t "${ALIAS_IMAGE}:${VERSION}" ${SOURCES}
-            if [[ "${{ inputs.latest }}" == "true" ]]; then
+            if [[ "${LATEST}" == "true" ]]; then
               docker buildx imagetools create -t "${ALIAS_IMAGE}:latest" ${SOURCES}
             fi
           fi
@@ -228,19 +235,17 @@ jobs:
       - name: Get manifest digest
         id: digest
         run: |
-          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}"
-          VERSION="${{ needs.prepare.outputs.version }}"
           DIGEST=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{json .Manifest}}' | jq -r '.digest')
-          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
 
       - name: Sign image with cosign (keyless)
         if: inputs.sign
+        env:
+          MANIFEST_DIGEST: ${{ steps.digest.outputs.digest }}
         run: |
-          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}"
-          cosign sign --yes "${IMAGE}@${{ steps.digest.outputs.digest }}"
-          ALIAS="${{ inputs.alias_image_name }}"
+          cosign sign --yes "${IMAGE}@${MANIFEST_DIGEST}"
           if [[ -n "${ALIAS}" ]]; then
-            cosign sign --yes "ghcr.io/${{ github.repository_owner }}/${ALIAS}@${{ steps.digest.outputs.digest }}"
+            cosign sign --yes "ghcr.io/${GITHUB_REPOSITORY_OWNER}/${ALIAS}@${MANIFEST_DIGEST}"
           fi
 
       # BuildKit already attaches an SPDX SBOM to every platform image. Dependency-Track and
@@ -251,9 +256,6 @@ jobs:
           # Packages only: without this, every file owned by an RPM becomes a CycloneDX component
           SYFT_FILE_METADATA_SELECTION: none
         run: |
-          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}"
-          VERSION="${{ needs.prepare.outputs.version }}"
-          PLATFORMS="${{ inputs.platforms }}"
           INDEX=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{json .Manifest}}')
 
           mkdir -p sbom
@@ -261,7 +263,7 @@ jobs:
             SUFFIX="${PLATFORM//\//-}"
             DIGEST=$(jq -r --arg os "${PLATFORM%%/*}" --arg arch "${PLATFORM#*/}" \
               '.manifests[] | select(.platform.os == $os and .platform.architecture == $arch) | .digest' <<< "${INDEX}")
-            BASE="sbom/${{ inputs.image_name }}-${VERSION}-${SUFFIX}"
+            BASE="sbom/${IMAGE_NAME}-${VERSION}-${SUFFIX}"
             syft scan "registry:${IMAGE}@${DIGEST}" \
               --source-name "${IMAGE}" --source-version "${VERSION}" \
               -o "cyclonedx-json=${BASE}.cdx.json" \
@@ -272,13 +274,11 @@ jobs:
       - name: Attest CycloneDX SBOMs with cosign (keyless)
         if: inputs.sign
         run: |
-          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}"
-          ALIAS="${{ inputs.alias_image_name }}"
           for CDX in sbom/*.cdx.json; do
             DIGEST=$(cat "${CDX%.cdx.json}.digest")
             cosign attest --yes --type cyclonedx --predicate "${CDX}" "${IMAGE}@${DIGEST}"
             if [[ -n "${ALIAS}" ]]; then
-              cosign attest --yes --type cyclonedx --predicate "${CDX}" "ghcr.io/${{ github.repository_owner }}/${ALIAS}@${DIGEST}"
+              cosign attest --yes --type cyclonedx --predicate "${CDX}" "ghcr.io/${GITHUB_REPOSITORY_OWNER}/${ALIAS}@${DIGEST}"
             fi
           done
 
@@ -306,8 +306,8 @@ jobs:
 
       - name: Set output
         id: result
+        env:
+          MANIFEST_DIGEST: ${{ steps.digest.outputs.digest }}
         run: |
-          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}"
-          VERSION="${{ needs.prepare.outputs.version }}"
-          echo "image=${IMAGE}:${VERSION}" >> $GITHUB_OUTPUT
-          echo "digest=${{ steps.digest.outputs.digest }}" >> $GITHUB_OUTPUT
+          echo "image=${IMAGE}:${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "digest=${MANIFEST_DIGEST}" >> "$GITHUB_OUTPUT"

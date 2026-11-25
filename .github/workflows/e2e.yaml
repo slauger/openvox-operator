@@ -22,7 +22,8 @@ jobs:
       operator: base
       openvox_major: ${{ inputs.openvox_major }}
       tests: '["single-node","multi-server","agent-basic","agent-broken","agent-idempotent","agent-concurrent","agent-report","database-cnpg","readonly-rootfs","code-pvc","autosign-policy","cert-rotation"]'
-    secrets: inherit
+    secrets:
+      E2E_KUBECONFIG: ${{ secrets.E2E_KUBECONFIG }}
 
   e2e-enc:
     needs: [e2e-base]
@@ -32,7 +33,8 @@ jobs:
       operator: base
       openvox_major: ${{ inputs.openvox_major }}
       tests: '["agent-enc","agent-full"]'
-    secrets: inherit
+    secrets:
+      E2E_KUBECONFIG: ${{ secrets.E2E_KUBECONFIG }}
 
   e2e-gateway:
     needs: [e2e-enc]
@@ -42,7 +44,8 @@ jobs:
       operator: gateway
       openvox_major: ${{ inputs.openvox_major }}
       tests: '["pool-gateway"]'
-    secrets: inherit
+    secrets:
+      E2E_KUBECONFIG: ${{ secrets.E2E_KUBECONFIG }}
 
   e2e-webhooks-cm:
     needs: [e2e-gateway]
@@ -52,4 +55,5 @@ jobs:
       operator: webhooks-cm
       openvox_major: ${{ inputs.openvox_major }}
       tests: '["webhook-validation-server","webhook-validation-config","webhook-validation-database","webhook-smoke"]'
-    secrets: inherit
+    secrets:
+      E2E_KUBECONFIG: ${{ secrets.E2E_KUBECONFIG }}

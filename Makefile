@@ -15,7 +15,7 @@ SED ?= $(shell which gsed 2>/dev/null || echo sed)
 
 LOCALBIN ?= $(shell pwd)/bin
 # renovate: datasource=github-releases depName=kyverno/chainsaw
-CHAINSAW_VERSION ?= v0.2.14
+CHAINSAW_VERSION ?= v0.2.15
 CHAINSAW ?= $(LOCALBIN)/chainsaw
 
 .PHONY: all

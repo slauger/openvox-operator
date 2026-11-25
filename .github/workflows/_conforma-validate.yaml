@@ -27,7 +27,7 @@ jobs:
       packages: read
     env:
       # renovate: datasource=github-releases depName=conforma/cli
-      EC_VERSION: "0.10.52"
+      EC_VERSION: "0.10.61"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -42,25 +42,33 @@ jobs:
           chmod +x ec_linux_amd64
           sudo mv ec_linux_amd64 /usr/local/bin/ec
 
+      # Workflow inputs and contexts are passed through env instead of being
+      # expanded into the script, so their values cannot inject shell code.
       - name: Login to ghcr.io
-        run: echo "${{ github.token }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: echo "${REGISTRY_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
 
       - name: Validate image with Conforma
+        env:
+          IMAGE: ${{ inputs.image }}
+          DIGEST: ${{ inputs.digest }}
+          STRICT: ${{ inputs.strict }}
         run: |
-          IMAGE_REF="${{ inputs.image }}"
-          if [[ -n "${{ inputs.digest }}" ]]; then
-            IMAGE_REF="${{ inputs.image }}@${{ inputs.digest }}"
+          IMAGE_REF="${IMAGE}"
+          if [[ -n "${DIGEST}" ]]; then
+            IMAGE_REF="${IMAGE}@${DIGEST}"
           fi
           ARGS=(
             validate image
             --image "${IMAGE_REF}"
             --policy .conforma/policy.yaml
-            --certificate-identity-regexp "https://github.com/${{ github.repository }}/"
+            --certificate-identity-regexp "https://github.com/${GITHUB_REPOSITORY}/"
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
             --show-successes
             --output yaml
           )
-          if [[ "${{ inputs.strict }}" == "true" ]]; then
+          if [[ "${STRICT}" == "true" ]]; then
             ARGS+=(--strict)
           else
             ARGS+=(--strict=false)

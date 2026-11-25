@@ -50,4 +50,5 @@ jobs:
           || inputs.operator == 'webhooks-cm' && '["webhook-validation-server","webhook-validation-config","webhook-validation-database","webhook-smoke"]'
           || '["single-node","multi-server","agent-basic","agent-broken","agent-idempotent","agent-concurrent","agent-report","database-cnpg","readonly-rootfs","code-pvc","autosign-policy","cert-rotation"]'
         }}
-    secrets: inherit
+    secrets:
+      E2E_KUBECONFIG: ${{ secrets.E2E_KUBECONFIG }}

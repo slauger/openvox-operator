@@ -14,6 +14,7 @@ GOVULNCHECK = go tool govulncheck
 SED ?= $(shell which gsed 2>/dev/null || echo sed)
 
 LOCALBIN ?= $(shell pwd)/bin
+# renovate: datasource=github-releases depName=kyverno/chainsaw
 CHAINSAW_VERSION ?= v0.2.14
 CHAINSAW ?= $(LOCALBIN)/chainsaw
 

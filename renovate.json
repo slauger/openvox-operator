@@ -1,11 +1,13 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
+    "config:recommended",
+    "helpers:pinGitHubActionDigests"
   ],
   "labels": [
     "dependencies"
   ],
+  "osvVulnerabilityAlerts": true,
   "postUpdateOptions": [
     "gomodTidy"
   ],
@@ -32,18 +34,45 @@
       "extractVersionTemplate": "^v?(?<version>.*)$"
     },
     {
+      "description": "Tool versions in workflows (FOO_VERSION: \"1.2.3\"), annotated with a renovate comment",
       "customType": "regex",
       "managerFilePatterns": [
-        "/(^|/).github/workflows/_helm\\.yaml$/",
-        "/(^|/).github/workflows/_conforma-validate\\.yaml$/"
+        "/(^|/)\\.github/workflows/[^/]+\\.ya?ml$/"
       ],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+\\w+_VERSION: \"(?<currentValue>[^\"]+)\""
       ],
       "extractVersionTemplate": "^v?(?<version>.*)$"
+    },
+    {
+      "description": "Action inputs in workflows (version: \"v1.2.3\"), annotated with a renovate comment; keeps the v prefix",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/(^|/)\\.github/workflows/[^/]+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+version: \"(?<currentValue>[^\"]+)\""
+      ]
+    },
+    {
+      "description": "Tool versions in the Makefile; keeps the v prefix because it is part of the download URL",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/(^|/)Makefile$/"
+      ],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\n\\w+\\s*\\??=\\s*(?<currentValue>\\S+)"
+      ]
     }
   ],
   "packageRules": [
+    {
+      "description": "Wait before proposing new releases (supply chain protection); security alerts are not delayed",
+      "matchPackageNames": [
+        "*"
+      ],
+      "minimumReleaseAge": "3 days"
+    },
     {
       "matchManagers": [
         "gomod"
@@ -179,13 +208,14 @@
       "automerge": true
     },
     {
-      "description": "Automerge GitHub Actions minor/patch (majors stay manual)",
+      "description": "Automerge GitHub Actions minor/patch and digest updates (majors stay manual)",
       "matchManagers": [
         "github-actions"
       ],
       "matchUpdateTypes": [
         "minor",
-        "patch"
+        "patch",
+        "digest"
       ],
       "automerge": true
     },

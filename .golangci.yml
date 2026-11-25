@@ -28,6 +28,12 @@ linters:
     - unconvert
     - unparam
   settings:
+    modernize:
+      disable:
+        # Go 1.27 allows promoted fields in composite literals. Keep the explicit
+        # ObjectMeta/TypeMeta style used across the Kubernetes ecosystem instead
+        # of rewriting every object literal.
+        - embedlit
     importas:
       no-unaliased: true
       alias:

@@ -16,7 +16,7 @@ jobs:
       new-release-version: ${{ steps.semantic.outputs.new_release_version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -34,13 +34,13 @@ jobs:
           fi
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 26
 
       - name: Run semantic-release
         id: semantic
-        uses: cycjimmy/semantic-release-action@v8.1.4
+        uses: cycjimmy/semantic-release-action@ad51787758d9654d5a75150a89a6fa9b3ccef95e # v8.1.4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -52,7 +52,7 @@ jobs:
       matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Build OpenVox version matrix
         id: matrix
         run: |
@@ -171,13 +171,13 @@ jobs:
       id-token: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Helm
-        uses: azure/setup-helm@v5
+        uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v4.1.4
+        uses: sigstore/cosign-installer@881c63bd87e38389154debd8331404ce7ca8a3ab # v4.1.4
 
       - name: Login to ghcr.io
         run: |
@@ -212,7 +212,7 @@ jobs:
           done < chart-digests.txt
 
       - name: Install oras
-        uses: oras-project/setup-oras@v2
+        uses: oras-project/setup-oras@ac735097e22fe643015b0d19645f7c9a69942128 # v2
 
       - name: Push ArtifactHub metadata
         run: |
@@ -223,7 +223,7 @@ jobs:
           done
 
       - name: Upload chart artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: helm-charts
           path: '*.tgz'
@@ -236,15 +236,15 @@ jobs:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Download chart artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: helm-charts
 
       - name: Download SBOM artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: sbom-*
           path: sbom
